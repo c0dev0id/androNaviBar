@@ -54,7 +54,7 @@ class TrampolineActivity : Activity() {
      * hidden API policy), sets a launch bounds hint covering the right half of
      * the screen, which works on standard freeform-capable devices.
      */
-    @SuppressLint("DiscouragedPrivateApi")
+    @SuppressLint("DiscouragedPrivateApi", "BlockedPrivateApi")
     private fun buildLaunchOptions(screenBounds: Rect): ActivityOptions {
         val options = ActivityOptions.makeBasic()
 
