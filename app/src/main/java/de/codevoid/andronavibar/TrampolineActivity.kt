@@ -1,5 +1,6 @@
 package de.codevoid.andronavibar
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
@@ -16,6 +17,7 @@ import android.os.Bundle
  */
 class TrampolineActivity : Activity() {
 
+    @SuppressLint("BlockedPrivateApi")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
