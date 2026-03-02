@@ -33,15 +33,22 @@ class TrampolineActivity : Activity() {
                 )
             }
 
+            val screenBounds = windowManager.currentWindowMetrics.bounds
             val options = ActivityOptions.makeBasic()
 
-            // Hint at right-half positioning for the split screen.
-            // The system may adjust these bounds, but this signals our preference.
-            val displayMetrics = resources.displayMetrics
-            val screenWidth = displayMetrics.widthPixels
-            val screenHeight = displayMetrics.heightPixels
-            val bounds = Rect(screenWidth / 2, 0, screenWidth, screenHeight)
-            options.setLaunchBounds(bounds)
+            // Primary: explicitly request split-screen secondary windowing mode.
+            // WINDOWING_MODE_SPLIT_SCREEN_SECONDARY = 4 (hidden API, works on most Android 12+
+            // custom builds such as car head units).
+            try {
+                val m = ActivityOptions::class.java
+                    .getDeclaredMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
+                m.invoke(options, 4)
+            } catch (_: Exception) {
+                // Hidden API inaccessible — fall back to bounds hint for freeform-capable devices.
+                options.setLaunchBounds(
+                    Rect(screenBounds.width() / 2, 0, screenBounds.width(), screenBounds.height())
+                )
+            }
 
             startActivity(launchIntent, options.toBundle())
         }
