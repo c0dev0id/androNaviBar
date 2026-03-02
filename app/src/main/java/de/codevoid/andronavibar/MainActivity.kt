@@ -7,6 +7,8 @@ import android.os.Bundle
 
 class MainActivity : Activity() {
 
+    private var wasInMultiWindowMode = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         isRunning = true
@@ -30,7 +32,9 @@ class MainActivity : Activity() {
         newConfig: Configuration
     ) {
         super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
-        if (!isInMultiWindowMode) {
+        if (isInMultiWindowMode) {
+            wasInMultiWindowMode = true
+        } else if (wasInMultiWindowMode) {
             finishAndRemoveTask()
         }
     }

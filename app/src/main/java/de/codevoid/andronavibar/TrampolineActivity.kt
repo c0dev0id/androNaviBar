@@ -3,7 +3,6 @@ package de.codevoid.andronavibar
 import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
-import android.graphics.Rect
 import android.os.Bundle
 
 /**
@@ -34,15 +33,6 @@ class TrampolineActivity : Activity() {
             }
 
             val options = ActivityOptions.makeBasic()
-
-            // Hint at right-half positioning for the split screen.
-            // The system may adjust these bounds, but this signals our preference.
-            val displayMetrics = resources.displayMetrics
-            val screenWidth = displayMetrics.widthPixels
-            val screenHeight = displayMetrics.heightPixels
-            val bounds = Rect(screenWidth / 2, 0, screenWidth, screenHeight)
-            options.setLaunchBounds(bounds)
-
             startActivity(launchIntent, options.toBundle())
         }
 
