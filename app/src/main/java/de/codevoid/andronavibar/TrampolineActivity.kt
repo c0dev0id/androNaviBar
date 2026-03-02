@@ -1,6 +1,5 @@
 package de.codevoid.andronavibar
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
@@ -17,7 +16,6 @@ import android.os.Bundle
  */
 class TrampolineActivity : Activity() {
 
-    @SuppressLint("BlockedPrivateApi")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -38,19 +36,11 @@ class TrampolineActivity : Activity() {
             val screenBounds = windowManager.currentWindowMetrics.bounds
             val options = ActivityOptions.makeBasic()
 
-            // Primary: explicitly request split-screen secondary windowing mode.
-            // WINDOWING_MODE_SPLIT_SCREEN_SECONDARY = 4 (hidden API, works on most Android 12+
-            // custom builds such as car head units).
-            try {
-                val m = ActivityOptions::class.java
-                    .getDeclaredMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-                m.invoke(options, 4)
-            } catch (_: Exception) {
-                // Hidden API inaccessible — fall back to bounds hint for freeform-capable devices.
-                options.setLaunchBounds(
-                    Rect(screenBounds.width() / 2, 0, screenBounds.width(), screenBounds.height())
-                )
-            }
+            // Provide a bounds hint for freeform-capable devices.
+            // Split-screen entry is driven by FLAG_ACTIVITY_LAUNCH_ADJACENT in the intent.
+            options.setLaunchBounds(
+                Rect(screenBounds.width() / 2, 0, screenBounds.width(), screenBounds.height())
+            )
 
             startActivity(launchIntent, options.toBundle())
         }
