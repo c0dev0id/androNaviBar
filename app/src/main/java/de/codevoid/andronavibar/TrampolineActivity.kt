@@ -1,10 +1,8 @@
 package de.codevoid.andronavibar
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
-import android.graphics.Rect
 import android.os.Bundle
 
 /**
@@ -34,8 +32,7 @@ class TrampolineActivity : Activity() {
                 )
             }
 
-            val screenBounds = windowManager.currentWindowMetrics.bounds
-            startActivity(launchIntent, buildLaunchOptions(screenBounds).toBundle())
+            startActivity(launchIntent, buildLaunchOptions().toBundle())
         }
 
         finish()
@@ -44,41 +41,12 @@ class TrampolineActivity : Activity() {
     /**
      * Builds ActivityOptions for launching MainActivity in split-screen.
      *
-     * Primary path: invokes the hidden setLaunchWindowingMode(4) API
-     * (WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) via reflection. This is the
-     * reliable mechanism on Android 14+ car head units and custom AOSP builds
-     * where FLAG_ACTIVITY_LAUNCH_ADJACENT alone does not trigger split-screen
-     * from a fullscreen context.
-     *
-     * Fallback path: if the hidden API is inaccessible (blocked by the device's
-     * hidden API policy), sets a launch bounds hint covering the right half of
-     * the screen, which works on standard freeform-capable devices.
+     * Split-screen behavior is triggered entirely by the intent flags
+     * (FLAG_ACTIVITY_LAUNCH_ADJACENT | FLAG_ACTIVITY_NEW_TASK) on large-screen
+     * (≥600dp) Android 12L+ devices. No hidden APIs or launch bounds hints are
+     * needed on standard Android 14 tablets in landscape mode.
      */
-    @SuppressLint("DiscouragedPrivateApi")
-    private fun buildLaunchOptions(screenBounds: Rect): ActivityOptions {
-        val options = ActivityOptions.makeBasic()
-
-        // Primary: explicitly request split-screen secondary windowing mode.
-        // WINDOWING_MODE_SPLIT_SCREEN_SECONDARY = 4 (hidden API, works on most
-        // Android 12+ custom builds such as car head units).
-if (android.os.Build.VERSION.SDK_INT < 35) {
-    try {
-        val m = ActivityOptions::class.java
-            .getDeclaredMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-        m.invoke(options, 4)
-    } catch (_: Exception) {
-        // fallback to bounds
-        options.setLaunchBounds(
-            Rect(screenBounds.width() / 2, 0, screenBounds.width(), screenBounds.height())
-        )
-    }
-} else {
-    // API 35+; always fall back to launch bounds
-    options.setLaunchBounds(
-        Rect(screenBounds.width() / 2, 0, screenBounds.width(), screenBounds.height())
-    )
-}
-
-        return options
+    private fun buildLaunchOptions(): ActivityOptions {
+        return ActivityOptions.makeBasic()
     }
 }
