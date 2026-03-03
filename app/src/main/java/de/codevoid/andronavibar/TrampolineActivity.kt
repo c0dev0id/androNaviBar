@@ -3,6 +3,7 @@ package de.codevoid.andronavibar
 import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Intent
+import android.graphics.Rect
 import android.os.Bundle
 
 /**
@@ -32,7 +33,8 @@ class TrampolineActivity : Activity() {
                 )
             }
 
-            startActivity(launchIntent, buildLaunchOptions().toBundle())
+            val screenBounds = windowManager.currentWindowMetrics.bounds
+            startActivity(launchIntent, buildLaunchOptions(screenBounds).toBundle())
         }
 
         finish()
@@ -41,12 +43,16 @@ class TrampolineActivity : Activity() {
     /**
      * Builds ActivityOptions for launching MainActivity in split-screen.
      *
-     * Split-screen behavior is triggered entirely by the intent flags
-     * (FLAG_ACTIVITY_LAUNCH_ADJACENT | FLAG_ACTIVITY_NEW_TASK) on large-screen
-     * (≥600dp) Android 12L+ devices. No hidden APIs or launch bounds hints are
-     * needed on standard Android 14 tablets in landscape mode.
+     * Sets a launch bounds hint covering the right half of the screen.
+     * Combined with FLAG_ACTIVITY_LAUNCH_ADJACENT | FLAG_ACTIVITY_NEW_TASK,
+     * this triggers split-screen or freeform multi-window mode on Android 14+
+     * large-screen devices.
      */
-    private fun buildLaunchOptions(): ActivityOptions {
-        return ActivityOptions.makeBasic()
+    private fun buildLaunchOptions(screenBounds: Rect): ActivityOptions {
+        val options = ActivityOptions.makeBasic()
+        options.setLaunchBounds(
+            Rect(screenBounds.width() / 2, 0, screenBounds.width(), screenBounds.height())
+        )
+        return options
     }
 }
