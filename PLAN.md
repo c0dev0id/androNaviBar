@@ -21,9 +21,10 @@ user taps the icon:
 1. Trampoline checks if `MainActivity` is already running (via static flag)
 2. **Not running** -> launch `MainActivity` with split-screen flags:
    - `FLAG_ACTIVITY_LAUNCH_ADJACENT | FLAG_ACTIVITY_NEW_TASK`
-   - On Android 12L+ (API 32+, so all Android 14+ devices), this flag
-     triggers split-screen entry from fullscreen automatically
-   - Use `ActivityOptions.setLaunchBounds()` to hint at positioning
+   - On Android 12L+ large-screen (≥600dp) devices, these flags alone
+     trigger split-screen entry from fullscreen automatically — no hidden
+     APIs or launch bounds hints needed
+   - Use `ActivityOptions.makeBasic()` (no additional configuration needed)
 3. **Already running** -> send intent to `MainActivity` triggering quit
 4. Trampoline calls `finish()` immediately (invisible to user)
 
@@ -94,7 +95,7 @@ onCreate():
     -> startActivity(MainActivity intent with ACTION_QUIT + FLAG_ACTIVITY_NEW_TASK)
   else
     -> startActivity(MainActivity intent with FLAG_ACTIVITY_LAUNCH_ADJACENT
-         | FLAG_ACTIVITY_NEW_TASK, ActivityOptions with launch bounds)
+         | FLAG_ACTIVITY_NEW_TASK, ActivityOptions.makeBasic())
   finish()
 ```
 
@@ -157,11 +158,14 @@ onMultiWindowModeChanged(inMultiWindow, config):
 
 ## Edge Cases & Notes
 
-- **FLAG_ACTIVITY_LAUNCH_ADJACENT on stock Android 14+**: On API 32+, this flag
-  triggers split-screen even when the device is currently in fullscreen mode.
-  The previous foreground app stays on one side; the new activity appears on the
-  other. This is the standard public API approach - no root, Shizuku, or
-  AccessibilityService needed.
+- **FLAG_ACTIVITY_LAUNCH_ADJACENT on stock Android 14+**: On large-screen
+  (≥600dp) devices running Android 12L+ (API 32+), combining
+  `FLAG_ACTIVITY_LAUNCH_ADJACENT` with `FLAG_ACTIVITY_NEW_TASK` triggers
+  split-screen even when the device is currently in fullscreen mode — no
+  hidden APIs, `setLaunchBounds()`, or any other workaround is needed.
+  This is the standard public API approach and works on standard Android 14
+  tablets in landscape mode. The previous foreground app stays on one side;
+  the new activity appears on the other.
 
 - **Split-screen exit handling**: When the user drags the divider to dismiss
   split-screen, `onMultiWindowModeChanged(false)` fires. We call
