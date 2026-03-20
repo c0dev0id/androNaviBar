@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">androNaviBar</string>
-
-    <string name="tab_1">Tab 1</string>
-    <string name="tab_2">Tab 2</string>
-    <string name="tab_3">Tab 3</string>
-    <string name="tab_4">Tab 4</string>
-    <string name="tab_5">Tab 5</string>
-
-    <string name="panel_1">Panel 1</string>
-    <string name="panel_2">Panel 2</string>
-    <string name="panel_3">Panel 3</string>
-    <string name="panel_4">Panel 4</string>
+    <string name="app_name">Home</string>
+    <string name="empty">Empty</string>
+    <string name="configure">Configure Button</string>
+    <string name="choose_app">Choose App</string>
+    <string name="enter_url">Enter URL</string>
+    <string name="clear">Clear</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="url_hint">https://example.com</string>
+    <string name="config_mode">Configuration Mode</string>
 </resources>

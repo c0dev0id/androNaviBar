@@ -2,67 +2,213 @@ package de.codevoid.andronavibar
 
 import android.app.Activity
 import android.content.Intent
-import android.content.res.Configuration
+import android.content.SharedPreferences
+import android.content.pm.ResolveInfo
+import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
+import android.widget.EditText
+import android.widget.FrameLayout
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class MainActivity : Activity() {
 
-    private var enteredMultiWindowMode = false
-    private val handler = Handler(Looper.getMainLooper())
-    private val multiWindowCheck = Runnable {
-        if (!enteredMultiWindowMode && !isInMultiWindowMode) finishAndRemoveTask()
-    }
+    private lateinit var prefs: SharedPreferences
+    private lateinit var buttons: List<MaterialButton>
+    private var configMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        isRunning = true
         setContentView(R.layout.activity_main)
-        handleIntent(intent)
+
+        prefs = getSharedPreferences("button_config", MODE_PRIVATE)
+
+        buttons = listOf(
+            findViewById(R.id.button0),
+            findViewById(R.id.button1),
+            findViewById(R.id.button2),
+            findViewById(R.id.button3),
+            findViewById(R.id.button4)
+        )
+
+        for (i in buttons.indices) {
+            buttons[i].setOnClickListener { onButtonClick(i) }
+            buttons[i].setOnLongClickListener {
+                toggleConfigMode()
+                true
+            }
+        }
+
+        loadButtons()
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (!enteredMultiWindowMode) handler.postDelayed(multiWindowCheck, 500)
+    private fun toggleConfigMode() {
+        configMode = !configMode
+        updateButtonStyles()
     }
 
-    override fun onPause() {
-        super.onPause()
-        handler.removeCallbacks(multiWindowCheck)
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        handleIntent(intent)
-    }
-
-    private fun handleIntent(intent: Intent) {
-        if (intent.action == ACTION_QUIT) {
-            finishAndRemoveTask()
+    private fun updateButtonStyles() {
+        for (i in buttons.indices) {
+            val btn = buttons[i]
+            if (configMode) {
+                btn.strokeColor = android.content.res.ColorStateList.valueOf(
+                    getColor(R.color.config_border)
+                )
+                btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
+            } else {
+                btn.strokeWidth = 0
+            }
         }
     }
 
-    override fun onMultiWindowModeChanged(
-        isInMultiWindowMode: Boolean,
-        newConfig: Configuration
-    ) {
-        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
-        if (isInMultiWindowMode) {
-            enteredMultiWindowMode = true
-            handler.removeCallbacks(multiWindowCheck)
-        } else if (enteredMultiWindowMode) {
-            finishAndRemoveTask()
+    private fun onButtonClick(index: Int) {
+        if (configMode) {
+            showConfigDialog(index)
+        } else {
+            launchButton(index)
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        isRunning = false
+    private fun launchButton(index: Int) {
+        val type = prefs.getString("btn_${index}_type", null) ?: return
+        val value = prefs.getString("btn_${index}_value", null) ?: return
+
+        when (type) {
+            "app" -> {
+                val intent = packageManager.getLaunchIntentForPackage(value)
+                if (intent != null) {
+                    startActivity(intent)
+                }
+            }
+            "url" -> {
+                val url = if (value.startsWith("http://") || value.startsWith("https://"))
+                    value else "https://$value"
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                startActivity(intent)
+            }
+        }
     }
 
-    companion object {
-        const val ACTION_QUIT = "de.codevoid.andronavibar.ACTION_QUIT"
-        var isRunning = false
+    private fun showConfigDialog(index: Int) {
+        val options = arrayOf(
+            getString(R.string.choose_app),
+            getString(R.string.enter_url),
+            getString(R.string.clear)
+        )
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.configure)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showAppPicker(index)
+                    1 -> showUrlDialog(index)
+                    2 -> clearButton(index)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showAppPicker(index: Int) {
+        val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val apps = packageManager.queryIntentActivities(mainIntent, 0)
+            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
+
+        val appNames = apps.map { it.loadLabel(packageManager).toString() }.toTypedArray()
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.choose_app)
+            .setItems(appNames) { _, which ->
+                val app = apps[which]
+                val pkgName = app.activityInfo.packageName
+                val label = app.loadLabel(packageManager).toString()
+                saveButton(index, "app", pkgName, label)
+                loadButtons()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showUrlDialog(index: Int) {
+        val input = EditText(this).apply {
+            hint = getString(R.string.url_hint)
+            setText(prefs.getString("btn_${index}_value", ""))
+            setSingleLine()
+        }
+
+        val container = FrameLayout(this).apply {
+            val padding = (16 * resources.displayMetrics.density).toInt()
+            setPadding(padding, padding, padding, 0)
+            addView(input)
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.enter_url)
+            .setView(container)
+            .setPositiveButton(R.string.ok) { _, _ ->
+                val url = input.text.toString().trim()
+                if (url.isNotEmpty()) {
+                    saveButton(index, "url", url, url)
+                    loadButtons()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun saveButton(index: Int, type: String, value: String, label: String) {
+        prefs.edit()
+            .putString("btn_${index}_type", type)
+            .putString("btn_${index}_value", value)
+            .putString("btn_${index}_label", label)
+            .apply()
+    }
+
+    private fun clearButton(index: Int) {
+        prefs.edit()
+            .remove("btn_${index}_type")
+            .remove("btn_${index}_value")
+            .remove("btn_${index}_label")
+            .apply()
+        loadButtons()
+    }
+
+    private fun loadButtons() {
+        for (i in buttons.indices) {
+            val type = prefs.getString("btn_${i}_type", null)
+            val label = prefs.getString("btn_${i}_label", null)
+
+            if (type != null && label != null) {
+                buttons[i].text = label
+                buttons[i].icon = getButtonIcon(i)
+            } else {
+                buttons[i].text = getString(R.string.empty)
+                buttons[i].icon = null
+            }
+        }
+    }
+
+    private fun getButtonIcon(index: Int): Drawable? {
+        val type = prefs.getString("btn_${index}_type", null) ?: return null
+        val value = prefs.getString("btn_${index}_value", null) ?: return null
+
+        return when (type) {
+            "app" -> {
+                try {
+                    packageManager.getApplicationIcon(value)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            else -> null
+        }
+    }
+
+    override fun onBackPressed() {
+        if (configMode) {
+            toggleConfigMode()
+        }
+        // Do nothing when not in config mode - this is a home app
     }
 }
