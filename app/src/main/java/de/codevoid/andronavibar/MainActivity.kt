@@ -8,11 +8,11 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
 import android.net.Uri
+import android.view.MotionEvent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -49,6 +49,16 @@ class MainActivity : Activity() {
             buttons[i].setOnLongClickListener {
                 toggleConfigMode()
                 true
+            }
+            buttons[i].setOnTouchListener { _, event ->
+                // Consume ACTION_DOWN on unfocused buttons outside config mode so
+                // no pressed-state overlay or ripple fires on a focus-only tap.
+                if (event.action == MotionEvent.ACTION_DOWN && !configMode && i != focusedIndex) {
+                    focusedIndex = i
+                    saveFocus()
+                    updateButtonStyles()
+                    true
+                } else false
             }
         }
 
@@ -111,14 +121,10 @@ class MainActivity : Activity() {
     }
 
     private fun updateButtonStyles() {
-        val accentCSL = ColorStateList.valueOf(getColor(R.color.colorPrimary))
-        val noRippleCSL = ColorStateList.valueOf(Color.TRANSPARENT)
         val configStroke = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
-
         for (i in buttons.indices) {
             val btn = buttons[i]
             btn.foreground = if (i == focusedIndex) makeFocusRing() else null
-            btn.rippleColor = if (i == focusedIndex) accentCSL else noRippleCSL
             if (configMode) {
                 btn.strokeColor = ColorStateList.valueOf(getColor(R.color.config_border))
                 btn.strokeWidth = configStroke
@@ -133,7 +139,7 @@ class MainActivity : Activity() {
         val ring = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(20).toFloat()  // button 16dp corner + 4dp gap
-            setStroke(dpToPx(3), getColor(R.color.colorPrimary))
+            setStroke(dpToPx(6), getColor(R.color.colorPrimary))
             setColor(Color.TRANSPARENT)
         }
         return InsetDrawable(ring, -gap)
@@ -153,10 +159,6 @@ class MainActivity : Activity() {
     private fun onButtonClick(index: Int) {
         if (configMode) {
             showConfigDialog(index)
-        } else if (index != focusedIndex) {
-            focusedIndex = index
-            saveFocus()
-            updateButtonStyles()
         } else {
             flashButton(index)
             launchButton(index)
