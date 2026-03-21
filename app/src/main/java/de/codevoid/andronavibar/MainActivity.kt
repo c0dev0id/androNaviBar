@@ -90,7 +90,13 @@ class MainActivity : Activity() {
     /** Loading spinner overlay, shown while a pane's content is being prepared. */
     private var loadingSpinner: ProgressBar? = null
 
-    private val paneFocused get() = activeConfigPane != null || activeAppsGridPane != null
+    private enum class FocusOwner { BUTTONS, PANE }
+
+    /** Which region currently owns D-pad input. */
+    private var focusOwner = FocusOwner.BUTTONS
+
+    /** Index of the button whose content/config pane is displayed (-1 = none). */
+    private var activeButtonIndex = -1
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -115,12 +121,19 @@ class MainActivity : Activity() {
         )
 
         for (i in buttons.indices) {
-            buttons[i].index             = i
-            buttons[i].onFocusRequested  = { setFocus(i) }
-            buttons[i].onConfigRequested = { openConfigPane(i) }
-            buttons[i].onUrlActivated    = { url -> showWebPane(url) }
-            buttons[i].onWidgetActivated    = { widgetId -> showWidgetPane(widgetId) }
-            buttons[i].onAppsGridActivated  = { apps -> showAppsGridPane(apps) }
+            buttons[i].index = i
+            buttons[i].onFocusRequested = {
+                if (activeConfigPane == null) {
+                    if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
+                    setFocus(i)
+                }
+            }
+            buttons[i].onConfigRequested = {
+                if (activeConfigPane == null) openConfigPane(i)
+            }
+            buttons[i].onUrlActivated      = { url  -> activateToggleButton(i) { showWebPane(url) } }
+            buttons[i].onWidgetActivated   = { id   -> activateToggleButton(i) { showWidgetPane(id) } }
+            buttons[i].onAppsGridActivated = { apps  -> activateToggleButton(i, interactive = true) { showAppsGridPane(apps) } }
             buttons[i].loadConfig(prefs)
         }
 
@@ -177,15 +190,15 @@ class MainActivity : Activity() {
                 // All other keys are gated on window focus.
                 if (!isWindowFocused) return
 
-                if (paneFocused) {
-                    activeConfigPane?.handleKey(keyCode) ?: activeAppsGridPane?.handleKey(keyCode)
-                } else {
-                    when (keyCode) {
+                when (focusOwner) {
+                    FocusOwner.PANE -> {
+                        activeConfigPane?.handleKey(keyCode)
+                            ?: activeAppsGridPane?.handleKey(keyCode)
+                    }
+                    FocusOwner.BUTTONS -> when (keyCode) {
                         19 -> moveFocus(-1)                    // DPAD_UP
                         20 -> moveFocus(+1)                    // DPAD_DOWN
                         66 -> buttons[focusedIndex].activate() // ROUND BUTTON 1
-                        // 21 LEFT, 22 RIGHT — reserved
-                        // 136 LEVER UP, 137 LEVER DOWN — reserved
                     }
                 }
 
@@ -198,10 +211,13 @@ class MainActivity : Activity() {
                     key111PressedAt = 0L
                     if (held < LauncherApplication.TOGGLE_HOLD_MS) {
                         when {
-                            activeConfigPane != null         -> dismissConfigPane()
-                            activeWebPane?.goBack() == false -> dismissWebPane()
-                            activeWidgetPane != null         -> dismissWidgetPane()
-                            activeAppsGridPane != null       -> dismissAppsGridPane()
+                            activeConfigPane != null -> {
+                                dismissConfigPane()
+                                deactivateActiveButton()
+                                setFocusOwner(FocusOwner.BUTTONS)
+                            }
+                            focusOwner == FocusOwner.PANE ->
+                                setFocusOwner(FocusOwner.BUTTONS)
                         }
                     }
                     // Long press already handled by LauncherApplication.
@@ -224,8 +240,48 @@ class MainActivity : Activity() {
 
     private fun updateFocus() {
         for (i in buttons.indices) {
-            buttons[i].isFocusedButton = (i == focusedIndex)
+            buttons[i].isFocusedButton = (focusOwner == FocusOwner.BUTTONS && i == focusedIndex)
         }
+    }
+
+    private fun setFocusOwner(owner: FocusOwner) {
+        focusOwner = owner
+        updateFocus()
+    }
+
+    /**
+     * Show a toggle button's content pane. If the button is already active
+     * (its pane is displayed) and the pane is interactive, move focus to it.
+     *
+     * @param interactive true for panes with D-pad navigation (AppsGrid);
+     *                    false for display-only panes (WebView, Widget)
+     *                    where focus stays on the button column.
+     */
+    private fun activateToggleButton(index: Int, interactive: Boolean = false, showPane: () -> Unit) {
+        if (activeButtonIndex == index) {
+            if (interactive) setFocusOwner(FocusOwner.PANE)
+            return
+        }
+        dismissCurrentPane()
+        deactivateActiveButton()
+        activeButtonIndex = index
+        buttons[index].isActiveButton = true
+        showPane()
+        if (interactive) setFocusOwner(FocusOwner.PANE)
+    }
+
+    private fun deactivateActiveButton() {
+        if (activeButtonIndex >= 0) {
+            buttons[activeButtonIndex].isActiveButton = false
+            activeButtonIndex = -1
+        }
+    }
+
+    private fun dismissCurrentPane() {
+        activeWebPane?.unload();    activeWebPane = null
+        activeWidgetPane?.unload(); activeWidgetPane = null
+        activeAppsGridPane?.unload(); activeAppsGridPane = null
+        hideLoading()
     }
 
     // ── Loading spinner ────────────────────────────────────────────────────────
@@ -248,33 +304,16 @@ class MainActivity : Activity() {
         loadingSpinner = null
     }
 
-    // ── Web pane ──────────────────────────────────────────────────────────────
+    // ── Content panes ────────────────────────────────────────────────────────
 
     private fun showWebPane(url: String) {
-        dismissConfigPane()
-        dismissWebPane()
-        dismissWidgetPane()
-        dismissAppsGridPane()
         val pane = WebPaneContent(this, url)
         pane.onContentReady = { hideLoading() }
         activeWebPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
 
-    private fun dismissWebPane() {
-        val pane = activeWebPane ?: return
-        activeWebPane = null
-        pane.unload()
-        hideLoading()
-    }
-
-    // ── Widget pane ───────────────────────────────────────────────────────────
-
     private fun showWidgetPane(appWidgetId: Int) {
-        dismissConfigPane()
-        dismissWebPane()
-        dismissWidgetPane()
-        dismissAppsGridPane()
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId) ?: return
         val pane = WidgetPaneContent(this, appWidgetHost, appWidgetId, info)
         pane.onContentReady = { hideLoading() }
@@ -282,31 +321,11 @@ class MainActivity : Activity() {
         pane.load { pane.show(reservedArea); showLoading() }
     }
 
-    private fun dismissWidgetPane() {
-        val pane = activeWidgetPane ?: return
-        activeWidgetPane = null
-        pane.unload()
-        hideLoading()
-    }
-
-    // ── Apps grid pane ────────────────────────────────────────────────────────
-
     private fun showAppsGridPane(apps: List<AppEntry>) {
-        dismissConfigPane()
-        dismissWebPane()
-        dismissWidgetPane()
-        dismissAppsGridPane()
         val pane = AppsGridPaneContent(this, apps)
         pane.onContentReady = { hideLoading() }
         activeAppsGridPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
-    }
-
-    private fun dismissAppsGridPane() {
-        val pane = activeAppsGridPane ?: return
-        activeAppsGridPane = null
-        pane.unload()
-        hideLoading()
     }
 
     // ── Widget binding ────────────────────────────────────────────────────────
@@ -363,20 +382,27 @@ class MainActivity : Activity() {
         pendingWidgetConfig = null
         clearPendingWidgetId()
         buttons[pendingWidgetButtonIndex].saveConfig(prefs, cfg)
-        // Show the widget pane immediately so the user sees the result.
         if (cfg.appWidgetId != -1) {
-            appWidgetHost.startListening()   // ensure host is active before creating view
+            appWidgetHost.startListening()
+            // Button is already active from the config→bind flow
             showWidgetPane(cfg.appWidgetId)
+            setFocusOwner(FocusOwner.PANE)
+        } else {
+            deactivateActiveButton()
+            setFocusOwner(FocusOwner.BUTTONS)
         }
     }
 
     // ── Config pane ───────────────────────────────────────────────────────────
 
     private fun openConfigPane(buttonIndex: Int) {
-        dismissWebPane()
-        dismissConfigPane()   // silently close any open pane (no save)
+        dismissConfigPane()
+        dismissCurrentPane()
+        deactivateActiveButton()
         setFocus(buttonIndex)
         configPaneButtonIndex = buttonIndex
+        activeButtonIndex = buttonIndex
+        buttons[buttonIndex].isActiveButton = true
 
         val pane = ConfigPaneContent(
             context       = this,
@@ -384,7 +410,7 @@ class MainActivity : Activity() {
             initialConfig = buttons[buttonIndex].config,
             onSave        = { newConfig ->
                 if (newConfig is ButtonConfig.WidgetLauncher && newConfig.appWidgetId == -1) {
-                    // Need to bind a widget — allocate an ID and start the system bind flow.
+                    // Widget bind flow — button stays active through the process.
                     val newId   = appWidgetHost.allocateAppWidgetId()
                     savePendingWidgetId(newId)
                     val oldCfg  = buttons[configPaneButtonIndex].config
@@ -406,7 +432,6 @@ class MainActivity : Activity() {
                         startActivityForResult(intent, BIND_WIDGET_REQUEST_CODE)
                     }
                 } else {
-                    // Free old widget ID if we're replacing a widget with something else.
                     val oldCfg = buttons[configPaneButtonIndex].config
                     if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1 &&
                         (newConfig !is ButtonConfig.WidgetLauncher ||
@@ -415,9 +440,15 @@ class MainActivity : Activity() {
                     }
                     buttons[configPaneButtonIndex].saveConfig(prefs, newConfig)
                     dismissConfigPane()
+                    deactivateActiveButton()
+                    setFocusOwner(FocusOwner.BUTTONS)
                 }
             },
-            onCancel = { dismissConfigPane() },
+            onCancel = {
+                dismissConfigPane()
+                deactivateActiveButton()
+                setFocusOwner(FocusOwner.BUTTONS)
+            },
             onClear  = {
                 val oldCfg = buttons[configPaneButtonIndex].config
                 if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
@@ -437,6 +468,7 @@ class MainActivity : Activity() {
         activeConfigPane = pane
         dragHandlePanel.visibility = View.VISIBLE
         pane.load { pane.show(reservedArea) }
+        setFocusOwner(FocusOwner.PANE)
     }
 
     /**
@@ -465,12 +497,13 @@ class MainActivity : Activity() {
                     val id = pendingWidgetConfig?.appWidgetId ?: -1
                     if (id != -1) completeWidgetBinding(id)
                 } else {
-                    // User denied the bind dialog; release the allocated ID.
                     pendingWidgetConfig?.let {
                         if (it.appWidgetId != -1) appWidgetHost.deleteAppWidgetId(it.appWidgetId)
                     }
                     pendingWidgetConfig = null
                     clearPendingWidgetId()
+                    deactivateActiveButton()
+                    setFocusOwner(FocusOwner.BUTTONS)
                 }
                 return
             }
@@ -478,12 +511,13 @@ class MainActivity : Activity() {
                 if (resultCode == RESULT_OK) {
                     finishWidgetSetup()
                 } else {
-                    // User cancelled configuration; delete the bound-but-unconfigured widget.
                     pendingWidgetConfig?.let {
                         if (it.appWidgetId != -1) appWidgetHost.deleteAppWidgetId(it.appWidgetId)
                     }
                     pendingWidgetConfig = null
                     clearPendingWidgetId()
+                    deactivateActiveButton()
+                    setFocusOwner(FocusOwner.BUTTONS)
                 }
                 return
             }
@@ -519,12 +553,15 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         when {
-            activeConfigPane != null         -> dismissConfigPane()
-            activeWebPane?.goBack() == false -> dismissWebPane()
-            activeWidgetPane != null         -> dismissWidgetPane()
-            activeAppsGridPane != null       -> dismissAppsGridPane()
+            activeConfigPane != null -> {
+                dismissConfigPane()
+                deactivateActiveButton()
+                setFocusOwner(FocusOwner.BUTTONS)
+            }
+            focusOwner == FocusOwner.PANE ->
+                setFocusOwner(FocusOwner.BUTTONS)
         }
-        // If nothing is open, do nothing — home launcher never exits on back.
+        // Home launcher never exits on back.
     }
 
     // ── Drag-to-reorder ───────────────────────────────────────────────────────
@@ -678,13 +715,15 @@ class MainActivity : Activity() {
         }
         val newFocus = rotate(focusedIndex)
         if (configPaneButtonIndex >= 0) configPaneButtonIndex = rotate(configPaneButtonIndex)
+        if (activeButtonIndex >= 0) activeButtonIndex = rotate(activeButtonIndex)
         edit.putInt("focused_index", newFocus)
         edit.apply()
 
         rotateIconFiles(from, to)
 
         focusedIndex = newFocus
-        for (b in buttons) b.loadConfig(prefs)
+        for (b in buttons) { b.loadConfig(prefs); b.isActiveButton = false }
+        if (activeButtonIndex >= 0) buttons[activeButtonIndex].isActiveButton = true
         updateFocus()
     }
 

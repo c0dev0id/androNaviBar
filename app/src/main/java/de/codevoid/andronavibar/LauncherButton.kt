@@ -414,21 +414,19 @@ class LauncherButton @JvmOverloads constructor(
                 if (intent != null) context.startActivity(intent)
             }
             is ButtonConfig.UrlLauncher -> {
-                flashActivation()
                 val url = if (cfg.url.startsWith("http://") || cfg.url.startsWith("https://"))
                     cfg.url else "https://${cfg.url}"
                 if (cfg.openInBrowser) {
+                    flashActivation()
                     context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
                 } else {
                     onUrlActivated?.invoke(url)
                 }
             }
             is ButtonConfig.WidgetLauncher -> {
-                flashActivation()
                 if (cfg.appWidgetId != -1) onWidgetActivated?.invoke(cfg.appWidgetId)
             }
             is ButtonConfig.AppsGrid -> {
-                flashActivation()
                 onAppsGridActivated?.invoke(cfg.apps)
             }
         }
