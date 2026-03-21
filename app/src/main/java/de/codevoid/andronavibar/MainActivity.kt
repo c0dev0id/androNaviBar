@@ -21,13 +21,14 @@ class MainActivity : Activity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var buttons: List<MaterialButton>
     private var configMode = false
-    private var focusedIndex = -1
+    private var focusedIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         prefs = getSharedPreferences("button_config", MODE_PRIVATE)
+        focusedIndex = prefs.getInt("focused_index", 0)
 
         buttons = listOf(
             findViewById(R.id.button0),
@@ -46,6 +47,7 @@ class MainActivity : Activity() {
         }
 
         loadButtons()
+        updateButtonStyles()
     }
 
     override fun onResume() {
@@ -77,9 +79,13 @@ class MainActivity : Activity() {
     }
 
     private fun moveFocus(delta: Int) {
-        focusedIndex = if (focusedIndex < 0) 0
-                       else (focusedIndex + delta).coerceIn(0, buttons.lastIndex)
+        focusedIndex = (focusedIndex + delta).coerceIn(0, buttons.lastIndex)
+        saveFocus()
         updateButtonStyles()
+    }
+
+    private fun saveFocus() {
+        prefs.edit().putInt("focused_index", focusedIndex).apply()
     }
 
     private fun activateFocused() {
@@ -112,6 +118,10 @@ class MainActivity : Activity() {
     private fun onButtonClick(index: Int) {
         if (configMode) {
             showConfigDialog(index)
+        } else if (index != focusedIndex) {
+            focusedIndex = index
+            saveFocus()
+            updateButtonStyles()
         } else {
             launchButton(index)
         }
