@@ -71,9 +71,11 @@ sealed class ButtonConfig {
         val icon: UrlIcon = UrlIcon.None
     ) : ButtonConfig()
 
-    // Planned toggle/pane types:
-    // data class MusicPlayer(...) : ButtonConfig()
-    // data class Metrics(...) : ButtonConfig()
+    data class MusicPlayer(
+        val playerPackage: String,      // fallback app to launch when nothing is playing
+        val label: String,
+        val icon: UrlIcon = UrlIcon.None
+    ) : ButtonConfig()
 }
 
 // ── LauncherButton ────────────────────────────────────────────────────────────
@@ -106,6 +108,9 @@ class LauncherButton @JvmOverloads constructor(
 
     /** Fired when an Apps Grid button is activated; MainActivity shows the apps grid pane. */
     var onAppsGridActivated: ((List<AppEntry>) -> Unit)? = null
+
+    /** Fired when a Music Player button is activated; MainActivity shows the music pane. */
+    var onMusicPlayerActivated: ((String) -> Unit)? = null
 
     // ── Visual state ─────────────────────────────────────────────────────────
 
@@ -260,6 +265,18 @@ class LauncherButton @JvmOverloads constructor(
                 }
                 ButtonConfig.AppsGrid(entries, labelRaw, icon)
             }
+            type == "music" -> {
+                val labelRaw = prefs.getString("btn_${index}_label", "") ?: ""
+                val iconType = prefs.getString("btn_${index}_icon_type", null)
+                val iconData = prefs.getString("btn_${index}_icon_data", null)
+                val icon = when (iconType) {
+                    "custom" -> UrlIcon.CustomFile
+                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
+                    else     -> UrlIcon.None
+                }
+                val playerPkg = prefs.getString("btn_${index}_value", "") ?: ""
+                ButtonConfig.MusicPlayer(playerPkg, labelRaw, icon)
+            }
             else -> ButtonConfig.Empty
         }
         applyConfig()
@@ -341,6 +358,26 @@ class LauncherButton @JvmOverloads constructor(
                 }
             }
 
+            is ButtonConfig.MusicPlayer -> {
+                val edit = prefs.edit()
+                    .putString("btn_${index}_type",  "music")
+                    .putString("btn_${index}_value", newConfig.playerPackage)
+                    .putString("btn_${index}_label", newConfig.label)
+                when (val ico = newConfig.icon) {
+                    is UrlIcon.None       -> edit.removeIconKeys()
+                    is UrlIcon.CustomFile -> edit
+                        .putString("btn_${index}_icon_type", "custom")
+                        .remove("btn_${index}_icon_data")
+                    is UrlIcon.Emoji      -> edit
+                        .putString("btn_${index}_icon_type", "emoji")
+                        .putString("btn_${index}_icon_data", ico.emoji)
+                }
+                edit.apply()
+                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
+                    iconFile().delete()
+                }
+            }
+
             is ButtonConfig.Empty -> clearConfig(prefs)
         }
         applyConfig()
@@ -400,6 +437,14 @@ class LauncherButton @JvmOverloads constructor(
                     is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
                 }
             }
+            is ButtonConfig.MusicPlayer -> {
+                text = cfg.label.ifEmpty { context.getString(R.string.tab_music) }
+                buttonIcon = when (val ico = cfg.icon) {
+                    is UrlIcon.None       -> null
+                    is UrlIcon.CustomFile -> loadIconFile()
+                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
+                }
+            }
         }
     }
 
@@ -428,6 +473,9 @@ class LauncherButton @JvmOverloads constructor(
             }
             is ButtonConfig.AppsGrid -> {
                 onAppsGridActivated?.invoke(cfg.apps)
+            }
+            is ButtonConfig.MusicPlayer -> {
+                onMusicPlayerActivated?.invoke(cfg.playerPackage)
             }
         }
     }
