@@ -80,14 +80,18 @@ class MainActivity : Activity() {
                 if (!pressedKeys.add(keyCode)) return  // auto-repeat, ignore
 
                 if (paneFocused) {
-                    // Route keys to the active config pane.
-                    // KEY_BUTTON_B (TBD): add `KEY -> saveAndClose()` here.
-                    activeConfigPane?.handleKey(keyCode)
+                    when (keyCode) {
+                        111 -> activeConfigPane?.save()          // ROUND BUTTON 2 — save + close
+                        else -> activeConfigPane?.handleKey(keyCode)
+                    }
                 } else {
                     when (keyCode) {
-                        19 -> moveFocus(-1)                    // DPAD_UP
-                        20 -> moveFocus(+1)                    // DPAD_DOWN
-                        66 -> buttons[focusedIndex].activate() // ENTER / Round Button 1
+                        19  -> moveFocus(-1)                     // DPAD_UP
+                        20  -> moveFocus(+1)                     // DPAD_DOWN
+                        66  -> buttons[focusedIndex].activate()  // ROUND BUTTON 1 — activate
+                        // 21 LEFT, 22 RIGHT — reserved: pane focus in/out, tab navigation
+                        // 111 ROUND BUTTON 2 — no-op outside pane (home app never exits)
+                        // 136 SWITCH IN, 137 SWITCH OUT — reserved: button list page up/down
                     }
                 }
             } else if (intent.hasExtra("key_release")) {

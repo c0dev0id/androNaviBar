@@ -367,7 +367,7 @@ unloading the pane. The pane only unloads when a different toggle button is acti
 | Tap unfocused button | Focus moves to that button; `ACTION_DOWN` consumed (no ripple) |
 | Tap focused direct-action button | Activation fires (ripple + flash + action) |
 | Tap focused toggle button | Pane load starts; focus transfers to pane when ready |
-| Long-press any button | Toggles config mode |
+| Long-press any button | Opens config pane for that button in the left pane |
 
 ### Remote Input (DMD Remote)
 
@@ -376,27 +376,40 @@ The DMD remote communicates via broadcast intent:
 - **Action**: `com.thorkracing.wireddevices.keypress`
 - **Key press extra**: `key_press` (int) — fired on key down
 - **Key release extra**: `key_release` (int) — fired on key up
+- **Device name extra**: `deviceName` (String) — remote model identifier
+
+Known device names: `DMD-Remote1`, `DMD-Remote2`, `DMD-Remote3`, `SilverFoxB8J`, `SilverFoxH1`.
 
 Auto-repeat is suppressed by tracking a `pressedKeys: MutableSet<Int>`. A key code arriving
 while already in the set is ignored. The set is cleared on `onPause()`.
 
-Current key mappings (button row focus):
+**Button row focus:**
 
 | Key code | Name | Action |
 |---|---|---|
 | 19 | DPAD_UP | Move focus up (clamped, no wrap) |
 | 20 | DPAD_DOWN | Move focus down (clamped, no wrap) |
-| 66 | ENTER / Round Button 1 | Activate focused button |
+| 66 | Round Button 1 | Activate focused button |
+| 21 | DPAD_LEFT | Reserved: navigate into left pane |
+| 22 | DPAD_RIGHT | Reserved: navigate out of pane to button row |
+| 111 | Round Button 2 | No-op (home app never exits) |
+| 136 | Switch In | Reserved: button list page up |
+| 137 | Switch Out | Reserved: button list page down |
 
-All remaining key codes are unmapped and reserved for future use (pane focus navigation,
-back from pane, page up/down for button list).
+**Config pane focus:**
+
+| Key code | Name | Action |
+|---|---|---|
+| 19 | DPAD_UP | Move app list selection up |
+| 20 | DPAD_DOWN | Move app list selection down |
+| 66 | Round Button 1 | Confirm selection (save + close) |
+| 111 | Round Button 2 | Save + close config pane |
 
 ### Back Key Behavior
 
 `onBackPressed()` behavior depends on context:
-- In config mode → exit config mode.
-- Pane is focused → return focus to button row (pane stays loaded).
-- Button row focused, not in config mode → no-op (home launcher must never be dismissed).
+- Config pane open → dismiss without saving (cancel).
+- Otherwise → no-op (home launcher must never be dismissed).
 
 ---
 
