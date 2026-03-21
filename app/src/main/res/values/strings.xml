@@ -20,4 +20,6 @@
     <string name="image_picked">New image selected</string>
     <string name="image_current">Using current image</string>
     <string name="config_mode">Configuration Mode</string>
+    <string name="widget_tab">Widget</string>
+    <string name="no_widgets">No widgets available</string>
 </resources>

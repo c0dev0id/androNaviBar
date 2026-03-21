@@ -1,5 +1,7 @@
 package de.codevoid.andronavibar
 
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -42,27 +44,32 @@ class ConfigPaneContent(
     private val onClear:       ()             -> Unit
 ) : PaneContent {
 
-    private enum class Tab { APP, URL, CLEAR }
+    private enum class Tab { APP, URL, WIDGET, CLEAR }
     private enum class IconOption { NONE, CUSTOM, EMOJI }
 
     // ── State ─────────────────────────────────────────────────────────────────
 
     private var activeTab: Tab = when (initialConfig) {
-        is ButtonConfig.AppLauncher -> Tab.APP
-        is ButtonConfig.UrlLauncher -> Tab.URL
-        is ButtonConfig.Empty       -> Tab.APP
+        is ButtonConfig.AppLauncher    -> Tab.APP
+        is ButtonConfig.UrlLauncher    -> Tab.URL
+        is ButtonConfig.WidgetLauncher -> Tab.WIDGET
+        is ButtonConfig.Empty          -> Tab.APP
     }
 
     private var apps:             List<ResolveInfo> = emptyList()
     private var selectedAppIndex: Int               = 0
 
-    private var selectedIconOption: IconOption = when {
-        initialConfig is ButtonConfig.UrlLauncher -> when (initialConfig.icon) {
+    private var selectedIconOption: IconOption = run {
+        val icon = when (initialConfig) {
+            is ButtonConfig.UrlLauncher    -> initialConfig.icon
+            is ButtonConfig.WidgetLauncher -> initialConfig.icon
+            else                           -> null
+        }
+        when (icon) {
             is UrlIcon.CustomFile -> IconOption.CUSTOM
             is UrlIcon.Emoji      -> IconOption.EMOJI
             else                  -> IconOption.NONE
         }
-        else -> IconOption.NONE
     }
 
     /** Set to true by MainActivity after a new custom image has been written to the icon file. */
@@ -92,6 +99,12 @@ class ConfigPaneContent(
     private var iconDetailArea: ViewGroup?                      = null
     private var emojiEdit:      EditText?                       = null
 
+    private var widgetProviders:      List<AppWidgetProviderInfo> = emptyList()
+    private var selectedProviderIndex: Int                        = 0
+    private var widgetRows:           List<View>                  = emptyList()
+    private var widgetScrollView:     ScrollView?                 = null
+    private var widgetLabelEdit:      EditText?                   = null
+
     // ── PaneContent ───────────────────────────────────────────────────────────
 
     override fun load(onReady: () -> Unit) {
@@ -103,6 +116,16 @@ class ConfigPaneContent(
         if (initialConfig is ButtonConfig.AppLauncher) {
             selectedAppIndex = apps
                 .indexOfFirst { it.activityInfo.packageName == initialConfig.packageName }
+                .coerceAtLeast(0)
+        }
+
+        widgetProviders = AppWidgetManager.getInstance(context)
+            .installedProviders
+            .sortedBy { it.loadLabel(context.packageManager).lowercase() }
+
+        if (initialConfig is ButtonConfig.WidgetLauncher) {
+            selectedProviderIndex = widgetProviders
+                .indexOfFirst { it.provider == initialConfig.provider }
                 .coerceAtLeast(0)
         }
 
@@ -126,19 +149,24 @@ class ConfigPaneContent(
         appLabelEdit    = null
         urlEditText     = null
         urlLabelEdit    = null
-        iconOptionBtns  = emptyMap()
-        iconDetailArea  = null
-        emojiEdit       = null
+        iconOptionBtns        = emptyMap()
+        iconDetailArea        = null
+        emojiEdit             = null
+        widgetRows            = emptyList()
+        widgetScrollView      = null
+        widgetLabelEdit       = null
     }
 
     // ── Key handling ──────────────────────────────────────────────────────────
 
     fun handleKey(keyCode: Int): Boolean {
         return when {
-            keyCode == 19 && activeTab == Tab.APP -> moveAppSelection(-1)
-            keyCode == 20 && activeTab == Tab.APP -> moveAppSelection(+1)
-            keyCode == 66                         -> { save(); true }
-            else                                  -> false
+            keyCode == 19 && activeTab == Tab.APP    -> moveAppSelection(-1)
+            keyCode == 20 && activeTab == Tab.APP    -> moveAppSelection(+1)
+            keyCode == 19 && activeTab == Tab.WIDGET -> moveWidgetSelection(-1)
+            keyCode == 20 && activeTab == Tab.WIDGET -> moveWidgetSelection(+1)
+            keyCode == 66                            -> { save(); true }
+            else                                     -> false
         }
     }
 
@@ -233,19 +261,17 @@ class ConfigPaneContent(
             built[tab] = btn
         }
 
-        addTab(Tab.APP,   context.getString(R.string.choose_app))
-        addTab(Tab.URL,   context.getString(R.string.enter_url))
-        addTab(Tab.CLEAR, context.getString(R.string.clear), last = true)
+        addTab(Tab.APP,    context.getString(R.string.choose_app))
+        addTab(Tab.URL,    context.getString(R.string.enter_url))
+        addTab(Tab.WIDGET, context.getString(R.string.widget_tab))
+        addTab(Tab.CLEAR,  context.getString(R.string.clear), last = true)
 
         tabButtons = built
         return row
     }
 
     private fun selectTab(tab: Tab) {
-        if (tab == Tab.CLEAR) {
-            onClear()
-            return
-        }
+        if (tab == Tab.CLEAR) { onClear(); return }
         activeTab = tab
         tabButtons.forEach { (t, btn) -> applyTabStyle(btn, t == activeTab) }
         refreshDetail()
@@ -266,9 +292,10 @@ class ConfigPaneContent(
         val container = detailArea ?: return
         container.removeAllViews()
         when (activeTab) {
-            Tab.APP   -> container.addView(buildAppPicker())
-            Tab.URL   -> container.addView(buildUrlEditor())
-            Tab.CLEAR -> Unit
+            Tab.APP    -> container.addView(buildAppPicker())
+            Tab.URL    -> container.addView(buildUrlEditor())
+            Tab.WIDGET -> container.addView(buildWidgetPicker())
+            Tab.CLEAR  -> Unit
         }
     }
 
@@ -372,6 +399,123 @@ class ConfigPaneContent(
         if (selectedAppIndex < appRows.size) {
             scroll.post { scroll.smoothScrollTo(0, appRows[selectedAppIndex].top) }
         }
+    }
+
+    // ── Widget picker ─────────────────────────────────────────────────────────
+
+    private fun buildWidgetPicker(): View {
+        val outer = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, MATCH)
+        }
+
+        if (widgetProviders.isEmpty()) {
+            outer.addView(TextView(context).apply {
+                text     = context.getString(R.string.no_widgets)
+                textSize = 16f
+                setTextColor(context.getColor(R.color.text_secondary))
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+            })
+            return outer
+        }
+
+        val scroll = ScrollView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
+        }
+        widgetScrollView = scroll
+
+        val list = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
+        }
+
+        val rows = mutableListOf<View>()
+        for (i in widgetProviders.indices) {
+            val row = buildWidgetRow(widgetProviders[i], i == selectedProviderIndex)
+            val idx = i
+            row.setOnClickListener {
+                selectedProviderIndex = idx
+                updateWidgetRowHighlights(rows, idx)
+            }
+            list.addView(row)
+            rows.add(row)
+        }
+        widgetRows = rows
+
+        scroll.addView(list)
+        outer.addView(scroll)
+
+        // Scroll to current selection after layout
+        scroll.post {
+            if (selectedProviderIndex < rows.size) {
+                scroll.smoothScrollTo(0, rows[selectedProviderIndex].top)
+            }
+        }
+
+        // Label field
+        val labelEdit = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+            hint      = context.getString(R.string.label_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            setTextColor(context.getColor(R.color.text_primary))
+            setHintTextColor(context.getColor(R.color.text_secondary))
+            setText(if (initialConfig is ButtonConfig.WidgetLauncher) initialConfig.label else "")
+        }
+        widgetLabelEdit = labelEdit
+        outer.addView(labelEdit)
+
+        // Icon options (same set as URL tab)
+        outer.addView(buildIconOptionRow())
+        val iconDetail = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+        }
+        iconDetailArea = iconDetail
+        outer.addView(iconDetail)
+        refreshIconDetail()
+
+        return outer
+    }
+
+    private fun buildWidgetRow(info: AppWidgetProviderInfo, selected: Boolean): View {
+        return LinearLayout(context).apply {
+            orientation  = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, px(56))
+            setPadding(px(8), px(8), px(8), px(8))
+            gravity      = Gravity.CENTER_VERTICAL
+            setBackgroundColor(rowBg(selected))
+
+            addView(ImageView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(px(36), px(36)).apply { marginEnd = px(12) }
+                scaleType    = ImageView.ScaleType.FIT_CENTER
+                setImageDrawable(try {
+                    info.loadIcon(context, context.resources.displayMetrics.densityDpi)
+                } catch (_: Exception) { null })
+            })
+
+            addView(TextView(context).apply {
+                text     = info.loadLabel(context.packageManager)
+                textSize = 16f
+                setTextColor(context.getColor(R.color.text_primary))
+            })
+        }
+    }
+
+    private fun moveWidgetSelection(delta: Int): Boolean {
+        if (widgetProviders.isEmpty()) return false
+        val next = (selectedProviderIndex + delta).coerceIn(0, widgetProviders.lastIndex)
+        if (next == selectedProviderIndex) return true
+        selectedProviderIndex = next
+        updateWidgetRowHighlights(widgetRows, next)
+        widgetScrollView?.post {
+            if (next < widgetRows.size) widgetScrollView!!.smoothScrollTo(0, widgetRows[next].top)
+        }
+        return true
+    }
+
+    private fun updateWidgetRowHighlights(rows: List<View>, selectedIndex: Int) {
+        for (i in rows.indices) rows[i].setBackgroundColor(rowBg(i == selectedIndex))
     }
 
     private fun rowBg(selected: Boolean) =
@@ -486,9 +630,11 @@ class ConfigPaneContent(
                     hint         = context.getString(R.string.emoji_hint)
                     inputType    = InputType.TYPE_CLASS_TEXT
                     setSingleLine()
-                    setText(if (initialConfig is ButtonConfig.UrlLauncher &&
-                                initialConfig.icon is UrlIcon.Emoji)
-                                initialConfig.icon.emoji else "")
+                    setText(when {
+                        initialConfig is ButtonConfig.UrlLauncher    && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
+                        initialConfig is ButtonConfig.WidgetLauncher && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
+                        else -> ""
+                    })
                     setTextColor(context.getColor(R.color.text_primary))
                     setHintTextColor(context.getColor(R.color.text_secondary))
                 }
@@ -499,8 +645,8 @@ class ConfigPaneContent(
             IconOption.CUSTOM -> {
                 val statusText = when {
                     hasPendingImage -> context.getString(R.string.image_picked)
-                    initialConfig is ButtonConfig.UrlLauncher &&
-                        initialConfig.icon is UrlIcon.CustomFile ->
+                    (initialConfig is ButtonConfig.UrlLauncher    && initialConfig.icon is UrlIcon.CustomFile) ||
+                    (initialConfig is ButtonConfig.WidgetLauncher && initialConfig.icon is UrlIcon.CustomFile) ->
                         context.getString(R.string.image_current)
                     else -> null
                 }
@@ -545,6 +691,23 @@ class ConfigPaneContent(
                     )
                 }
                 ButtonConfig.UrlLauncher(url, label, icon)
+            }
+            Tab.WIDGET -> {
+                val prov = widgetProviders.getOrNull(selectedProviderIndex)
+                    ?: return ButtonConfig.Empty
+                // Preserve the existing appWidgetId if provider hasn't changed
+                val existingId = if (initialConfig is ButtonConfig.WidgetLauncher &&
+                                     initialConfig.provider == prov.provider)
+                                     initialConfig.appWidgetId else -1
+                val label = widgetLabelEdit?.text?.toString()?.trim().orEmpty()
+                val icon  = when (selectedIconOption) {
+                    IconOption.NONE   -> UrlIcon.None
+                    IconOption.CUSTOM -> UrlIcon.CustomFile
+                    IconOption.EMOJI  -> UrlIcon.Emoji(
+                        emojiEdit?.text?.toString()?.trim() ?: ""
+                    )
+                }
+                ButtonConfig.WidgetLauncher(prov.provider, existingId, label, icon)
             }
             Tab.CLEAR -> ButtonConfig.Empty
         }

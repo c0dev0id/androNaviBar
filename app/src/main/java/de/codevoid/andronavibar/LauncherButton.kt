@@ -1,5 +1,7 @@
 package de.codevoid.andronavibar
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -52,8 +54,14 @@ sealed class ButtonConfig {
         val icon: UrlIcon = UrlIcon.None
     ) : ButtonConfig()
 
+    data class WidgetLauncher(
+        val provider: ComponentName,
+        val appWidgetId: Int,           // -1 until bound
+        val label: String,
+        val icon: UrlIcon = UrlIcon.None
+    ) : ButtonConfig()
+
     // Planned toggle/pane types:
-    // data class Widget(...) : ButtonConfig()
     // data class MusicPlayer(...) : ButtonConfig()
     // data class Metrics(...) : ButtonConfig()
 }
@@ -82,6 +90,9 @@ class LauncherButton @JvmOverloads constructor(
 
     /** Fired when a URL button is activated; MainActivity shows the URL in a WebView pane. */
     var onUrlActivated: ((String) -> Unit)? = null
+
+    /** Fired when a Widget button is activated; MainActivity shows the widget pane. */
+    var onWidgetActivated: ((Int) -> Unit)? = null
 
     // ── Visual state ─────────────────────────────────────────────────────────
 
@@ -176,6 +187,23 @@ class LauncherButton @JvmOverloads constructor(
                 val label = prefs.getString("btn_${index}_label", null)
                 if (label != null) ButtonConfig.AppLauncher(value, label) else ButtonConfig.Empty
             }
+            type == "widget" && value != null -> {
+                val cn = ComponentName.unflattenFromString(value)
+                if (cn == null) {
+                    ButtonConfig.Empty
+                } else {
+                    val widgetId  = prefs.getString("btn_${index}_widget_id", null)?.toIntOrNull() ?: -1
+                    val labelRaw  = prefs.getString("btn_${index}_label", "") ?: ""
+                    val iconType  = prefs.getString("btn_${index}_icon_type", null)
+                    val iconData  = prefs.getString("btn_${index}_icon_data", null)
+                    val icon = when (iconType) {
+                        "custom" -> UrlIcon.CustomFile
+                        "emoji"  -> UrlIcon.Emoji(iconData ?: "")
+                        else     -> UrlIcon.None
+                    }
+                    ButtonConfig.WidgetLauncher(cn, widgetId, labelRaw, icon)
+                }
+            }
             type == "url" && value != null -> {
                 val labelRaw = prefs.getString("btn_${index}_label", "") ?: ""
                 // Migrate: old code stored url as label — treat label==url as empty.
@@ -226,6 +254,27 @@ class LauncherButton @JvmOverloads constructor(
                 }
             }
 
+            is ButtonConfig.WidgetLauncher -> {
+                val edit = prefs.edit()
+                    .putString("btn_${index}_type",      "widget")
+                    .putString("btn_${index}_value",     newConfig.provider.flattenToString())
+                    .putString("btn_${index}_label",     newConfig.label)
+                    .putString("btn_${index}_widget_id", newConfig.appWidgetId.toString())
+                when (val ico = newConfig.icon) {
+                    is UrlIcon.None       -> edit.removeIconKeys()
+                    is UrlIcon.CustomFile -> edit
+                        .putString("btn_${index}_icon_type", "custom")
+                        .remove("btn_${index}_icon_data")
+                    is UrlIcon.Emoji      -> edit
+                        .putString("btn_${index}_icon_type", "emoji")
+                        .putString("btn_${index}_icon_data", ico.emoji)
+                }
+                edit.apply()
+                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
+                    iconFile().delete()
+                }
+            }
+
             is ButtonConfig.Empty -> clearConfig(prefs)
         }
         applyConfig()
@@ -238,6 +287,7 @@ class LauncherButton @JvmOverloads constructor(
             .remove("btn_${index}_type")
             .remove("btn_${index}_value")
             .remove("btn_${index}_label")
+            .remove("btn_${index}_widget_id")
             .removeIconKeys()
             .apply()
         applyConfig()
@@ -267,6 +317,14 @@ class LauncherButton @JvmOverloads constructor(
                     is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
                 }
             }
+            is ButtonConfig.WidgetLauncher -> {
+                text = cfg.label.ifEmpty { cfg.provider.shortClassName.trimStart('.') }
+                buttonIcon = when (val ico = cfg.icon) {
+                    is UrlIcon.None       -> null
+                    is UrlIcon.CustomFile -> loadIconFile()
+                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
+                }
+            }
         }
     }
 
@@ -286,7 +344,10 @@ class LauncherButton @JvmOverloads constructor(
                     cfg.url else "https://${cfg.url}"
                 onUrlActivated?.invoke(url)
             }
-            // TODO: toggle/pane types — call load() here; show() on onReady
+            is ButtonConfig.WidgetLauncher -> {
+                flashActivation()
+                if (cfg.appWidgetId != -1) onWidgetActivated?.invoke(cfg.appWidgetId)
+            }
         }
     }
 

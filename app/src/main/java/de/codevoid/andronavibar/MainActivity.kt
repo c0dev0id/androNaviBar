@@ -1,6 +1,8 @@
 package de.codevoid.andronavibar
 
 import android.app.Activity
+import android.appwidget.AppWidgetHost
+import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -31,6 +33,7 @@ class MainActivity : Activity() {
     private lateinit var buttons:         List<LauncherButton>
     private lateinit var reservedArea:    FrameLayout
     private lateinit var dragHandlePanel: LinearLayout
+    private lateinit var appWidgetHost:   AppWidgetHost
 
     private var focusedIndex = 0
 
@@ -64,8 +67,15 @@ class MainActivity : Activity() {
     /** Non-null while a web pane is displayed in reservedArea. */
     private var activeWebPane: WebPaneContent? = null
 
+    /** Non-null while a widget pane is displayed in reservedArea. */
+    private var activeWidgetPane: WidgetPaneContent? = null
+
     /** Non-null while a config pane is displayed in reservedArea. */
     private var activeConfigPane: ConfigPaneContent? = null
+
+    /** Holds a partially-bound widget config while waiting for the system bind dialog result. */
+    private var pendingWidgetConfig: ButtonConfig.WidgetLauncher? = null
+    private var pendingWidgetButtonIndex: Int = 0
 
     /**
      * The current slot index of the button whose config pane is open.
@@ -83,9 +93,10 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         hideSystemBars()
-        prefs        = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
-        reservedArea = findViewById(R.id.reservedArea)
-        focusedIndex = prefs.getInt("focused_index", 0)
+        prefs          = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
+        reservedArea   = findViewById(R.id.reservedArea)
+        appWidgetHost  = AppWidgetHost(this, APP_WIDGET_HOST_ID)
+        focusedIndex   = prefs.getInt("focused_index", 0)
 
         buttons = listOf(
             findViewById(R.id.button0),
@@ -101,6 +112,7 @@ class MainActivity : Activity() {
             buttons[i].onFocusRequested  = { setFocus(i) }
             buttons[i].onConfigRequested = { openConfigPane(i) }
             buttons[i].onUrlActivated    = { url -> showWebPane(url) }
+            buttons[i].onWidgetActivated = { widgetId -> showWidgetPane(widgetId) }
             buttons[i].loadConfig(prefs)
         }
 
@@ -110,6 +122,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        appWidgetHost.startListening()
         LauncherApplication.mainActivity = WeakReference(this)
         registerReceiver(
             remoteListener,
@@ -120,6 +133,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        appWidgetHost.stopListening()
         LauncherApplication.mainActivity = null
         isWindowFocused = false
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
@@ -175,9 +189,11 @@ class MainActivity : Activity() {
                     val held = SystemClock.elapsedRealtime() - key111PressedAt
                     key111PressedAt = 0L
                     if (held < LauncherApplication.TOGGLE_HOLD_MS) {
-                        // Short press: dismiss config pane or step back in WebView, then dismiss it.
-                        if (activeConfigPane != null) dismissConfigPane()
-                        else if (activeWebPane?.goBack() == false) dismissWebPane()
+                        when {
+                            activeConfigPane != null         -> dismissConfigPane()
+                            activeWebPane?.goBack() == false -> dismissWebPane()
+                            activeWidgetPane != null         -> dismissWidgetPane()
+                        }
                     }
                     // Long press already handled by LauncherApplication.
                 }
@@ -219,6 +235,47 @@ class MainActivity : Activity() {
         pane.unload()
     }
 
+    // ── Widget pane ───────────────────────────────────────────────────────────
+
+    private fun showWidgetPane(appWidgetId: Int) {
+        dismissConfigPane()
+        dismissWebPane()
+        dismissWidgetPane()
+        val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId) ?: return
+        val pane = WidgetPaneContent(this, appWidgetHost, appWidgetId, info)
+        activeWidgetPane = pane
+        pane.load { pane.show(reservedArea) }
+    }
+
+    private fun dismissWidgetPane() {
+        val pane = activeWidgetPane ?: return
+        activeWidgetPane = null
+        pane.unload()
+    }
+
+    // ── Widget binding ────────────────────────────────────────────────────────
+
+    private fun completeWidgetBinding(appWidgetId: Int) {
+        val cfg  = pendingWidgetConfig ?: return
+        val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
+        if (info?.configure != null) {
+            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+                component = info.configure
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, CONFIGURE_WIDGET_REQUEST_CODE)
+        } else {
+            finishWidgetSetup()
+        }
+    }
+
+    private fun finishWidgetSetup() {
+        val cfg = pendingWidgetConfig ?: return
+        pendingWidgetConfig = null
+        buttons[pendingWidgetButtonIndex].saveConfig(prefs, cfg)
+    }
+
     // ── Config pane ───────────────────────────────────────────────────────────
 
     private fun openConfigPane(buttonIndex: Int) {
@@ -232,11 +289,47 @@ class MainActivity : Activity() {
             buttonIndex   = buttonIndex,
             initialConfig = buttons[buttonIndex].config,
             onSave        = { newConfig ->
-                buttons[configPaneButtonIndex].saveConfig(prefs, newConfig)
-                dismissConfigPane()
+                if (newConfig is ButtonConfig.WidgetLauncher && newConfig.appWidgetId == -1) {
+                    // Need to bind a widget — allocate an ID and start the system bind flow.
+                    val newId   = appWidgetHost.allocateAppWidgetId()
+                    val oldCfg  = buttons[configPaneButtonIndex].config
+                    if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
+                        appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
+                    }
+                    pendingWidgetConfig       = newConfig.copy(appWidgetId = newId)
+                    pendingWidgetButtonIndex  = configPaneButtonIndex
+                    dismissConfigPane()
+                    val mgr = AppWidgetManager.getInstance(this)
+                    if (mgr.bindAppWidgetIdIfAllowed(newId, newConfig.provider)) {
+                        completeWidgetBinding(newId)
+                    } else {
+                        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newId)
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, newConfig.provider)
+                        }
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, BIND_WIDGET_REQUEST_CODE)
+                    }
+                } else {
+                    // Free old widget ID if we're replacing a widget with something else.
+                    val oldCfg = buttons[configPaneButtonIndex].config
+                    if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1 &&
+                        (newConfig !is ButtonConfig.WidgetLauncher ||
+                         newConfig.appWidgetId != oldCfg.appWidgetId)) {
+                        appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
+                    }
+                    buttons[configPaneButtonIndex].saveConfig(prefs, newConfig)
+                    dismissConfigPane()
+                }
             },
             onCancel = { dismissConfigPane() },
-            onClear  = { buttons[configPaneButtonIndex].clearConfig(prefs) }
+            onClear  = {
+                val oldCfg = buttons[configPaneButtonIndex].config
+                if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
+                    appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
+                }
+                buttons[configPaneButtonIndex].clearConfig(prefs)
+            }
         )
 
         pane.onPickImageRequest = {
@@ -271,6 +364,26 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        when (requestCode) {
+            BIND_WIDGET_REQUEST_CODE -> {
+                if (resultCode == RESULT_OK) {
+                    val id = pendingWidgetConfig?.appWidgetId ?: -1
+                    if (id != -1) completeWidgetBinding(id)
+                } else {
+                    // User denied the bind dialog; release the allocated ID.
+                    pendingWidgetConfig?.let {
+                        if (it.appWidgetId != -1) appWidgetHost.deleteAppWidgetId(it.appWidgetId)
+                    }
+                    pendingWidgetConfig = null
+                }
+                return
+            }
+            CONFIGURE_WIDGET_REQUEST_CODE -> {
+                finishWidgetSetup()   // proceed whether OK or CANCEL; widget is already bound
+                return
+            }
+        }
+
         if (requestCode == IMAGE_REQUEST_CODE && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             val dest = File(filesDir, "btn_${pendingIconButtonIndex}_icon.png")
@@ -301,8 +414,9 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
         when {
-            activeConfigPane != null          -> dismissConfigPane()
-            activeWebPane?.goBack() == false  -> dismissWebPane()
+            activeConfigPane != null         -> dismissConfigPane()
+            activeWebPane?.goBack() == false -> dismissWebPane()
+            activeWidgetPane != null         -> dismissWidgetPane()
         }
         // If nothing is open, do nothing — home launcher never exits on back.
     }
@@ -433,7 +547,7 @@ class MainActivity : Activity() {
     }
 
     private fun reorderButtons(from: Int, to: Int) {
-        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data")
+        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data", "_widget_id")
         // Snapshot all button prefs
         val snap = Array(buttons.size) { i ->
             keys.associateWith { k -> prefs.getString("btn_$i$k", null) }
@@ -488,7 +602,10 @@ class MainActivity : Activity() {
     private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density + 0.5f).toInt()
 
     companion object {
-        private const val IMAGE_REQUEST_CODE = 1001
+        private const val IMAGE_REQUEST_CODE          = 1001
+        private const val BIND_WIDGET_REQUEST_CODE    = 1002
+        private const val CONFIGURE_WIDGET_REQUEST_CODE = 1003
+        private const val APP_WIDGET_HOST_ID          = 1536
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     }
 }
