@@ -57,11 +57,8 @@ class LauncherButton @JvmOverloads constructor(
     /** Fired when this unfocused button receives ACTION_DOWN (focus-only tap). */
     var onFocusRequested: (() -> Unit)? = null
 
-    /** Fired on long-press; MainActivity toggles config mode. */
-    var onLongPressed: (() -> Unit)? = null
-
-    /** Fired when activated in config mode; MainActivity shows the config dialog. */
-    var onConfigRequest: (() -> Unit)? = null
+    /** Fired on long-press; MainActivity opens the config pane for this button. */
+    var onConfigRequested: (() -> Unit)? = null
 
     // ── Visual state ─────────────────────────────────────────────────────────
 
@@ -69,17 +66,6 @@ class LauncherButton @JvmOverloads constructor(
         set(value) {
             field = value
             foreground = if (value) makeFocusRing() else null
-        }
-
-    var isInConfigMode: Boolean = false
-        set(value) {
-            field = value
-            if (value) {
-                strokeColor = ColorStateList.valueOf(context.getColor(R.color.config_border))
-                strokeWidth = dpToPx(2)
-            } else {
-                strokeWidth = 0
-            }
         }
 
     // ── Pane loading (used by future toggle/pane types) ───────────────────────
@@ -97,13 +83,13 @@ class LauncherButton @JvmOverloads constructor(
     init {
         setOnClickListener { activate() }
         setOnLongClickListener {
-            onLongPressed?.invoke()
+            onConfigRequested?.invoke()
             true
         }
         setOnTouchListener { _, event ->
-            // Consume ACTION_DOWN on unfocused buttons outside config mode so the
-            // Material pressed-state overlay does not fire on a focus-only tap.
-            if (event.action == MotionEvent.ACTION_DOWN && !isInConfigMode && !isFocusedButton) {
+            // Consume ACTION_DOWN on unfocused buttons so the Material pressed-state
+            // overlay does not fire on a focus-only tap.
+            if (event.action == MotionEvent.ACTION_DOWN && !isFocusedButton) {
                 onFocusRequested?.invoke()
                 true
             } else false
@@ -173,10 +159,6 @@ class LauncherButton @JvmOverloads constructor(
     // ── Activation ────────────────────────────────────────────────────────────
 
     fun activate() {
-        if (isInConfigMode) {
-            onConfigRequest?.invoke()
-            return
-        }
         when (val cfg = config) {
             is ButtonConfig.Empty -> Unit
             is ButtonConfig.AppLauncher -> {
@@ -204,7 +186,7 @@ class LauncherButton @JvmOverloads constructor(
     }
 
     private fun makeFocusRing(): GradientDrawable = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
+        shape        = GradientDrawable.RECTANGLE
         cornerRadius = dpToPx(16).toFloat()
         setStroke(dpToPx(6), context.getColor(R.color.colorPrimary))
         setColor(Color.TRANSPARENT)

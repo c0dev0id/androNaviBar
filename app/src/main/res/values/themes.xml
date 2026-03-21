@@ -24,16 +24,6 @@
         <item name="cornerRadius">16dp</item>
     </style>
 
-    <style name="Widget.AndroNaviBar.Button.Config" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="android:textColor">@color/text_primary</item>
-        <item name="iconTint">@color/text_primary</item>
-        <item name="strokeColor">@color/config_border</item>
-        <item name="strokeWidth">2dp</item>
-        <item name="iconSize">32dp</item>
-        <item name="iconGravity">textStart</item>
-        <item name="cornerRadius">16dp</item>
-    </style>
-
     <style name="ThemeOverlay.AndroNaviBar.AlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="android:background">@color/surface_card</item>
         <item name="colorOnSurface">@color/text_primary</item>

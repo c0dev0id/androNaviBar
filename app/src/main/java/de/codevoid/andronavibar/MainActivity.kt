@@ -6,23 +6,32 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.os.Bundle
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class MainActivity : Activity() {
 
-    private lateinit var prefs: SharedPreferences
-    private lateinit var buttons: List<LauncherButton>
-    private var configMode = false
+    private lateinit var prefs:        SharedPreferences
+    private lateinit var buttons:      List<LauncherButton>
+    private lateinit var reservedArea: FrameLayout
+
     private var focusedIndex = 0
+
+    // ── Pane coordination ─────────────────────────────────────────────────────
+
+    /** Non-null while a config pane is displayed in reservedArea. */
+    private var activeConfigPane: ConfigPaneContent? = null
+
+    private val paneFocused get() = activeConfigPane != null
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        prefs = getSharedPreferences("button_config", MODE_PRIVATE)
+        prefs        = getSharedPreferences("button_config", MODE_PRIVATE)
+        reservedArea = findViewById(R.id.reservedArea)
         focusedIndex = prefs.getInt("focused_index", 0)
 
         buttons = listOf(
@@ -34,10 +43,9 @@ class MainActivity : Activity() {
         )
 
         for (i in buttons.indices) {
-            buttons[i].index = i
+            buttons[i].index            = i
             buttons[i].onFocusRequested = { setFocus(i) }
-            buttons[i].onLongPressed    = { toggleConfigMode() }
-            buttons[i].onConfigRequest  = { showConfigDialog(i) }
+            buttons[i].onConfigRequested = { openConfigPane(i) }
             buttons[i].loadConfig(prefs)
         }
 
@@ -66,13 +74,21 @@ class MainActivity : Activity() {
     private val remoteListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != "com.thorkracing.wireddevices.keypress") return
+
             if (intent.hasExtra("key_press")) {
                 val keyCode = intent.getIntExtra("key_press", 0)
                 if (!pressedKeys.add(keyCode)) return  // auto-repeat, ignore
-                when (keyCode) {
-                    19 -> moveFocus(-1)              // DPAD_UP
-                    20 -> moveFocus(+1)              // DPAD_DOWN
-                    66 -> buttons[focusedIndex].activate()  // ENTER / Round Button 1
+
+                if (paneFocused) {
+                    // Route keys to the active config pane.
+                    // KEY_BUTTON_B (TBD): add `KEY -> saveAndClose()` here.
+                    activeConfigPane?.handleKey(keyCode)
+                } else {
+                    when (keyCode) {
+                        19 -> moveFocus(-1)                    // DPAD_UP
+                        20 -> moveFocus(+1)                    // DPAD_DOWN
+                        66 -> buttons[focusedIndex].activate() // ENTER / Round Button 1
+                    }
                 }
             } else if (intent.hasExtra("key_release")) {
                 pressedKeys.remove(intent.getIntExtra("key_release", 0))
@@ -98,81 +114,39 @@ class MainActivity : Activity() {
         }
     }
 
-    // ── Config mode ───────────────────────────────────────────────────────────
+    // ── Config pane ───────────────────────────────────────────────────────────
 
-    private fun toggleConfigMode() {
-        configMode = !configMode
-        for (btn in buttons) btn.isInConfigMode = configMode
-    }
+    private fun openConfigPane(buttonIndex: Int) {
+        dismissConfigPane()   // silently close any open pane (no save)
+        setFocus(buttonIndex)
 
-    // ── Config dialogs ────────────────────────────────────────────────────────
-
-    private fun showConfigDialog(index: Int) {
-        val options = arrayOf(
-            getString(R.string.choose_app),
-            getString(R.string.enter_url),
-            getString(R.string.clear)
+        val pane = ConfigPaneContent(
+            context       = this,
+            initialConfig = buttons[buttonIndex].config,
+            onSave        = { newConfig ->
+                buttons[buttonIndex].saveConfig(prefs, newConfig)
+                dismissConfigPane()
+            }
         )
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.configure)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> showAppPicker(index)
-                    1 -> showUrlDialog(index)
-                    2 -> buttons[index].clearConfig(prefs)
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+
+        activeConfigPane = pane
+        pane.load { pane.show(reservedArea) }
     }
 
-    private fun showAppPicker(index: Int) {
-        val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val apps = packageManager.queryIntentActivities(mainIntent, 0)
-            .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-        val appNames = apps.map { it.loadLabel(packageManager).toString() }.toTypedArray()
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.choose_app)
-            .setItems(appNames) { _, which ->
-                val app = apps[which]
-                buttons[index].saveConfig(prefs, ButtonConfig.AppLauncher(
-                    packageName = app.activityInfo.packageName,
-                    label       = app.loadLabel(packageManager).toString()
-                ))
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
+    /**
+     * Remove the config pane without saving. Always safe to call; no-op when
+     * no pane is open. onSave is never fired from here.
+     */
+    private fun dismissConfigPane() {
+        val pane = activeConfigPane ?: return
+        activeConfigPane = null
+        pane.unload()
     }
 
-    private fun showUrlDialog(index: Int) {
-        val currentUrl = (buttons[index].config as? ButtonConfig.UrlLauncher)?.url ?: ""
-        val input = EditText(this).apply {
-            hint = getString(R.string.url_hint)
-            setText(currentUrl)
-            setSingleLine()
-        }
-        val container = FrameLayout(this).apply {
-            val padding = (16 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding, padding, 0)
-            addView(input)
-        }
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.enter_url)
-            .setView(container)
-            .setPositiveButton(R.string.ok) { _, _ ->
-                val url = input.text.toString().trim()
-                if (url.isNotEmpty()) {
-                    buttons[index].saveConfig(prefs, ButtonConfig.UrlLauncher(url, url))
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
+    // ── Back key ──────────────────────────────────────────────────────────────
 
     override fun onBackPressed() {
-        if (configMode) toggleConfigMode()
-        // Do nothing when not in config mode — this is a home app.
+        // Back = dismiss without saving (cancel). Home app never exits on back.
+        dismissConfigPane()
     }
 }
