@@ -24,6 +24,7 @@ class WebPaneContent(
     }
 
     override fun show(container: ViewGroup) {
+        val targetUrl = url   // capture before apply{} — inside apply, 'url' resolves to WebView.url (String?)
         val wv = WebView(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -32,7 +33,7 @@ class WebPaneContent(
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = WebViewClient()   // keep all navigation inside this WebView
-            loadUrl(url)
+            loadUrl(targetUrl)
         }
         webView = wv
         container.addView(wv)
