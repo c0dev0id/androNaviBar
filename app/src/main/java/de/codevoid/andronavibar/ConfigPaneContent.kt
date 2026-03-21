@@ -27,18 +27,18 @@ import com.google.android.material.button.MaterialButton
  *   │  — or —                    │
  *   │  URL / label / icon fields │   ← URL tab
  *   └────────────────────────────┘
+ *   [ Cancel ]         [ Save ]      ← action row
  *
- * Remote: DPAD_UP/DOWN scrolls app list; key 66 (Round Button 1) confirms; key 111
- * (Round Button 2) saves+closes via MainActivity routing.
- *
- * Custom image: MainActivity owns the Activity result; it calls onImageReady() once
- * the image has been copied to the button's icon file.
+ * Remote: DPAD_UP/DOWN scrolls app list; key 66 (Round Button 1) saves; key 111
+ * (Round Button 2) cancels — same as Back. Custom image: MainActivity calls
+ * onImageReady() once the picked image has been copied to the button's icon file.
  */
 class ConfigPaneContent(
     private val context:       Context,
     private val buttonIndex:   Int,
     private val initialConfig: ButtonConfig,
     private val onSave:        (ButtonConfig) -> Unit,
+    private val onCancel:      ()             -> Unit,
     private val onClear:       ()             -> Unit
 ) : PaneContent {
 
@@ -144,6 +144,10 @@ class ConfigPaneContent(
         onSave(buildConfig())
     }
 
+    fun cancel() {
+        onCancel()
+    }
+
     // ── View construction ─────────────────────────────────────────────────────
 
     private fun buildRoot(): View {
@@ -164,8 +168,39 @@ class ConfigPaneContent(
         detailArea = detail
         root.addView(detail)
 
+        root.addView(buildActionRow())
+
         refreshDetail()
         return root
+    }
+
+    private fun buildActionRow(): View {
+        return LinearLayout(context).apply {
+            orientation  = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(12) }
+
+            addView(MaterialButton(
+                context, null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle
+            ).apply {
+                text         = context.getString(R.string.cancel)
+                cornerRadius = px(8)
+                setTextColor(context.getColor(R.color.text_primary))
+                strokeColor  = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
+                strokeWidth  = px(1)
+                layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply { marginEnd = px(8) }
+                setOnClickListener { cancel() }
+            })
+
+            addView(MaterialButton(context).apply {
+                text               = context.getString(R.string.save)
+                cornerRadius       = px(8)
+                backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.colorPrimary))
+                setTextColor(context.getColor(R.color.text_primary))
+                layoutParams       = LinearLayout.LayoutParams(0, WRAP, 1f)
+                setOnClickListener { save() }
+            })
+        }
     }
 
     private fun buildTabRow(): View {

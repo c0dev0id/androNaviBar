@@ -6,6 +6,7 @@
     <string name="choose_app">Choose App</string>
     <string name="enter_url">Enter URL</string>
     <string name="clear">Clear</string>
+    <string name="save">Save</string>
     <string name="cancel">Cancel</string>
     <string name="ok">OK</string>
     <string name="url_hint">https://example.com</string>

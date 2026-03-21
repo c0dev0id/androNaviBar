@@ -82,7 +82,7 @@ class MainActivity : Activity() {
 
                 if (paneFocused) {
                     when (keyCode) {
-                        111 -> activeConfigPane?.save()          // ROUND BUTTON 2 — save + close
+                        111 -> dismissConfigPane()               // ROUND BUTTON 2 — cancel/discard
                         else -> activeConfigPane?.handleKey(keyCode)
                     }
                 } else {
@@ -133,9 +133,8 @@ class MainActivity : Activity() {
                 buttons[buttonIndex].saveConfig(prefs, newConfig)
                 dismissConfigPane()
             },
-            onClear = {
-                buttons[buttonIndex].clearConfig(prefs)
-            }
+            onCancel = { dismissConfigPane() },
+            onClear  = { buttons[buttonIndex].clearConfig(prefs) }
         )
 
         pane.onPickImageRequest = {
