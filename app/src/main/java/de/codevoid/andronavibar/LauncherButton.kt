@@ -129,7 +129,7 @@ class LauncherButton @JvmOverloads constructor(
             // background away from the view's top/bottom edges — making the top/bottom
             // gap look smaller than the left gap at equal insets.
             val vInset = dpToPx(6) * 2          // 12dp top/bottom
-            val hInset = dpToPx(3)              // 3dp left (= 12dp − M3's ~9dp insetTop)
+            val hInset = dpToPx(9)              // 9dp left (= 12dp − M3's ~3dp insetTop)
             val iconSize = height - vInset * 2
             // Clip to the button's full rounded rect so the icon respects corner radius.
             val path = Path()
