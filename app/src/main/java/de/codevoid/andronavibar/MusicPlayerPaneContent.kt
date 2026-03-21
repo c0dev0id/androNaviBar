@@ -262,7 +262,12 @@ class MusicPlayerPaneContent(
             3 -> {
                 val mc = mediaController ?: return
                 isShuffleOn = !isShuffleOn
-                mc.transportControls.setShuffleMode(if (isShuffleOn) 1 else 0)
+                mc.transportControls.sendCustomAction(
+                    COMPAT_ACTION_SET_SHUFFLE,
+                    android.os.Bundle().apply {
+                        putInt(COMPAT_EXTRA_SHUFFLE, if (isShuffleOn) 1 else 0)
+                    }
+                )
                 updateShuffleVisual()
             }
         }
@@ -325,7 +330,7 @@ class MusicPlayerPaneContent(
         controller.registerCallback(mediaCallback)
         updateMetadata(controller.metadata)
         updatePlaybackState(controller.playbackState)
-        isShuffleOn = (controller.shuffleMode == 1)
+        isShuffleOn = controller.extras?.getInt(COMPAT_EXTRA_SHUFFLE, 0) == 1
         updateShuffleVisual()
     }
 
@@ -516,5 +521,11 @@ class MusicPlayerPaneContent(
     companion object {
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
+        // AndroidX MediaSessionCompat action/extra keys — used via sendCustomAction
+        // because the framework MediaController has no shuffle mode API.
+        private const val COMPAT_ACTION_SET_SHUFFLE =
+            "android.support.v4.media.session.action.SET_SHUFFLE_MODE"
+        private const val COMPAT_EXTRA_SHUFFLE =
+            "android.support.v4.media.session.extra.SHUFFLE_MODE"
     }
 }
