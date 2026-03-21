@@ -3,17 +3,18 @@ package de.codevoid.andronavibar
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaMetadata
+import android.media.browse.MediaBrowser
 import android.media.session.MediaController
-import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
+import android.service.media.MediaBrowserService
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -41,11 +42,10 @@ class MusicPlayerPaneContent(
     private var controlIcons: List<ImageView> = emptyList()
     private var focusIndex: Int = 1  // default: play/pause
 
-    // Media session
-    private var sessionManager: MediaSessionManager? = null
+    // Media browser — connects directly to the player's MediaBrowserService.
+    // No notification listener permission needed.
+    private var mediaBrowser: MediaBrowser? = null
     private var mediaController: MediaController? = null
-    private var sessionListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
-    private var hasNotificationAccess = false
     private var isShuffleOn = false
 
     var onContentReady: (() -> Unit)? = null
@@ -242,18 +242,15 @@ class MusicPlayerPaneContent(
     // ── Control actions ─────────────────────────────────────────────────────
 
     private fun activateControl(index: Int) {
-        if (!hasNotificationAccess) {
-            openNotificationSettings()
-            return
-        }
         when (index) {
             0 -> mediaController?.transportControls?.skipToPrevious() ?: launchPlayerApp()
             1 -> {
-                val state = mediaController?.playbackState?.state
-                if (state == PlaybackState.STATE_PLAYING) {
-                    mediaController?.transportControls?.pause()
-                } else if (mediaController != null) {
-                    mediaController?.transportControls?.play()
+                val mc = mediaController
+                if (mc != null) {
+                    if (mc.playbackState?.state == PlaybackState.STATE_PLAYING)
+                        mc.transportControls.pause()
+                    else
+                        mc.transportControls.play()
                 } else {
                     launchPlayerApp()
                 }
@@ -277,51 +274,43 @@ class MusicPlayerPaneContent(
         if (playerPackage.isEmpty()) return
         val intent = context.packageManager.getLaunchIntentForPackage(playerPackage) ?: return
         context.startActivity(intent)
+        // Retry browser connection — the service may not have been running before.
+        if (mediaController == null) {
+            disconnectFromMediaSession()
+            connectToMediaSession()
+        }
     }
 
-    private fun openNotificationSettings() {
-        val intent = Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-    }
-
-    // ── Media session ───────────────────────────────────────────────────────
-
-    private val listenerComponent by lazy {
-        ComponentName(context, MediaNotificationListener::class.java)
-    }
+    // ── Media browser ───────────────────────────────────────────────────────
 
     private fun connectToMediaSession() {
-        val mgr = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
-        sessionManager = mgr
+        if (playerPackage.isEmpty()) return
 
-        try {
-            val sessions = mgr.getActiveSessions(listenerComponent)
-            hasNotificationAccess = true
-            if (sessions.isNotEmpty()) attachToController(sessions[0])
-        } catch (_: SecurityException) {
-            hasNotificationAccess = false
-            showPermissionMessage()
-            return
-        }
+        val intent = Intent(MediaBrowserService.SERVICE_INTERFACE)
+        intent.setPackage(playerPackage)
+        val services = context.packageManager.queryIntentServices(intent, PackageManager.MATCH_ALL)
+        if (services.isEmpty()) return
 
-        val listener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
-            if (controllers != null && controllers.isNotEmpty()) {
-                attachToController(controllers[0])
-            } else {
-                detachController()
-            }
-        }
-        sessionListener = listener
-        mgr.addOnActiveSessionsChangedListener(listener, listenerComponent)
+        val si = services[0].serviceInfo
+        val component = ComponentName(si.packageName, si.name)
+        val browser = MediaBrowser(context, component, browserCallback, null)
+        mediaBrowser = browser
+        browser.connect()
     }
 
     private fun disconnectFromMediaSession() {
-        sessionListener?.let { sessionManager?.removeOnActiveSessionsChangedListener(it) }
-        sessionListener = null
         mediaController?.unregisterCallback(mediaCallback)
         mediaController = null
-        sessionManager = null
+        mediaBrowser?.disconnect()
+        mediaBrowser = null
+    }
+
+    private val browserCallback = object : MediaBrowser.ConnectionCallback() {
+        override fun onConnected() {
+            val token = mediaBrowser?.sessionToken ?: return
+            attachToController(MediaController(context, token))
+        }
+        override fun onConnectionSuspended() { detachController() }
     }
 
     private fun attachToController(controller: MediaController) {
@@ -406,11 +395,6 @@ class MusicPlayerPaneContent(
         titleView?.visibility = View.GONE
         artistView?.visibility = View.GONE
         albumView?.visibility = View.GONE
-    }
-
-    private fun showPermissionMessage() {
-        placeholderView?.text = context.getString(R.string.notification_access_required)
-        showPlaceholder()
     }
 
     // ── Icon drawing ────────────────────────────────────────────────────────
