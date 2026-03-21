@@ -70,7 +70,8 @@ class MainActivity : Activity() {
             findViewById(R.id.button1),
             findViewById(R.id.button2),
             findViewById(R.id.button3),
-            findViewById(R.id.button4)
+            findViewById(R.id.button4),
+            findViewById(R.id.button5)
         )
 
         for (i in buttons.indices) {
