@@ -5,7 +5,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Path
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -86,6 +90,45 @@ class LauncherButton @JvmOverloads constructor(
             field = value
             foreground = if (value) makeFocusRing() else null
         }
+
+    // ── Full-height icon ──────────────────────────────────────────────────────
+
+    /**
+     * Icon drawn as a full-height square on the left edge of the button.
+     * Setting this automatically adjusts paddingStart and triggers a redraw.
+     */
+    private var buttonIcon: Drawable? = null
+        set(value) {
+            field = value
+            updateIconPadding()
+            invalidate()
+        }
+
+    private fun updateIconPadding() {
+        val iconWidth = if (buttonIcon != null && height > 0) height else 0
+        setPaddingRelative(iconWidth, paddingTop, paddingEnd, paddingBottom)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        updateIconPadding()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        buttonIcon?.let { drawable ->
+            val h = height.toFloat()
+            val cornerRad = dpToPx(16).toFloat()
+            // Clip to the button's full rounded rect so the icon respects corner radius.
+            val path = Path()
+            path.addRoundRect(RectF(0f, 0f, width.toFloat(), h), cornerRad, cornerRad, Path.Direction.CW)
+            canvas.save()
+            canvas.clipPath(path)
+            drawable.setBounds(0, 0, height, height)
+            drawable.draw(canvas)
+            canvas.restore()
+        }
+        super.onDraw(canvas)
+    }
 
     // ── Pane loading (used by future toggle/pane types) ───────────────────────
 
@@ -198,20 +241,21 @@ class LauncherButton @JvmOverloads constructor(
         .remove("btn_${index}_icon_data")
 
     private fun applyConfig() {
+        icon = null   // always suppress MaterialButton's built-in icon slot
         when (val cfg = config) {
             is ButtonConfig.Empty -> {
                 text = context.getString(R.string.empty)
-                icon = null
+                buttonIcon = null
             }
             is ButtonConfig.AppLauncher -> {
                 text = cfg.label
-                icon = try { context.packageManager.getApplicationIcon(cfg.packageName) }
-                       catch (_: Exception) { null }
+                buttonIcon = try { context.packageManager.getApplicationIcon(cfg.packageName) }
+                             catch (_: Exception) { null }
             }
             is ButtonConfig.UrlLauncher -> {
                 text = cfg.label.ifEmpty { cfg.url }
-                icon = when (cfg.icon) {
-                    is UrlIcon.None                        -> null
+                buttonIcon = when (cfg.icon) {
+                    is UrlIcon.None -> null
                     is UrlIcon.Favicon, is UrlIcon.CustomFile -> loadIconFile()
                 }
             }
