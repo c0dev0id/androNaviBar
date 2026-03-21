@@ -311,9 +311,18 @@ class MainActivity : Activity() {
             // This grants the configure activity proper permissions through an
             // IntentSender — manually constructing the Intent bypasses this and
             // causes crashes in many widget providers.
+            //
+            // MODE_BACKGROUND_ACTIVITY_START_ALLOWED is required on API 34+:
+            // the IntentSender comes from the system process (uid 1000) which
+            // has no visible window, so Android's BAL rules block the launch
+            // unless the foreground caller explicitly opts in.
+            val opts = android.app.ActivityOptions.makeBasic().apply {
+                pendingIntentBackgroundActivityStartMode =
+                    android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
             @Suppress("DEPRECATION")
             appWidgetHost.startAppWidgetConfigureActivityForResult(
-                this, appWidgetId, 0, CONFIGURE_WIDGET_REQUEST_CODE, null
+                this, appWidgetId, 0, CONFIGURE_WIDGET_REQUEST_CODE, opts.toBundle()
             )
         } else {
             finishWidgetSetup()
