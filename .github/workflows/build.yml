@@ -25,8 +25,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Run lint
-        env:
-          MAPTILER_KEY: ${{ secrets.MAPTILER_KEY }}
         run: ./gradlew lint
 
   build:
@@ -46,8 +44,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
-        env:
-          MAPTILER_KEY: ${{ secrets.MAPTILER_KEY }}
         run: ./gradlew assembleDebug
 
       - name: Upload debug APK
@@ -113,8 +109,8 @@ jobs:
       - name: Rename APK
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          mv app-signed.apk "aWayToGo-dev-${SHORT_SHA}.apk"
-          echo "apk_name=aWayToGo-dev-${SHORT_SHA}.apk" >> "$GITHUB_ENV"
+          mv app-signed.apk "aR2Launcher-dev-${SHORT_SHA}.apk"
+          echo "apk_name=aR2Launcher-dev-${SHORT_SHA}.apk" >> "$GITHUB_ENV"
 
       - name: Delete existing dev release
         env:

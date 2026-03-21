@@ -56,8 +56,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build release APK
-        env:
-          MAPTILER_KEY: ${{ secrets.MAPTILER_KEY }}
         run: ./gradlew assembleRelease
 
       - name: Set up signing keystore
@@ -82,9 +80,9 @@ jobs:
             --ks-pass "pass:$SIGNING_KEYSTORE_PASSWORD" \
             --ks-key-alias "$SIGNING_KEY_ALIAS" \
             --key-pass "pass:$SIGNING_KEY_PASSWORD" \
-            --out "aWayToGo-${VERSION}.apk" \
+            --out "aR2Launcher-${VERSION}.apk" \
             app-release-aligned.apk
-          echo "apk_path=aWayToGo-${VERSION}.apk" >> "$GITHUB_OUTPUT"
+          echo "apk_path=aR2Launcher-${VERSION}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
         run: |
