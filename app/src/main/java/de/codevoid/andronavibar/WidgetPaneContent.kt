@@ -39,6 +39,7 @@ class WidgetPaneContent(
     /** The view added to the container — either the host view or a recovery view. */
     private var addedView: View? = null
     private var hostView: AppWidgetHostView? = null
+    private var container: ViewGroup? = null
 
     /** Called once after the host view is attached and sized. */
     var onContentReady: (() -> Unit)? = null
@@ -51,6 +52,7 @@ class WidgetPaneContent(
     }
 
     override fun show(container: ViewGroup) {
+        this.container = container
         val mgr = AppWidgetManager.getInstance(context)
 
         // Trigger the provider to re-send fresh RemoteViews BEFORE creating
@@ -65,13 +67,29 @@ class WidgetPaneContent(
         mgr.updateAppWidgetOptions(appWidgetId, existingOpts)
 
         val hv = appWidgetHost.createView(context, appWidgetId, providerInfo)
-
-        // Check if the cached RemoteViews failed to inflate (stale URI grants).
         val safeView = hv as? SafeAppWidgetHostView
+
+        // Sync path: on some devices inflation is synchronous and the error
+        // has already been detected by the time createView() returns.
         if (safeView?.updateFailed == true) {
-            Log.w(TAG, "Widget $appWidgetId has stale cached views — showing recovery")
+            Log.w(TAG, "Widget $appWidgetId has stale cached views (sync) — showing recovery")
             showRecoveryView(container)
             return
+        }
+
+        // Async path (API 31+): inflation runs on a background executor.
+        // The error arrives on the main thread after createView() returns.
+        // Set a callback so we can swap the error view for recovery UI.
+        safeView?.onUpdateFailed = {
+            Log.w(TAG, "Widget $appWidgetId has stale cached views (async) — showing recovery")
+            val c = this.container ?: return@onUpdateFailed
+            val existing = addedView
+            if (existing != null) {
+                (existing.parent as? ViewGroup)?.removeView(existing)
+            }
+            hostView = null
+            addedView = null
+            showRecoveryView(c)
         }
 
         hv.layoutParams = ViewGroup.LayoutParams(
@@ -108,9 +126,11 @@ class WidgetPaneContent(
     }
 
     override fun unload() {
+        (hostView as? SafeAppWidgetHostView)?.onUpdateFailed = null
         val view = addedView ?: return
         addedView = null
         hostView = null
+        container = null
         (view.parent as? ViewGroup)?.removeView(view)
     }
 
