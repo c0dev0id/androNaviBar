@@ -73,6 +73,9 @@ class MainActivity : Activity() {
     /** Non-null while an apps grid pane is displayed in reservedArea. */
     private var activeAppsGridPane: AppsGridPaneContent? = null
 
+    /** Non-null while a music player pane is displayed in reservedArea. */
+    private var activeMusicPlayerPane: MusicPlayerPaneContent? = null
+
     /** Non-null while a config pane is displayed in reservedArea. */
     private var activeConfigPane: ConfigPaneContent? = null
 
@@ -133,7 +136,8 @@ class MainActivity : Activity() {
             }
             buttons[i].onUrlActivated      = { url  -> activateToggleButton(i) { showWebPane(url) } }
             buttons[i].onWidgetActivated   = { id   -> activateToggleButton(i) { showWidgetPane(id) } }
-            buttons[i].onAppsGridActivated = { apps  -> activateToggleButton(i, interactive = true) { showAppsGridPane(apps) } }
+            buttons[i].onAppsGridActivated     = { apps -> activateToggleButton(i, interactive = true) { showAppsGridPane(apps) } }
+            buttons[i].onMusicPlayerActivated  = { pkg  -> activateToggleButton(i, interactive = true) { showMusicPlayerPane(pkg) } }
             buttons[i].loadConfig(prefs)
         }
 
@@ -194,6 +198,7 @@ class MainActivity : Activity() {
                     FocusOwner.PANE -> {
                         activeConfigPane?.handleKey(keyCode)
                             ?: activeAppsGridPane?.handleKey(keyCode)
+                            ?: activeMusicPlayerPane?.handleKey(keyCode)
                     }
                     FocusOwner.BUTTONS -> when (keyCode) {
                         19 -> moveFocus(-1)                    // DPAD_UP
@@ -247,6 +252,7 @@ class MainActivity : Activity() {
     private fun setFocusOwner(owner: FocusOwner) {
         focusOwner = owner
         updateFocus()
+        if (owner == FocusOwner.PANE) activeMusicPlayerPane?.setInitialFocus()
     }
 
     /**
@@ -278,9 +284,10 @@ class MainActivity : Activity() {
     }
 
     private fun dismissCurrentPane() {
-        activeWebPane?.unload();    activeWebPane = null
-        activeWidgetPane?.unload(); activeWidgetPane = null
-        activeAppsGridPane?.unload(); activeAppsGridPane = null
+        activeWebPane?.unload();         activeWebPane = null
+        activeWidgetPane?.unload();      activeWidgetPane = null
+        activeAppsGridPane?.unload();    activeAppsGridPane = null
+        activeMusicPlayerPane?.unload(); activeMusicPlayerPane = null
         hideLoading()
     }
 
@@ -325,6 +332,13 @@ class MainActivity : Activity() {
         val pane = AppsGridPaneContent(this, apps)
         pane.onContentReady = { hideLoading() }
         activeAppsGridPane = pane
+        pane.load { pane.show(reservedArea); showLoading() }
+    }
+
+    private fun showMusicPlayerPane(playerPackage: String) {
+        val pane = MusicPlayerPaneContent(this, playerPackage)
+        pane.onContentReady = { hideLoading() }
+        activeMusicPlayerPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
 

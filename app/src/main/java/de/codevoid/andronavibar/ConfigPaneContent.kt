@@ -45,7 +45,7 @@ class ConfigPaneContent(
     private val onClear:       ()             -> Unit
 ) : PaneContent {
 
-    private enum class Tab { APP, URL, WIDGET, APPS, CLEAR }
+    private enum class Tab { APP, URL, WIDGET, APPS, MUSIC, CLEAR }
     private enum class IconOption { NONE, CUSTOM, EMOJI }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -55,6 +55,7 @@ class ConfigPaneContent(
         is ButtonConfig.UrlLauncher    -> Tab.URL
         is ButtonConfig.WidgetLauncher -> Tab.WIDGET
         is ButtonConfig.AppsGrid       -> Tab.APPS
+        is ButtonConfig.MusicPlayer    -> Tab.MUSIC
         is ButtonConfig.Empty          -> Tab.APP
     }
 
@@ -71,6 +72,7 @@ class ConfigPaneContent(
             is ButtonConfig.UrlLauncher    -> initialConfig.icon
             is ButtonConfig.WidgetLauncher -> initialConfig.icon
             is ButtonConfig.AppsGrid       -> initialConfig.icon
+            is ButtonConfig.MusicPlayer    -> initialConfig.icon
             else                           -> null
         }
         when (icon) {
@@ -118,6 +120,11 @@ class ConfigPaneContent(
     private var appsCheckRows:     List<View>  = emptyList()
     private var appsGridLabelEdit: EditText?   = null
 
+    private var selectedMusicAppIndex: Int      = 0
+    private var musicAppRows:          List<View>  = emptyList()
+    private var musicScrollView:       ScrollView? = null
+    private var musicLabelEdit:        EditText?   = null
+
     // ── PaneContent ───────────────────────────────────────────────────────────
 
     override fun load(onReady: () -> Unit) {
@@ -139,6 +146,12 @@ class ConfigPaneContent(
         if (initialConfig is ButtonConfig.WidgetLauncher) {
             selectedProviderIndex = widgetProviders
                 .indexOfFirst { it.provider == initialConfig.provider }
+                .coerceAtLeast(0)
+        }
+
+        if (initialConfig is ButtonConfig.MusicPlayer) {
+            selectedMusicAppIndex = apps
+                .indexOfFirst { it.activityInfo.packageName == initialConfig.playerPackage }
                 .coerceAtLeast(0)
         }
 
@@ -172,6 +185,9 @@ class ConfigPaneContent(
         appsScrollView        = null
         appsCheckRows         = emptyList()
         appsGridLabelEdit     = null
+        musicAppRows          = emptyList()
+        musicScrollView       = null
+        musicLabelEdit        = null
     }
 
     // ── Key handling ──────────────────────────────────────────────────────────
@@ -184,6 +200,8 @@ class ConfigPaneContent(
             keyCode == 20 && activeTab == Tab.WIDGET -> moveWidgetSelection(+1)
             keyCode == 19 && activeTab == Tab.APPS   -> { appsScrollView?.smoothScrollBy(0, -px(56)); true }
             keyCode == 20 && activeTab == Tab.APPS   -> { appsScrollView?.smoothScrollBy(0, +px(56)); true }
+            keyCode == 19 && activeTab == Tab.MUSIC  -> moveMusicSelection(-1)
+            keyCode == 20 && activeTab == Tab.MUSIC  -> moveMusicSelection(+1)
             keyCode == 66                            -> { save(); true }
             else                                     -> false
         }
@@ -285,6 +303,7 @@ class ConfigPaneContent(
         addTab(Tab.URL,    context.getString(R.string.tab_url))
         addTab(Tab.WIDGET, context.getString(R.string.widget_tab))
         addTab(Tab.APPS,   context.getString(R.string.tab_apps))
+        addTab(Tab.MUSIC,  context.getString(R.string.tab_music))
         addTab(Tab.CLEAR,  context.getString(R.string.clear), last = true)
 
         tabButtons = built
@@ -317,6 +336,7 @@ class ConfigPaneContent(
             Tab.URL    -> container.addView(buildUrlEditor())
             Tab.WIDGET -> container.addView(buildWidgetPicker())
             Tab.APPS   -> container.addView(buildAppsGridPicker())
+            Tab.MUSIC  -> container.addView(buildMusicPicker())
             Tab.CLEAR  -> Unit
         }
     }
@@ -634,6 +654,85 @@ class ConfigPaneContent(
         }
     }
 
+    // ── Music player picker ────────────────────────────────────────────────────
+
+    private fun buildMusicPicker(): View {
+        val outer = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, MATCH)
+        }
+
+        val scroll = ScrollView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
+        }
+        musicScrollView = scroll
+
+        val list = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
+        }
+
+        val rows = mutableListOf<View>()
+        for (i in apps.indices) {
+            val row = buildAppRow(apps[i], i == selectedMusicAppIndex)
+            val idx = i
+            row.setOnClickListener {
+                selectedMusicAppIndex = idx
+                updateMusicRowHighlights(rows, idx)
+            }
+            list.addView(row)
+            rows.add(row)
+        }
+        musicAppRows = rows
+
+        scroll.addView(list)
+        outer.addView(scroll)
+        scroll.post {
+            if (selectedMusicAppIndex < rows.size) {
+                scroll.smoothScrollTo(0, rows[selectedMusicAppIndex].top)
+            }
+        }
+
+        val labelEdit = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+            hint      = context.getString(R.string.label_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            setTextColor(context.getColor(R.color.text_primary))
+            setHintTextColor(context.getColor(R.color.text_secondary))
+            setText(if (initialConfig is ButtonConfig.MusicPlayer) initialConfig.label else "")
+        }
+        musicLabelEdit = labelEdit
+        outer.addView(labelEdit)
+
+        outer.addView(buildIconOptionRow())
+        val iconDetail = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+        }
+        iconDetailArea = iconDetail
+        outer.addView(iconDetail)
+        refreshIconDetail()
+
+        return outer
+    }
+
+    private fun moveMusicSelection(delta: Int): Boolean {
+        if (apps.isEmpty()) return false
+        val next = (selectedMusicAppIndex + delta).coerceIn(0, apps.lastIndex)
+        if (next == selectedMusicAppIndex) return true
+        selectedMusicAppIndex = next
+        updateMusicRowHighlights(musicAppRows, next)
+        musicScrollView?.post {
+            if (next < musicAppRows.size) musicScrollView!!.smoothScrollTo(0, musicAppRows[next].top)
+        }
+        return true
+    }
+
+    private fun updateMusicRowHighlights(rows: List<View>, selectedIndex: Int) {
+        for (i in rows.indices) rows[i].setBackgroundColor(rowBg(i == selectedIndex))
+    }
+
     // ── URL editor ────────────────────────────────────────────────────────────
 
     private fun buildUrlEditor(): View {
@@ -756,6 +855,7 @@ class ConfigPaneContent(
                         initialConfig is ButtonConfig.UrlLauncher    && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
                         initialConfig is ButtonConfig.WidgetLauncher && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
                         initialConfig is ButtonConfig.AppsGrid       && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
+                        initialConfig is ButtonConfig.MusicPlayer    && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
                         else -> ""
                     })
                     setTextColor(context.getColor(R.color.text_primary))
@@ -770,7 +870,8 @@ class ConfigPaneContent(
                     hasPendingImage -> context.getString(R.string.image_picked)
                     (initialConfig is ButtonConfig.UrlLauncher    && initialConfig.icon is UrlIcon.CustomFile) ||
                     (initialConfig is ButtonConfig.WidgetLauncher && initialConfig.icon is UrlIcon.CustomFile) ||
-                    (initialConfig is ButtonConfig.AppsGrid       && initialConfig.icon is UrlIcon.CustomFile) ->
+                    (initialConfig is ButtonConfig.AppsGrid       && initialConfig.icon is UrlIcon.CustomFile) ||
+                    (initialConfig is ButtonConfig.MusicPlayer    && initialConfig.icon is UrlIcon.CustomFile) ->
                         context.getString(R.string.image_current)
                     else -> null
                 }
@@ -846,6 +947,17 @@ class ConfigPaneContent(
                     IconOption.EMOJI  -> UrlIcon.Emoji(emojiEdit?.text?.toString()?.trim() ?: "")
                 }
                 ButtonConfig.AppsGrid(selectedApps, label, icon)
+            }
+            Tab.MUSIC -> {
+                val app = apps.getOrNull(selectedMusicAppIndex)
+                val playerPkg = app?.activityInfo?.packageName ?: ""
+                val label = musicLabelEdit?.text?.toString()?.trim().orEmpty()
+                val icon  = when (selectedIconOption) {
+                    IconOption.NONE   -> UrlIcon.None
+                    IconOption.CUSTOM -> UrlIcon.CustomFile
+                    IconOption.EMOJI  -> UrlIcon.Emoji(emojiEdit?.text?.toString()?.trim() ?: "")
+                }
+                ButtonConfig.MusicPlayer(playerPkg, label, icon)
             }
             Tab.CLEAR -> ButtonConfig.Empty
         }
