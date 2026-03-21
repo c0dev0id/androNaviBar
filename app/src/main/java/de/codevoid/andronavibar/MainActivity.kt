@@ -252,7 +252,13 @@ class MainActivity : Activity() {
     private fun setFocusOwner(owner: FocusOwner) {
         focusOwner = owner
         updateFocus()
-        if (owner == FocusOwner.PANE) activeMusicPlayerPane?.setInitialFocus()
+        if (owner == FocusOwner.PANE) {
+            activeMusicPlayerPane?.setInitialFocus()
+            activeAppsGridPane?.setInitialFocus()
+        } else {
+            activeMusicPlayerPane?.clearFocus()
+            activeAppsGridPane?.clearFocus()
+        }
     }
 
     /**

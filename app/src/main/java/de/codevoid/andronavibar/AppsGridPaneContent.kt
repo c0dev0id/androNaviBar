@@ -150,6 +150,14 @@ class AppsGridPaneContent(
 
     // ── Focus ─────────────────────────────────────────────────────────────────
 
+    fun setInitialFocus() {
+        cells.getOrNull(focusIndex)?.foreground = makeFocusRing()
+    }
+
+    fun clearFocus() {
+        cells.getOrNull(focusIndex)?.foreground = null
+    }
+
     private fun moveFocus(newIndex: Int) {
         val clamped = newIndex.coerceIn(0, apps.lastIndex)
         if (clamped == focusIndex) return

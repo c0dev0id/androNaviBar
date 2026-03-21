@@ -225,7 +225,7 @@ class MusicPlayerPaneContent(
     private fun moveFocus(newIndex: Int) {
         val clamped = newIndex.coerceIn(0, controlViews.lastIndex)
         if (clamped == focusIndex) return
-        val btnSize = controlViews.getOrNull(0)?.width ?: dpToPx(72)
+        val btnSize = controlViews.getOrNull(0)?.width ?: dpToPx(108)
         controlViews.getOrNull(focusIndex)?.foreground = null
         focusIndex = clamped
         controlViews.getOrNull(focusIndex)?.foreground = makeFocusRing(btnSize)
@@ -233,10 +233,14 @@ class MusicPlayerPaneContent(
 
     fun setInitialFocus() {
         focusIndex = 1
-        val btnSize = controlViews.getOrNull(0)?.width ?: dpToPx(72)
+        val btnSize = controlViews.getOrNull(0)?.width ?: dpToPx(108)
         for (i in controlViews.indices) {
             controlViews[i].foreground = if (i == focusIndex) makeFocusRing(btnSize) else null
         }
+    }
+
+    fun clearFocus() {
+        controlViews.getOrNull(focusIndex)?.foreground = null
     }
 
     // ── Control actions ─────────────────────────────────────────────────────
