@@ -3,9 +3,34 @@ name: Build
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    types: [labeled]
 
 jobs:
+  lint:
+    if: github.event_name == 'push' || github.event.label.name == 'run-build'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run lint
+        env:
+          MAPTILER_KEY: ${{ secrets.MAPTILER_KEY }}
+        run: ./gradlew lint
+
   build:
+    if: github.event_name == 'push' || github.event.label.name == 'run-build'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,10 +46,91 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Build debug APK
+        env:
+          MAPTILER_KEY: ${{ secrets.MAPTILER_KEY }}
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+
+  sign:
+    needs: build
+    if: github.event_name == 'push' || github.event.label.name == 'run-build'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-debug
+
+      - name: Set up signing keystore
+        run: |
+          echo "${{ secrets.SIGNING_KEYSTORE_BASE64 }}" | base64 -d > "${{ runner.temp }}/release.keystore"
+
+      - name: Align and sign APK
+        env:
+          SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          "$BUILD_TOOLS_DIR/zipalign" -v -p 4 app-debug.apk app-aligned.apk
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks "$SIGNING_KEYSTORE_PATH" \
+            --ks-pass "pass:$SIGNING_KEYSTORE_PASSWORD" \
+            --ks-key-alias "$SIGNING_KEY_ALIAS" \
+            --key-pass "pass:$SIGNING_KEY_PASSWORD" \
+            --out app-signed.apk \
+            app-aligned.apk
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-signed
+          path: app-signed.apk
+
+  draft-release:
+    needs: sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download signed APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-signed
+
+      - name: Rename APK
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          mv app-signed.apk "aWayToGo-dev-${SHORT_SHA}.apk"
+          echo "apk_name=aWayToGo-dev-${SHORT_SHA}.apk" >> "$GITHUB_ENV"
+
+      - name: Delete existing dev release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete dev --yes 2>/dev/null || true
+
+      - name: Create pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: dev
+          name: Development Build
+          body: |
+            Automated development build from commit ${{ github.sha }} on ${{ github.ref_name }}.
+
+            This is a pre-release snapshot — not intended for production use.
+          draft: false
+          prerelease: true
+          make_latest: false
+          files: ${{ env.apk_name }}
