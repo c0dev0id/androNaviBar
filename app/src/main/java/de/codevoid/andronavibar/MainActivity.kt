@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.os.SystemClock
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.widget.FrameLayout
 import android.os.Bundle
 import java.io.File
@@ -35,6 +37,14 @@ class MainActivity : Activity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         isWindowFocused = hasFocus
+        if (hasFocus) hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        window.insetsController?.let {
+            it.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+            it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 
     // ── Pane coordination ─────────────────────────────────────────────────────
@@ -50,6 +60,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        hideSystemBars()
         prefs        = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
         reservedArea = findViewById(R.id.reservedArea)
         focusedIndex = prefs.getInt("focused_index", 0)
