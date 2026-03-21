@@ -126,7 +126,7 @@ class MusicPlayerPaneContent(
         upper.addView(placeholderView)
 
         titleView = TextView(context).apply {
-            textSize = 20f
+            textSize = 28f
             gravity = Gravity.CENTER
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
@@ -137,7 +137,7 @@ class MusicPlayerPaneContent(
         upper.addView(titleView)
 
         artistView = TextView(context).apply {
-            textSize = 16f
+            textSize = 22f
             gravity = Gravity.CENTER
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
@@ -148,7 +148,7 @@ class MusicPlayerPaneContent(
         upper.addView(artistView)
 
         albumView = TextView(context).apply {
-            textSize = 14f
+            textSize = 20f
             gravity = Gravity.CENTER
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
@@ -173,9 +173,9 @@ class MusicPlayerPaneContent(
             gravity = Gravity.CENTER
         }
 
-        val btnSize = dpToPx(72)
-        val iconSize = dpToPx(36)
-        val spacing = dpToPx(20)
+        val btnSize = dpToPx(108)
+        val iconSize = dpToPx(54)
+        val spacing = dpToPx(30)
         val iconColor = context.getColor(R.color.text_primary)
 
         val icons = listOf(
@@ -376,14 +376,14 @@ class MusicPlayerPaneContent(
     }
 
     private fun updatePlayPauseIcon(isPlaying: Boolean) {
-        val iconSize = dpToPx(36)
+        val iconSize = dpToPx(54)
         val color = context.getColor(R.color.text_primary)
         val bmp = if (isPlaying) drawPause(iconSize, color) else drawPlay(iconSize, color)
         controlIcons.getOrNull(1)?.setImageBitmap(bmp)
     }
 
     private fun updateShuffleVisual() {
-        val iconSize = dpToPx(36)
+        val iconSize = dpToPx(54)
         val color = if (isShuffleOn)
             context.getColor(R.color.colorPrimary) else context.getColor(R.color.text_primary)
         controlIcons.getOrNull(3)?.setImageBitmap(drawShuffle(iconSize, color))
@@ -489,13 +489,13 @@ class MusicPlayerPaneContent(
 
     private fun makeButtonBg(): GradientDrawable = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(16).toFloat()
+        cornerRadius = dpToPx(24).toFloat()
         setColor(context.getColor(R.color.button_inactive))
     }
 
     private fun makeFocusRing(size: Int): GradientDrawable = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(16).toFloat()
+        cornerRadius = dpToPx(24).toFloat()
         setStroke(dpToPx(3), context.getColor(R.color.colorPrimary))
         setColor(Color.TRANSPARENT)
     }
