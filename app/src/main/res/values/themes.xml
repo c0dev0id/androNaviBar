@@ -8,10 +8,11 @@
         <item name="colorOnPrimary">@color/text_primary</item>
         <item name="colorSurface">@color/surface_dark</item>
         <item name="colorOnSurface">@color/text_primary</item>
-        <item name="android:colorBackground">@color/background_dark</item>
+        <item name="android:colorBackground">@color/surface_dark</item>
         <item name="colorOnBackground">@color/text_primary</item>
         <item name="android:statusBarColor">@color/background_dark</item>
         <item name="android:navigationBarColor">@color/background_dark</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.AndroNaviBar.AlertDialog</item>
     </style>
 
     <style name="Widget.AndroNaviBar.Button" parent="Widget.Material3.Button">
@@ -20,7 +21,7 @@
         <item name="iconTint">@color/text_primary</item>
         <item name="iconSize">32dp</item>
         <item name="iconGravity">textStart</item>
-        <item name="cornerRadius">8dp</item>
+        <item name="cornerRadius">16dp</item>
     </style>
 
     <style name="Widget.AndroNaviBar.Button.Config" parent="Widget.Material3.Button.OutlinedButton">
@@ -30,6 +31,11 @@
         <item name="strokeWidth">2dp</item>
         <item name="iconSize">32dp</item>
         <item name="iconGravity">textStart</item>
-        <item name="cornerRadius">8dp</item>
+        <item name="cornerRadius">16dp</item>
+    </style>
+
+    <style name="ThemeOverlay.AndroNaviBar.AlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:background">@color/surface_card</item>
+        <item name="colorOnSurface">@color/text_primary</item>
     </style>
 </resources>
