@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.widget.FrameLayout
 import android.os.Bundle
+import java.io.File
 
 class MainActivity : Activity() {
 
@@ -126,6 +127,7 @@ class MainActivity : Activity() {
 
         val pane = ConfigPaneContent(
             context       = this,
+            buttonIndex   = buttonIndex,
             initialConfig = buttons[buttonIndex].config,
             onSave        = { newConfig ->
                 buttons[buttonIndex].saveConfig(prefs, newConfig)
@@ -135,6 +137,13 @@ class MainActivity : Activity() {
                 buttons[buttonIndex].clearConfig(prefs)
             }
         )
+
+        pane.onPickImageRequest = {
+            pendingIconButtonIndex = buttonIndex
+            val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, IMAGE_REQUEST_CODE)
+        }
 
         activeConfigPane = pane
         pane.load { pane.show(reservedArea) }
@@ -150,10 +159,34 @@ class MainActivity : Activity() {
         pane.unload()
     }
 
+    // ── Image picker result ───────────────────────────────────────────────────
+
+    private var pendingIconButtonIndex: Int = 0
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == IMAGE_REQUEST_CODE && resultCode == RESULT_OK) {
+            val uri = data?.data ?: return
+            val dest = File(filesDir, "btn_${pendingIconButtonIndex}_icon.png")
+            try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                }
+                activeConfigPane?.onImageReady()
+            } catch (_: Exception) { /* ignore failed pick */ }
+        }
+    }
+
     // ── Back key ──────────────────────────────────────────────────────────────
 
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
         // Back = dismiss without saving (cancel). Home app never exits on back.
         dismissConfigPane()
+    }
+
+    companion object {
+        private const val IMAGE_REQUEST_CODE = 1001
     }
 }

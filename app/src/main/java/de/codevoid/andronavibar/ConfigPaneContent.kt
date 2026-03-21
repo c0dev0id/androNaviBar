@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -22,30 +23,27 @@ import com.google.android.material.button.MaterialButton
  * Layout:
  *   [ App ]  [ URL ]  [ Clear ]      ← type selector row
  *   ┌────────────────────────────┐
- *   │  scrollable app list       │   ← visible when App tab is active
+ *   │  scrollable app list       │   ← App tab: list + label field below
  *   │  — or —                    │
- *   │  URL text field            │   ← visible when URL tab is active
+ *   │  URL / label / icon fields │   ← URL tab
  *   └────────────────────────────┘
  *
- * Remote navigation: DPAD_UP/DPAD_DOWN scrolls the app list; ENTER (key 66)
- * confirms the current selection and triggers [onSave].
- * Button B (key TBD): add to handleKey() when key code is confirmed.
+ * Remote: DPAD_UP/DOWN scrolls app list; key 66 (Round Button 1) confirms; key 111
+ * (Round Button 2) saves+closes via MainActivity routing.
  *
- * Touch: tap an app row to select immediately; type in the URL field and
- * confirm with ENTER or the remote's confirm button.
- *
- * Closing is always initiated by the caller (MainActivity), not by this class.
- * [onSave] fires when the user confirms a selection; MainActivity is
- * responsible for calling unload() afterwards.
+ * Custom image: MainActivity owns the Activity result; it calls onImageReady() once
+ * the image has been copied to the button's icon file.
  */
 class ConfigPaneContent(
     private val context:       Context,
+    private val buttonIndex:   Int,
     private val initialConfig: ButtonConfig,
     private val onSave:        (ButtonConfig) -> Unit,
     private val onClear:       ()             -> Unit
 ) : PaneContent {
 
     private enum class Tab { APP, URL, CLEAR }
+    private enum class IconOption { NONE, EMOJI, FAVICON, CUSTOM }
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -58,20 +56,46 @@ class ConfigPaneContent(
     private var apps:             List<ResolveInfo> = emptyList()
     private var selectedAppIndex: Int               = 0
 
+    private var selectedIconOption: IconOption = when {
+        initialConfig is ButtonConfig.UrlLauncher -> when (initialConfig.icon) {
+            is UrlIcon.Emoji      -> IconOption.EMOJI
+            is UrlIcon.Favicon    -> IconOption.FAVICON
+            is UrlIcon.CustomFile -> IconOption.CUSTOM
+            else                  -> IconOption.NONE
+        }
+        else -> IconOption.NONE
+    }
+
+    /** Set to true by MainActivity after a new custom image has been written to the icon file. */
+    private var hasPendingImage = false
+
+    // ── Callbacks wired by MainActivity ───────────────────────────────────────
+
+    var onPickImageRequest: (() -> Unit)? = null
+
+    /** Called by MainActivity after it has already copied the picked image to the icon file. */
+    fun onImageReady() {
+        hasPendingImage = true
+        refreshIconDetail()
+    }
+
     // ── Live view references (valid between show() and unload()) ──────────────
 
-    private var rootView:      View?                      = null
-    private var detailArea:    ViewGroup?                 = null
-    private var tabButtons:    Map<Tab, MaterialButton>   = emptyMap()
-    private var appRows:       List<View>                 = emptyList()
-    private var appScrollView: ScrollView?                = null
-    private var urlEditText:   EditText?                  = null
+    private var rootView:       View?                           = null
+    private var detailArea:     ViewGroup?                      = null
+    private var tabButtons:     Map<Tab, MaterialButton>        = emptyMap()
+    private var appRows:        List<View>                      = emptyList()
+    private var appScrollView:  ScrollView?                     = null
+    private var appLabelEdit:   EditText?                       = null
+    private var urlEditText:    EditText?                       = null
+    private var urlLabelEdit:   EditText?                       = null
+    private var iconOptionBtns: Map<IconOption, MaterialButton> = emptyMap()
+    private var iconDetailArea: ViewGroup?                      = null
+    private var emojiEdit:      EditText?                       = null
 
     // ── PaneContent ───────────────────────────────────────────────────────────
 
     override fun load(onReady: () -> Unit) {
-        // Query installed apps — same synchronous call the old dialog used.
-        // TODO: move to button.scope coroutine when performance warrants it.
         val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         apps = context.packageManager
             .queryIntentActivities(mainIntent, PackageManager.MATCH_ALL)
@@ -95,23 +119,21 @@ class ConfigPaneContent(
 
     override fun unload() {
         (rootView?.parent as? ViewGroup)?.removeView(rootView)
-        rootView      = null
-        detailArea    = null
-        tabButtons    = emptyMap()
-        appRows       = emptyList()
-        appScrollView = null
-        urlEditText   = null
+        rootView        = null
+        detailArea      = null
+        tabButtons      = emptyMap()
+        appRows         = emptyList()
+        appScrollView   = null
+        appLabelEdit    = null
+        urlEditText     = null
+        urlLabelEdit    = null
+        iconOptionBtns  = emptyMap()
+        iconDetailArea  = null
+        emojiEdit       = null
     }
 
-    // ── Key handling (routed from MainActivity while this pane has input focus) ─
+    // ── Key handling ──────────────────────────────────────────────────────────
 
-    /**
-     * Returns true if the key was consumed.
-     *
-     * Key 19 / 20 (DPAD_UP / DPAD_DOWN): navigate app list.
-     * Key 66 (ENTER / Round Button 1): confirm selection.
-     * Key TBD (Button B): add `KEY_BUTTON_B -> { save(); true }` when confirmed.
-     */
     fun handleKey(keyCode: Int): Boolean {
         return when {
             keyCode == 19 && activeTab == Tab.APP -> moveAppSelection(-1)
@@ -121,7 +143,6 @@ class ConfigPaneContent(
         }
     }
 
-    /** Build the selected config and notify the caller. */
     fun save() {
         onSave(buildConfig())
     }
@@ -188,8 +209,6 @@ class ConfigPaneContent(
 
     private fun selectTab(tab: Tab) {
         if (tab == Tab.CLEAR) {
-            // Clear: save Empty to the button, then stay on the config pane
-            // so the user can immediately pick a new assignment.
             onClear()
             return
         }
@@ -203,7 +222,7 @@ class ConfigPaneContent(
             btn.backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.colorPrimary))
             btn.strokeWidth        = 0
         } else {
-            btn.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
+            btn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
             btn.strokeColor        = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
             btn.strokeWidth        = px(1)
         }
@@ -222,8 +241,13 @@ class ConfigPaneContent(
     // ── App picker ────────────────────────────────────────────────────────────
 
     private fun buildAppPicker(): View {
-        val scroll = ScrollView(context).apply {
+        val outer = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH, MATCH)
+        }
+
+        val scroll = ScrollView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
         }
         appScrollView = scroll
 
@@ -239,7 +263,8 @@ class ConfigPaneContent(
             row.setOnClickListener {
                 selectedAppIndex = idx
                 updateAppRowHighlights(rows, idx)
-                save()
+                scrollToSelected()
+                appLabelEdit?.setText(apps[idx].loadLabel(context.packageManager))
             }
             list.addView(row)
             rows.add(row)
@@ -247,7 +272,26 @@ class ConfigPaneContent(
         appRows = rows
 
         scroll.addView(list)
-        return scroll
+        outer.addView(scroll)
+
+        // Label field below the app list
+        val labelEdit = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+            hint      = context.getString(R.string.label_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            setTextColor(context.getColor(R.color.text_primary))
+            setHintTextColor(context.getColor(R.color.text_secondary))
+            setText(when {
+                initialConfig is ButtonConfig.AppLauncher -> initialConfig.label
+                apps.isNotEmpty()                         -> apps[selectedAppIndex].loadLabel(context.packageManager)
+                else                                      -> ""
+            })
+        }
+        appLabelEdit = labelEdit
+        outer.addView(labelEdit)
+
+        return outer
     }
 
     private fun buildAppRow(app: ResolveInfo, selected: Boolean): View {
@@ -281,6 +325,7 @@ class ConfigPaneContent(
         selectedAppIndex = next
         updateAppRowHighlights(appRows, next)
         scrollToSelected()
+        appLabelEdit?.setText(apps[next].loadLabel(context.packageManager))
         return true
     }
 
@@ -306,7 +351,7 @@ class ConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
             setPadding(0, px(8), 0, 0)
 
-            val edit = EditText(context).apply {
+            val urlEdit = EditText(context).apply {
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
                 hint         = context.getString(R.string.url_hint)
                 inputType    = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
@@ -316,8 +361,130 @@ class ConfigPaneContent(
                 setHintTextColor(context.getColor(R.color.text_secondary))
                 requestFocus()
             }
-            urlEditText = edit
-            addView(edit)
+            urlEditText = urlEdit
+            addView(urlEdit)
+
+            val labelEdit = EditText(context).apply {
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+                hint      = context.getString(R.string.display_name_hint)
+                inputType = InputType.TYPE_CLASS_TEXT
+                setSingleLine()
+                setText(if (initialConfig is ButtonConfig.UrlLauncher) initialConfig.label else "")
+                setTextColor(context.getColor(R.color.text_primary))
+                setHintTextColor(context.getColor(R.color.text_secondary))
+            }
+            urlLabelEdit = labelEdit
+            addView(labelEdit)
+
+            addView(buildIconOptionRow())
+
+            val iconDetail = LinearLayout(context).apply {
+                orientation  = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+            }
+            iconDetailArea = iconDetail
+            addView(iconDetail)
+            refreshIconDetail()
+        }
+    }
+
+    private fun buildIconOptionRow(): View {
+        val row = LinearLayout(context).apply {
+            orientation  = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(12) }
+        }
+
+        val built = mutableMapOf<IconOption, MaterialButton>()
+
+        fun addOption(opt: IconOption, label: String, last: Boolean = false) {
+            val btn = MaterialButton(
+                context, null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle
+            ).apply {
+                text         = label
+                cornerRadius = px(8)
+                textSize     = 12f
+                setTextColor(context.getColor(R.color.text_primary))
+                layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
+                    if (!last) marginEnd = px(4)
+                }
+                applyIconOptionStyle(this, opt == selectedIconOption)
+                setOnClickListener { selectIconOption(opt) }
+            }
+            row.addView(btn)
+            built[opt] = btn
+        }
+
+        addOption(IconOption.NONE,    context.getString(R.string.icon_none))
+        addOption(IconOption.EMOJI,   context.getString(R.string.icon_emoji))
+        addOption(IconOption.FAVICON, context.getString(R.string.icon_favicon))
+        addOption(IconOption.CUSTOM,  context.getString(R.string.icon_image), last = true)
+
+        iconOptionBtns = built
+        return row
+    }
+
+    private fun selectIconOption(opt: IconOption) {
+        selectedIconOption = opt
+        iconOptionBtns.forEach { (o, btn) -> applyIconOptionStyle(btn, o == selectedIconOption) }
+        refreshIconDetail()
+    }
+
+    private fun applyIconOptionStyle(btn: MaterialButton, active: Boolean) {
+        if (active) {
+            btn.backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.colorPrimary))
+            btn.strokeWidth        = 0
+        } else {
+            btn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            btn.strokeColor        = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
+            btn.strokeWidth        = px(1)
+        }
+    }
+
+    private fun refreshIconDetail() {
+        val area = iconDetailArea ?: return
+        area.removeAllViews()
+        when (selectedIconOption) {
+            IconOption.NONE, IconOption.FAVICON -> Unit
+
+            IconOption.EMOJI -> {
+                val edit = EditText(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+                    hint      = context.getString(R.string.emoji_hint)
+                    inputType = InputType.TYPE_CLASS_TEXT
+                    setSingleLine()
+                    setText(
+                        (initialConfig as? ButtonConfig.UrlLauncher)
+                            ?.icon?.let { (it as? UrlIcon.Emoji)?.emoji } ?: ""
+                    )
+                    setTextColor(context.getColor(R.color.text_primary))
+                    setHintTextColor(context.getColor(R.color.text_secondary))
+                }
+                emojiEdit = edit
+                area.addView(edit)
+            }
+
+            IconOption.CUSTOM -> {
+                val statusText = when {
+                    hasPendingImage -> context.getString(R.string.image_picked)
+                    initialConfig is ButtonConfig.UrlLauncher &&
+                        initialConfig.icon is UrlIcon.CustomFile ->
+                        context.getString(R.string.image_current)
+                    else -> null
+                }
+                if (statusText != null) {
+                    area.addView(TextView(context).apply {
+                        text         = statusText
+                        layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+                        setTextColor(context.getColor(R.color.text_secondary))
+                    })
+                }
+                area.addView(MaterialButton(context).apply {
+                    text         = context.getString(R.string.pick_image)
+                    layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = px(4) }
+                    setOnClickListener { onPickImageRequest?.invoke() }
+                })
+            }
         }
     }
 
@@ -327,14 +494,27 @@ class ConfigPaneContent(
         return when (activeTab) {
             Tab.APP -> {
                 val app = apps.getOrNull(selectedAppIndex) ?: return ButtonConfig.Empty
+                val defaultLabel = app.loadLabel(context.packageManager).toString()
+                val label = appLabelEdit?.text?.toString()?.trim().orEmpty().ifEmpty { defaultLabel }
                 ButtonConfig.AppLauncher(
                     packageName = app.activityInfo.packageName,
-                    label       = app.loadLabel(context.packageManager).toString()
+                    label       = label
                 )
             }
             Tab.URL -> {
                 val url = urlEditText?.text?.toString()?.trim().orEmpty()
-                if (url.isNotEmpty()) ButtonConfig.UrlLauncher(url, url) else ButtonConfig.Empty
+                if (url.isEmpty()) return ButtonConfig.Empty
+                val label = urlLabelEdit?.text?.toString()?.trim().orEmpty()
+                val icon  = when (selectedIconOption) {
+                    IconOption.NONE    -> UrlIcon.None
+                    IconOption.EMOJI   -> {
+                        val e = emojiEdit?.text?.toString().orEmpty()
+                        if (e.isNotEmpty()) UrlIcon.Emoji(e) else UrlIcon.None
+                    }
+                    IconOption.FAVICON -> UrlIcon.Favicon
+                    IconOption.CUSTOM  -> UrlIcon.CustomFile
+                }
+                ButtonConfig.UrlLauncher(url, label, icon)
             }
             Tab.CLEAR -> ButtonConfig.Empty
         }
