@@ -211,7 +211,7 @@ interface PaneContent {
 
     /**
      * Attach the prepared view to [container] (the left pane FrameLayout).
-     * Only called after [onReady] has fired. Must be idempotent.
+     * Only called after [onReady] has fired, and only when the button is still focused.
      */
     fun show(container: ViewGroup)
 
@@ -234,34 +234,34 @@ reuse the same attach/detach protocol.
 ## 6. Pane Loading Lifecycle
 
 The loading model is **load-on-focus, unload-on-unfocus**. It is non-blocking and avoids
-mid-load cancellation complexity by using a "still focused?" check at completion time.
+mid-load cancellation complexity by letting loads always run to completion and checking focus
+state at the end.
 
 ```
-Focus arrives at button B
+Focus → B: B not already loading → load() starts
         │
         ▼
-B.paneContent?.load {          ← launches async work (coroutine, callback, etc.)
-    onReady = {
-        if (B.isFocused) {     ← check at completion time
-            paneContent.show(leftPane)
-        }
-        // else: result is silently discarded
-    }
-}
-
-Focus moves to button C
+Focus → C: B.unload(), C.load() starts. B's load still running.
         │
         ▼
-B.paneContent?.unload()        ← detach and release immediately
-C.paneContent?.load { ... }    ← begin loading C's content
+Focus → B: B is already loading → do nothing, in-flight load continues.
+        │
+        ▼
+B's load completes → isFocused = true → show()
+C's load completes → isFocused = false → discard silently
 ```
+
+Each button tracks an `isLoading` boolean. When focus arrives:
+- `isLoading = false` → start a new load
+- `isLoading = true` → do nothing; the in-flight load will call `show()` when done
 
 Key properties of this model:
 
-- **No mid-load interruption.** If focus moves away while loading is in progress, the load
-  completes naturally — the result is just discarded. This avoids cooperative cancellation
-  complexity inside each `PaneContent` implementation.
-- **No race conditions.** The `isFocused` check at callback time is sufficient because all
+- **No mid-load interruption.** Loads always run to completion. No cooperative cancellation
+  needed inside `PaneContent` implementations.
+- **No double loads.** `isLoading` prevents starting a second load if focus returns while
+  the first is still in progress.
+- **No race conditions.** The `isFocused` check at completion time is sufficient because all
   callbacks are dispatched on the main thread.
 - **Scope cancellation as safety net.** If the button is removed from the hierarchy entirely,
   the button's `CoroutineScope` is cancelled, stopping any in-flight coroutine-based loading.
