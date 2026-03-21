@@ -307,17 +307,14 @@ class MainActivity : Activity() {
         if (pendingWidgetConfig == null) return
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
         if (info?.configure != null) {
-            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
-                component = info.configure
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            }
-            try {
-                @Suppress("DEPRECATION")
-                startActivityForResult(intent, CONFIGURE_WIDGET_REQUEST_CODE)
-            } catch (_: Exception) {
-                // Configure activity couldn't be launched; proceed with the widget as-is.
-                finishWidgetSetup()
-            }
+            // Let the system construct the configure Intent via AppWidgetService.
+            // This grants the configure activity proper permissions through an
+            // IntentSender — manually constructing the Intent bypasses this and
+            // causes crashes in many widget providers.
+            @Suppress("DEPRECATION")
+            appWidgetHost.startAppWidgetConfigureActivityForResult(
+                this, appWidgetId, 0, CONFIGURE_WIDGET_REQUEST_CODE, null
+            )
         } else {
             finishWidgetSetup()
         }
