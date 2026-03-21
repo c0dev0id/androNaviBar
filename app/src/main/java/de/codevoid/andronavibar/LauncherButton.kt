@@ -118,15 +118,21 @@ class LauncherButton @JvmOverloads constructor(
         buttonIcon?.let { drawable ->
             val h = height.toFloat()
             val cornerRad = dpToPx(16).toFloat()
-            // Inset by 2 × focus ring stroke (2 × 6dp = 12dp) so the icon sits
-            // visually inside the focus frame rather than behind it.
-            val inset = dpToPx(6) * 2
+            // Inset by 2 × focus ring stroke (2 × 6dp = 12dp) on all sides so the
+            // icon sits visually inside the focus frame rather than behind it.
+            // The horizontal inset is halved (6dp) to compensate for Material3's
+            // default insetTop/insetBottom (6dp each), which shrink the visible button
+            // background away from the view's top/bottom edges — making the top/bottom
+            // gap look smaller than the left gap at equal insets.
+            val vInset = dpToPx(6) * 2          // 12dp top/bottom
+            val hInset = dpToPx(6)              // 6dp left (= 12dp − M3's 6dp insetTop)
+            val iconSize = height - vInset * 2
             // Clip to the button's full rounded rect so the icon respects corner radius.
             val path = Path()
             path.addRoundRect(RectF(0f, 0f, width.toFloat(), h), cornerRad, cornerRad, Path.Direction.CW)
             canvas.save()
             canvas.clipPath(path)
-            drawable.setBounds(inset, inset, height - inset, height - inset)
+            drawable.setBounds(hInset, vInset, hInset + iconSize, vInset + iconSize)
             drawable.draw(canvas)
             canvas.restore()
         }
