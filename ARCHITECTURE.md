@@ -233,25 +233,39 @@ reuse the same attach/detach protocol.
 
 ## 6. Pane Loading Lifecycle
 
-The loading model is **load-on-focus, unload-on-unfocus**. It is non-blocking and avoids
-mid-load cancellation complexity by letting loads always run to completion and checking focus
-state at the end.
+The loading model is **load-on-activation, unload-on-replacement**. Pane content is only
+triggered when the user explicitly activates a toggle-type button — not on focus change.
+Once loaded, the pane stays visible until a different toggle button is activated.
+
+This avoids spurious loads while the user navigates focus (joystick up/down), and matches
+conventional UX where a confirmed action (button press) produces a visible result.
 
 ```
-Focus → B: B not already loading → load() starts
-        │
-        ▼
-Focus → C: B.unload(), C.load() starts. B's load still running.
-        │
-        ▼
-Focus → B: B is already loading → do nothing, in-flight load continues.
-        │
-        ▼
-B's load completes → isFocused = true → show()
-C's load completes → isFocused = false → discard silently
+Activate B: B not already loading → load() starts
+            │
+            ▼
+B's load completes → isActivated = true → show(), focus transfers into pane
+            │
+            ▼
+Activate C: B.unload(), C.load() starts. B's previous load already completed.
+            │
+            ▼
+C's load completes → show(), focus transfers into pane
 ```
 
-Each button tracks an `isLoading` boolean. When focus arrives:
+Edge case — activating a toggle button while it is still loading:
+
+```
+Activate B: B not already loading → load() starts
+            │
+            ▼
+Activate B again: B is already loading → do nothing, in-flight load continues.
+            │
+            ▼
+B's load completes → isActivated = true → show()
+```
+
+Each toggle button tracks an `isLoading` boolean. When activated:
 - `isLoading = false` → start a new load
 - `isLoading = true` → do nothing; the in-flight load will call `show()` when done
 
@@ -259,36 +273,30 @@ Key properties of this model:
 
 - **No mid-load interruption.** Loads always run to completion. No cooperative cancellation
   needed inside `PaneContent` implementations.
-- **No double loads.** `isLoading` prevents starting a second load if focus returns while
-  the first is still in progress.
-- **No race conditions.** The `isFocused` check at completion time is sufficient because all
-  callbacks are dispatched on the main thread.
+- **No double loads.** `isLoading` prevents starting a second load if the button is
+  activated again while the first load is still in progress.
+- **No race conditions.** The `isActivated` check at completion time is sufficient because
+  all callbacks are dispatched on the main thread.
 - **Scope cancellation as safety net.** If the button is removed from the hierarchy entirely,
   the button's `CoroutineScope` is cancelled, stopping any in-flight coroutine-based loading.
-
-This model is intentionally simple. A future refinement — retaining loaded content on unfocus
-instead of always unloading — can be added as an opt-in flag per type:
-
-```kotlin
-interface PaneContent {
-    val retainOnUnfocus: Boolean get() = false  // future hook
-    // ...
-}
-```
+- **Intentionality gate.** Focus is cheap — the user may flick through buttons quickly.
+  Activation is deliberate. No work is done until the user confirms their choice.
 
 ---
 
 ## 7. Button Types
 
-Every button type defines three things:
+Every button type belongs to one of two categories and defines three things:
 
 1. **Activation behavior** — what happens when the button is pressed.
-2. **PaneContent** — what appears in the left pane when the button is focused (`null` for
-   direct-action types).
+2. **PaneContent** — the content shown in the left pane (`null` for direct-action types).
 3. **Config UI** — a `PaneContent` shown in the left pane when the button is activated in
    config mode.
 
-### Current Types
+### Direct-Action Types
+
+Direct-action buttons fire immediately on activation and show nothing in the left pane.
+They do not participate in the pane loading lifecycle.
 
 **AppLauncher**
 - Activation: calls `packageManager.getLaunchIntentForPackage(packageName)` and `startActivity()`.
@@ -307,22 +315,28 @@ Every button type defines three things:
 - PaneContent: `null`.
 - Config UI: the type-selection menu (Choose App / Enter URL / Clear).
 
-### Planned Types
+### Toggle/Pane Types
 
-**Widget**
-- Activation: transfers focus to the widget view in the left pane.
-- PaneContent: inflates and hosts an Android `AppWidgetHostView`.
-- Notes: likely sets `retainOnUnfocus = true` to keep the widget alive across focus changes.
+Toggle-type buttons load and display content in the left pane. Activation triggers the pane
+load; once `onReady` fires, focus transfers from the button row into the pane. The pane
+remains loaded until a different toggle button is activated.
 
-**MusicPlayer**
-- Activation: transfers focus to the now-playing view.
-- PaneContent: binds to the active `MediaSession` via `MediaSessionManager`; displays track
-  title, artist, cover art, and playback controls.
-- Notes: cover art loading is async; the `load` callback fires when the session is bound and
-  initial metadata is available.
+Pressing a designated back key (to be assigned) returns focus from the pane back to the
+button row. The previously active button retains its focus indicator in the button row while
+the pane is displayed.
 
-**Metrics**
-- Activation: transfers focus to the metrics view.
+**Widget** *(planned)*
+- Activation: starts `AppWidgetHostView` inflation; transfers focus to the pane when ready.
+- PaneContent: hosts an Android `AppWidgetHostView`.
+
+**MusicPlayer** *(planned)*
+- Activation: binds to the active `MediaSession`; transfers focus to the pane when bound.
+- PaneContent: displays track title, artist, cover art, and playback controls.
+- Notes: cover art loading is async; `onReady` fires when the session is bound and initial
+  metadata is available.
+
+**Metrics** *(planned)*
+- Activation: starts data subscription; transfers focus to the pane when ready.
 - PaneContent: displays system or GPS metrics (speed, altitude, heading, etc.).
 - Data source TBD (GPS via `LocationManager`, OBD, or a custom broadcast).
 
@@ -332,19 +346,27 @@ Every button type defines three things:
 
 ### Focus State
 
-A single integer `focusedIndex` in `MainActivity` tracks which button is focused. It is
-persisted to `SharedPreferences` under the key `focused_index` on every change, so the launcher
-restores to the previously focused button after a restart.
+There are two focus contexts:
 
-Only one button is focused at a time. When a pane-type button is activated, focus management
-within the pane is the pane's own responsibility.
+1. **Button row focus** — a single integer `focusedIndex` in `MainActivity` tracks which
+   button has focus. Persisted to `SharedPreferences` under `focused_index` on every change,
+   so the launcher restores to the previously focused button after a restart.
+
+2. **Pane focus** — when a toggle-type button is activated and its pane is ready, focus
+   transfers from the button row into the pane. The button row remains visible and the
+   previously focused button retains its focus indicator. Pane-internal focus routing is
+   per-type and defined when each pane type is implemented.
+
+A designated back key (to be assigned) returns focus from the pane to the button row without
+unloading the pane. The pane only unloads when a different toggle button is activated.
 
 ### Touch Input
 
 | Scenario | Result |
 |---|---|
 | Tap unfocused button | Focus moves to that button; `ACTION_DOWN` consumed (no ripple) |
-| Tap focused button | Activation fires (ripple + flash + action) |
+| Tap focused direct-action button | Activation fires (ripple + flash + action) |
+| Tap focused toggle button | Pane load starts; focus transfers to pane when ready |
 | Long-press any button | Toggles config mode |
 
 ### Remote Input (DMD Remote)
@@ -358,7 +380,7 @@ The DMD remote communicates via broadcast intent:
 Auto-repeat is suppressed by tracking a `pressedKeys: MutableSet<Int>`. A key code arriving
 while already in the set is ignored. The set is cleared on `onPause()`.
 
-Current key mappings:
+Current key mappings (button row focus):
 
 | Key code | Name | Action |
 |---|---|---|
@@ -367,12 +389,14 @@ Current key mappings:
 | 66 | ENTER / Round Button 1 | Activate focused button |
 
 All remaining key codes are unmapped and reserved for future use (pane focus navigation,
-page switching, back from pane).
+back from pane, page up/down for button list).
 
 ### Back Key Behavior
 
-`onBackPressed()` exits config mode if active. When not in config mode it does nothing —
-correct for a home launcher, which must never be dismissed by back.
+`onBackPressed()` behavior depends on context:
+- In config mode → exit config mode.
+- Pane is focused → return focus to button row (pane stays loaded).
+- Button row focused, not in config mode → no-op (home launcher must never be dismissed).
 
 ---
 
