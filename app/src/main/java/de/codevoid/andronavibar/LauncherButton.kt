@@ -4,9 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
@@ -37,6 +39,8 @@ sealed class UrlIcon {
     object Favicon : UrlIcon()
     /** User-provided image; stored at the button's icon file. */
     object CustomFile : UrlIcon()
+    /** Emoji rendered onto a tinted background; no file on disk. */
+    data class Emoji(val emoji: String) : UrlIcon()
 }
 
 // ── Button configuration ──────────────────────────────────────────────────────
@@ -185,6 +189,7 @@ class LauncherButton @JvmOverloads constructor(
                 val icon = when (iconType) {
                     "favicon" -> UrlIcon.Favicon
                     "custom"  -> UrlIcon.CustomFile
+                    "emoji"   -> UrlIcon.Emoji(iconData ?: "")
                     else      -> UrlIcon.None
                 }
                 ButtonConfig.UrlLauncher(value, label, icon)
@@ -209,7 +214,7 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_type",  "url")
                     .putString("btn_${index}_value", newConfig.url)
                     .putString("btn_${index}_label", newConfig.label)
-                when (newConfig.icon) {
+                when (val ico = newConfig.icon) {
                     is UrlIcon.None -> edit.removeIconKeys()
                     is UrlIcon.Favicon -> edit
                         .putString("btn_${index}_icon_type", "favicon")
@@ -217,11 +222,14 @@ class LauncherButton @JvmOverloads constructor(
                     is UrlIcon.CustomFile -> edit
                         .putString("btn_${index}_icon_type", "custom")
                         .remove("btn_${index}_icon_data")
+                    is UrlIcon.Emoji -> edit
+                        .putString("btn_${index}_icon_type", "emoji")
+                        .putString("btn_${index}_icon_data", ico.emoji)
                 }
                 edit.apply()
 
                 // Delete stale icon file when switching away from file-based icon.
-                if (newConfig.icon == UrlIcon.None) {
+                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
                     iconFile().delete()
                 }
                 // Trigger async favicon fetch.
@@ -263,9 +271,10 @@ class LauncherButton @JvmOverloads constructor(
             }
             is ButtonConfig.UrlLauncher -> {
                 text = cfg.label.ifEmpty { cfg.url }
-                buttonIcon = when (cfg.icon) {
+                buttonIcon = when (val ico = cfg.icon) {
                     is UrlIcon.None -> null
                     is UrlIcon.Favicon, is UrlIcon.CustomFile -> loadIconFile()
+                    is UrlIcon.Emoji -> renderEmojiIcon(ico.emoji)
                 }
             }
         }
@@ -299,6 +308,35 @@ class LauncherButton @JvmOverloads constructor(
         val file = iconFile()
         if (!file.exists()) return null
         val bmp = BitmapFactory.decodeFile(file.path) ?: return null
+        return BitmapDrawable(resources, bmp)
+    }
+
+    private fun renderEmojiIcon(emoji: String): Drawable {
+        val size = 256
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+
+        // Base: surface_card colour
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        bgPaint.color = context.getColor(R.color.surface_card)
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
+
+        // Subtle orange tint (~15 % opacity)
+        val tintPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        tintPaint.color = context.getColor(R.color.colorPrimary)
+        tintPaint.alpha = 38
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), tintPaint)
+
+        // Emoji centred at 65 % of the tile size
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textAlign = Paint.Align.CENTER
+            textSize  = size * 0.65f
+        }
+        val fm = textPaint.fontMetrics
+        val x  = size / 2f
+        val y  = size / 2f - (fm.ascent + fm.descent) / 2f
+        canvas.drawText(emoji, x, y, textPaint)
+
         return BitmapDrawable(resources, bmp)
     }
 

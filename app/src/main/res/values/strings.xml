@@ -12,6 +12,8 @@
     <string name="url_hint">https://example.com</string>
     <string name="display_name_hint">Display name (optional)</string>
     <string name="label_hint">Button label (optional)</string>
+    <string name="icon_emoji">Emoji</string>
+    <string name="emoji_hint">Paste emoji here…</string>
     <string name="icon_none">None</string>
     <string name="icon_favicon">Favicon</string>
     <string name="icon_image">Image</string>

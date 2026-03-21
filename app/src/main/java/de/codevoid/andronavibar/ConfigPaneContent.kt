@@ -43,7 +43,7 @@ class ConfigPaneContent(
 ) : PaneContent {
 
     private enum class Tab { APP, URL, CLEAR }
-    private enum class IconOption { NONE, FAVICON, CUSTOM }
+    private enum class IconOption { NONE, FAVICON, CUSTOM, EMOJI }
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -60,6 +60,7 @@ class ConfigPaneContent(
         initialConfig is ButtonConfig.UrlLauncher -> when (initialConfig.icon) {
             is UrlIcon.Favicon    -> IconOption.FAVICON
             is UrlIcon.CustomFile -> IconOption.CUSTOM
+            is UrlIcon.Emoji      -> IconOption.EMOJI
             else                  -> IconOption.NONE
         }
         else -> IconOption.NONE
@@ -90,6 +91,7 @@ class ConfigPaneContent(
     private var urlLabelEdit:   EditText?                       = null
     private var iconOptionBtns: Map<IconOption, MaterialButton> = emptyMap()
     private var iconDetailArea: ViewGroup?                      = null
+    private var emojiEdit:      EditText?                       = null
 
     // ── PaneContent ───────────────────────────────────────────────────────────
 
@@ -127,6 +129,7 @@ class ConfigPaneContent(
         urlLabelEdit    = null
         iconOptionBtns  = emptyMap()
         iconDetailArea  = null
+        emojiEdit       = null
     }
 
     // ── Key handling ──────────────────────────────────────────────────────────
@@ -449,7 +452,8 @@ class ConfigPaneContent(
 
         addOption(IconOption.NONE,    context.getString(R.string.icon_none))
         addOption(IconOption.FAVICON, context.getString(R.string.icon_favicon))
-        addOption(IconOption.CUSTOM,  context.getString(R.string.icon_image), last = true)
+        addOption(IconOption.CUSTOM,  context.getString(R.string.icon_image))
+        addOption(IconOption.EMOJI,   context.getString(R.string.icon_emoji), last = true)
 
         iconOptionBtns = built
         return row
@@ -477,6 +481,22 @@ class ConfigPaneContent(
         area.removeAllViews()
         when (selectedIconOption) {
             IconOption.NONE, IconOption.FAVICON -> Unit
+
+            IconOption.EMOJI -> {
+                val edit = EditText(context).apply {
+                    layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+                    hint         = context.getString(R.string.emoji_hint)
+                    inputType    = InputType.TYPE_CLASS_TEXT
+                    setSingleLine()
+                    setText(if (initialConfig is ButtonConfig.UrlLauncher &&
+                                initialConfig.icon is UrlIcon.Emoji)
+                                initialConfig.icon.emoji else "")
+                    setTextColor(context.getColor(R.color.text_primary))
+                    setHintTextColor(context.getColor(R.color.text_secondary))
+                }
+                emojiEdit = edit
+                area.addView(edit)
+            }
 
             IconOption.CUSTOM -> {
                 val statusText = when {
@@ -523,6 +543,9 @@ class ConfigPaneContent(
                     IconOption.NONE    -> UrlIcon.None
                     IconOption.FAVICON -> UrlIcon.Favicon
                     IconOption.CUSTOM  -> UrlIcon.CustomFile
+                    IconOption.EMOJI   -> UrlIcon.Emoji(
+                        emojiEdit?.text?.toString()?.trim() ?: ""
+                    )
                 }
                 ButtonConfig.UrlLauncher(url, label, icon)
             }
