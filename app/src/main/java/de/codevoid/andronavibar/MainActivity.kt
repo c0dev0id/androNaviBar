@@ -1,7 +1,6 @@
 package de.codevoid.andronavibar
 
 import android.app.Activity
-import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -34,7 +33,7 @@ class MainActivity : Activity() {
     private lateinit var buttons:         List<LauncherButton>
     private lateinit var reservedArea:    FrameLayout
     private lateinit var dragHandlePanel: LinearLayout
-    private lateinit var appWidgetHost:   AppWidgetHost
+    private lateinit var appWidgetHost:   SafeAppWidgetHost
 
     private var focusedIndex = 0
 
@@ -102,7 +101,7 @@ class MainActivity : Activity() {
         hideSystemBars()
         prefs          = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
         reservedArea   = findViewById(R.id.reservedArea)
-        appWidgetHost  = AppWidgetHost(this, APP_WIDGET_HOST_ID)
+        appWidgetHost  = SafeAppWidgetHost(this, APP_WIDGET_HOST_ID)
         cleanupOrphanedWidgetId()
         focusedIndex   = prefs.getInt("focused_index", 0)
 
