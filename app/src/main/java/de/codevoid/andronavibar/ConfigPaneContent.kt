@@ -43,7 +43,7 @@ class ConfigPaneContent(
 ) : PaneContent {
 
     private enum class Tab { APP, URL, CLEAR }
-    private enum class IconOption { NONE, FAVICON, CUSTOM, EMOJI }
+    private enum class IconOption { NONE, CUSTOM, EMOJI }
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +58,6 @@ class ConfigPaneContent(
 
     private var selectedIconOption: IconOption = when {
         initialConfig is ButtonConfig.UrlLauncher -> when (initialConfig.icon) {
-            is UrlIcon.Favicon    -> IconOption.FAVICON
             is UrlIcon.CustomFile -> IconOption.CUSTOM
             is UrlIcon.Emoji      -> IconOption.EMOJI
             else                  -> IconOption.NONE
@@ -450,10 +449,9 @@ class ConfigPaneContent(
             built[opt] = btn
         }
 
-        addOption(IconOption.NONE,    context.getString(R.string.icon_none))
-        addOption(IconOption.FAVICON, context.getString(R.string.icon_favicon))
-        addOption(IconOption.CUSTOM,  context.getString(R.string.icon_image))
-        addOption(IconOption.EMOJI,   context.getString(R.string.icon_emoji), last = true)
+        addOption(IconOption.NONE,   context.getString(R.string.icon_none))
+        addOption(IconOption.CUSTOM, context.getString(R.string.icon_image))
+        addOption(IconOption.EMOJI,  context.getString(R.string.icon_emoji), last = true)
 
         iconOptionBtns = built
         return row
@@ -540,10 +538,9 @@ class ConfigPaneContent(
                 if (url.isEmpty()) return ButtonConfig.Empty
                 val label = urlLabelEdit?.text?.toString()?.trim().orEmpty()
                 val icon  = when (selectedIconOption) {
-                    IconOption.NONE    -> UrlIcon.None
-                    IconOption.FAVICON -> UrlIcon.Favicon
-                    IconOption.CUSTOM  -> UrlIcon.CustomFile
-                    IconOption.EMOJI   -> UrlIcon.Emoji(
+                    IconOption.NONE   -> UrlIcon.None
+                    IconOption.CUSTOM -> UrlIcon.CustomFile
+                    IconOption.EMOJI  -> UrlIcon.Emoji(
                         emojiEdit?.text?.toString()?.trim() ?: ""
                     )
                 }

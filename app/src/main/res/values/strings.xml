@@ -15,8 +15,7 @@
     <string name="icon_emoji">Emoji</string>
     <string name="emoji_hint">Paste emoji here…</string>
     <string name="icon_none">None</string>
-    <string name="icon_favicon">Favicon</string>
-    <string name="icon_image">Image</string>
+<string name="icon_image">Image</string>
     <string name="pick_image">Pick image…</string>
     <string name="image_picked">New image selected</string>
     <string name="image_current">Using current image</string>

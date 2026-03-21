@@ -25,18 +25,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL as JavaURL
 
 // ── Icon type for URL buttons ─────────────────────────────────────────────────
 
 sealed class UrlIcon {
     object None : UrlIcon()
-    /** Fetched async from the page's domain; stored at the button's icon file. */
-    object Favicon : UrlIcon()
     /** User-provided image; stored at the button's icon file. */
     object CustomFile : UrlIcon()
     /** Emoji rendered onto a tinted background; no file on disk. */
@@ -187,10 +181,9 @@ class LauncherButton @JvmOverloads constructor(
                 val iconType = prefs.getString("btn_${index}_icon_type", null)
                 val iconData = prefs.getString("btn_${index}_icon_data", null)
                 val icon = when (iconType) {
-                    "favicon" -> UrlIcon.Favicon
-                    "custom"  -> UrlIcon.CustomFile
-                    "emoji"   -> UrlIcon.Emoji(iconData ?: "")
-                    else      -> UrlIcon.None
+                    "custom" -> UrlIcon.CustomFile
+                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
+                    else     -> UrlIcon.None   // includes legacy "favicon" → no icon
                 }
                 ButtonConfig.UrlLauncher(value, label, icon)
             }
@@ -216,9 +209,6 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_label", newConfig.label)
                 when (val ico = newConfig.icon) {
                     is UrlIcon.None -> edit.removeIconKeys()
-                    is UrlIcon.Favicon -> edit
-                        .putString("btn_${index}_icon_type", "favicon")
-                        .remove("btn_${index}_icon_data")
                     is UrlIcon.CustomFile -> edit
                         .putString("btn_${index}_icon_type", "custom")
                         .remove("btn_${index}_icon_data")
@@ -228,12 +218,10 @@ class LauncherButton @JvmOverloads constructor(
                 }
                 edit.apply()
 
-                // Delete stale icon file when switching away from file-based icon.
+                // Delete stale icon file when not using a file-based icon.
                 if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
                     iconFile().delete()
                 }
-                // Trigger async favicon fetch.
-                if (newConfig.icon == UrlIcon.Favicon) fetchFavicon(newConfig.url)
             }
 
             is ButtonConfig.Empty -> clearConfig(prefs)
@@ -272,9 +260,9 @@ class LauncherButton @JvmOverloads constructor(
             is ButtonConfig.UrlLauncher -> {
                 text = cfg.label.ifEmpty { cfg.url }
                 buttonIcon = when (val ico = cfg.icon) {
-                    is UrlIcon.None -> null
-                    is UrlIcon.Favicon, is UrlIcon.CustomFile -> loadIconFile()
-                    is UrlIcon.Emoji -> renderEmojiIcon(ico.emoji)
+                    is UrlIcon.None       -> null
+                    is UrlIcon.CustomFile -> loadIconFile()
+                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
                 }
             }
         }
@@ -316,16 +304,10 @@ class LauncherButton @JvmOverloads constructor(
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
 
-        // Base: surface_card colour
+        // Background: surface_card colour
         val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
         bgPaint.color = context.getColor(R.color.surface_card)
         canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
-
-        // Subtle orange tint (~15 % opacity)
-        val tintPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        tintPaint.color = context.getColor(R.color.colorPrimary)
-        tintPaint.alpha = 38
-        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), tintPaint)
 
         // Emoji centred at 65 % of the tile size
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -338,27 +320,6 @@ class LauncherButton @JvmOverloads constructor(
         canvas.drawText(emoji, x, y, textPaint)
 
         return BitmapDrawable(resources, bmp)
-    }
-
-    private fun fetchFavicon(pageUrl: String) {
-        scope.launch {
-            val domain = Uri.parse(pageUrl).host ?: return@launch
-            val dest   = iconFile()
-            val fetched = withContext(Dispatchers.IO) {
-                try {
-                    val faviconUrl = "https://www.google.com/s2/favicons?domain=$domain&sz=64"
-                    val conn = JavaURL(faviconUrl).openConnection() as HttpURLConnection
-                    conn.connectTimeout = 5_000
-                    conn.readTimeout    = 5_000
-                    conn.connect()
-                    if (conn.responseCode == HttpURLConnection.HTTP_OK) {
-                        dest.outputStream().use { out -> conn.inputStream.use { it.copyTo(out) } }
-                        true
-                    } else false
-                } catch (_: Exception) { false }
-            }
-            if (fetched) applyConfig()
-        }
     }
 
     // ── Visuals ───────────────────────────────────────────────────────────────
