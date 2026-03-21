@@ -62,6 +62,13 @@ class MainActivity : Activity() {
     /** Non-null while a config pane is displayed in reservedArea. */
     private var activeConfigPane: ConfigPaneContent? = null
 
+    /**
+     * The current slot index of the button whose config pane is open.
+     * Kept in sync with drag reorders so save/clear/image-pick always
+     * target the right slot even after buttons have been moved around.
+     */
+    private var configPaneButtonIndex = -1
+
     private val paneFocused get() = activeConfigPane != null
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -194,21 +201,22 @@ class MainActivity : Activity() {
     private fun openConfigPane(buttonIndex: Int) {
         dismissConfigPane()   // silently close any open pane (no save)
         setFocus(buttonIndex)
+        configPaneButtonIndex = buttonIndex
 
         val pane = ConfigPaneContent(
             context       = this,
             buttonIndex   = buttonIndex,
             initialConfig = buttons[buttonIndex].config,
             onSave        = { newConfig ->
-                buttons[buttonIndex].saveConfig(prefs, newConfig)
+                buttons[configPaneButtonIndex].saveConfig(prefs, newConfig)
                 dismissConfigPane()
             },
             onCancel = { dismissConfigPane() },
-            onClear  = { buttons[buttonIndex].clearConfig(prefs) }
+            onClear  = { buttons[configPaneButtonIndex].clearConfig(prefs) }
         )
 
         pane.onPickImageRequest = {
-            pendingIconButtonIndex = buttonIndex
+            pendingIconButtonIndex = configPaneButtonIndex
             val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
             @Suppress("DEPRECATION")
             startActivityForResult(intent, IMAGE_REQUEST_CODE)
@@ -226,6 +234,7 @@ class MainActivity : Activity() {
     private fun dismissConfigPane() {
         val pane = activeConfigPane ?: return
         activeConfigPane = null
+        configPaneButtonIndex = -1
         pane.unload()
         dragHandlePanel.visibility = View.GONE
         if (dragSourceIndex >= 0) cancelDrag()
@@ -400,13 +409,15 @@ class MainActivity : Activity() {
             }
         }
 
-        // Keep focused_index pointing at the same logical button
-        val newFocus = when {
-            focusedIndex == from                         -> to
-            from < to && focusedIndex in (from + 1)..to -> focusedIndex - 1
-            from > to && focusedIndex in to until from  -> focusedIndex + 1
-            else                                        -> focusedIndex
+        // Keep focused_index and configPaneButtonIndex pointing at the same logical buttons
+        fun rotate(idx: Int) = when {
+            idx == from                         -> to
+            from < to && idx in (from + 1)..to  -> idx - 1
+            from > to && idx in to until from   -> idx + 1
+            else                                -> idx
         }
+        val newFocus = rotate(focusedIndex)
+        if (configPaneButtonIndex >= 0) configPaneButtonIndex = rotate(configPaneButtonIndex)
         edit.putInt("focused_index", newFocus)
         edit.apply()
 
