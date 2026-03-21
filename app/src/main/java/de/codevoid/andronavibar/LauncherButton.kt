@@ -15,7 +15,6 @@ import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -80,6 +79,9 @@ class LauncherButton @JvmOverloads constructor(
 
     /** Fired on long-press; MainActivity opens the config pane for this button. */
     var onConfigRequested: (() -> Unit)? = null
+
+    /** Fired when a URL button is activated; MainActivity shows the URL in a WebView pane. */
+    var onUrlActivated: ((String) -> Unit)? = null
 
     // ── Visual state ─────────────────────────────────────────────────────────
 
@@ -282,7 +284,7 @@ class LauncherButton @JvmOverloads constructor(
                 flashActivation()
                 val url = if (cfg.url.startsWith("http://") || cfg.url.startsWith("https://"))
                     cfg.url else "https://${cfg.url}"
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                onUrlActivated?.invoke(url)
             }
             // TODO: toggle/pane types — call load() here; show() on onReady
         }

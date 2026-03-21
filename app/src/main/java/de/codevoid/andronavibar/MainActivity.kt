@@ -61,6 +61,9 @@ class MainActivity : Activity() {
 
     // ── Pane coordination ─────────────────────────────────────────────────────
 
+    /** Non-null while a web pane is displayed in reservedArea. */
+    private var activeWebPane: WebPaneContent? = null
+
     /** Non-null while a config pane is displayed in reservedArea. */
     private var activeConfigPane: ConfigPaneContent? = null
 
@@ -97,6 +100,7 @@ class MainActivity : Activity() {
             buttons[i].index             = i
             buttons[i].onFocusRequested  = { setFocus(i) }
             buttons[i].onConfigRequested = { openConfigPane(i) }
+            buttons[i].onUrlActivated    = { url -> showWebPane(url) }
             buttons[i].loadConfig(prefs)
         }
 
@@ -171,8 +175,9 @@ class MainActivity : Activity() {
                     val held = SystemClock.elapsedRealtime() - key111PressedAt
                     key111PressedAt = 0L
                     if (held < LauncherApplication.TOGGLE_HOLD_MS) {
-                        // Short press → dismiss config pane (cancel); no focus check needed.
-                        dismissConfigPane()
+                        // Short press: dismiss config pane or step back in WebView, then dismiss it.
+                        if (activeConfigPane != null) dismissConfigPane()
+                        else if (activeWebPane?.goBack() == false) dismissWebPane()
                     }
                     // Long press already handled by LauncherApplication.
                 }
@@ -198,9 +203,26 @@ class MainActivity : Activity() {
         }
     }
 
+    // ── Web pane ──────────────────────────────────────────────────────────────
+
+    private fun showWebPane(url: String) {
+        dismissConfigPane()
+        dismissWebPane()
+        val pane = WebPaneContent(this, url)
+        activeWebPane = pane
+        pane.load { pane.show(reservedArea) }
+    }
+
+    private fun dismissWebPane() {
+        val pane = activeWebPane ?: return
+        activeWebPane = null
+        pane.unload()
+    }
+
     // ── Config pane ───────────────────────────────────────────────────────────
 
     private fun openConfigPane(buttonIndex: Int) {
+        dismissWebPane()
         dismissConfigPane()   // silently close any open pane (no save)
         setFocus(buttonIndex)
         configPaneButtonIndex = buttonIndex
@@ -278,8 +300,11 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        // Back = dismiss config pane without saving. Home app never exits on back.
-        dismissConfigPane()
+        when {
+            activeConfigPane != null          -> dismissConfigPane()
+            activeWebPane?.goBack() == false  -> dismissWebPane()
+        }
+        // If nothing is open, do nothing — home launcher never exits on back.
     }
 
     // ── Drag-to-reorder ───────────────────────────────────────────────────────
