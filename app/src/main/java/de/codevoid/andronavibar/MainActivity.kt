@@ -99,6 +99,7 @@ class MainActivity : Activity() {
         prefs          = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
         reservedArea   = findViewById(R.id.reservedArea)
         appWidgetHost  = AppWidgetHost(this, APP_WIDGET_HOST_ID)
+        cleanupOrphanedWidgetId()
         focusedIndex   = prefs.getInt("focused_index", 0)
 
         buttons = listOf(
@@ -229,6 +230,8 @@ class MainActivity : Activity() {
     private fun showWebPane(url: String) {
         dismissConfigPane()
         dismissWebPane()
+        dismissWidgetPane()
+        dismissAppsGridPane()
         val pane = WebPaneContent(this, url)
         activeWebPane = pane
         pane.load { pane.show(reservedArea) }
@@ -246,6 +249,7 @@ class MainActivity : Activity() {
         dismissConfigPane()
         dismissWebPane()
         dismissWidgetPane()
+        dismissAppsGridPane()
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId) ?: return
         val pane = WidgetPaneContent(this, appWidgetHost, appWidgetId, info)
         activeWidgetPane = pane
@@ -278,11 +282,32 @@ class MainActivity : Activity() {
 
     // ── Widget binding ────────────────────────────────────────────────────────
 
+    /**
+     * If the process was killed between allocateAppWidgetId() and
+     * onActivityResult(), the allocated ID is orphaned. Clean it up on
+     * the next launch.
+     */
+    private fun cleanupOrphanedWidgetId() {
+        val orphan = prefs.getInt("pending_widget_id", -1)
+        if (orphan != -1) {
+            appWidgetHost.deleteAppWidgetId(orphan)
+            prefs.edit().remove("pending_widget_id").apply()
+        }
+    }
+
+    private fun savePendingWidgetId(id: Int) {
+        prefs.edit().putInt("pending_widget_id", id).apply()
+    }
+
+    private fun clearPendingWidgetId() {
+        prefs.edit().remove("pending_widget_id").apply()
+    }
+
     private fun completeWidgetBinding(appWidgetId: Int) {
         if (pendingWidgetConfig == null) return
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
         if (info?.configure != null) {
-            val intent = Intent().apply {
+            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
                 component = info.configure
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             }
@@ -296,6 +321,7 @@ class MainActivity : Activity() {
     private fun finishWidgetSetup() {
         val cfg = pendingWidgetConfig ?: return
         pendingWidgetConfig = null
+        clearPendingWidgetId()
         buttons[pendingWidgetButtonIndex].saveConfig(prefs, cfg)
         // Show the widget pane immediately so the user sees the result.
         if (cfg.appWidgetId != -1) {
@@ -320,6 +346,7 @@ class MainActivity : Activity() {
                 if (newConfig is ButtonConfig.WidgetLauncher && newConfig.appWidgetId == -1) {
                     // Need to bind a widget — allocate an ID and start the system bind flow.
                     val newId   = appWidgetHost.allocateAppWidgetId()
+                    savePendingWidgetId(newId)
                     val oldCfg  = buttons[configPaneButtonIndex].config
                     if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
                         appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
@@ -403,11 +430,21 @@ class MainActivity : Activity() {
                         if (it.appWidgetId != -1) appWidgetHost.deleteAppWidgetId(it.appWidgetId)
                     }
                     pendingWidgetConfig = null
+                    clearPendingWidgetId()
                 }
                 return
             }
             CONFIGURE_WIDGET_REQUEST_CODE -> {
-                finishWidgetSetup()   // proceed whether OK or CANCEL; widget is already bound
+                if (resultCode == RESULT_OK) {
+                    finishWidgetSetup()
+                } else {
+                    // User cancelled configuration; delete the bound-but-unconfigured widget.
+                    pendingWidgetConfig?.let {
+                        if (it.appWidgetId != -1) appWidgetHost.deleteAppWidgetId(it.appWidgetId)
+                    }
+                    pendingWidgetConfig = null
+                    clearPendingWidgetId()
+                }
                 return
             }
         }
