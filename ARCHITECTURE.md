@@ -456,9 +456,10 @@ uninstall or clear-data.
 app/src/main/
 ├── AndroidManifest.xml
 ├── java/de/codevoid/andronavibar/
-│   ├── MainActivity.kt          — Activity; focus management, remote receiver, button wiring
-│   ├── LauncherButton.kt        — (planned) Custom MaterialButton subclass
-│   └── PaneContent.kt           — (planned) PaneContent interface + per-type implementations
+│   ├── MainActivity.kt          — Activity; focus management, remote receiver, config dialogs
+│   ├── LauncherButton.kt        — Custom MaterialButton; ButtonConfig sealed class, activation,
+│   │                              config persistence, visual state (focus ring, flash, stroke)
+│   └── PaneContent.kt           — PaneContent interface (load/show/unload)
 └── res/
     ├── layout/
     │   └── activity_main.xml    — Two-pane root layout
@@ -468,11 +469,6 @@ app/src/main/
         ├── strings.xml          — All user-visible strings
         └── themes.xml           — App theme, button styles, dialog theme overlay
 ```
-
-### Current vs. Planned
-
-`LauncherButton.kt` and `PaneContent.kt` are planned extractions. Currently, all logic resides
-in `MainActivity.kt`. The extraction into `LauncherButton` is the primary pending refactor.
 
 ---
 

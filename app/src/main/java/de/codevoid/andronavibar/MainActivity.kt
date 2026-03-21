@@ -6,28 +6,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
-import android.content.pm.ResolveInfo
-import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
-import android.net.Uri
-import android.view.MotionEvent
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.widget.EditText
 import android.widget.FrameLayout
-import com.google.android.material.button.MaterialButton
+import android.os.Bundle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class MainActivity : Activity() {
 
     private lateinit var prefs: SharedPreferences
-    private lateinit var buttons: List<MaterialButton>
+    private lateinit var buttons: List<LauncherButton>
     private var configMode = false
     private var focusedIndex = 0
-    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,25 +34,14 @@ class MainActivity : Activity() {
         )
 
         for (i in buttons.indices) {
-            buttons[i].setOnClickListener { onButtonClick(i) }
-            buttons[i].setOnLongClickListener {
-                toggleConfigMode()
-                true
-            }
-            buttons[i].setOnTouchListener { _, event ->
-                // Consume ACTION_DOWN on unfocused buttons outside config mode so
-                // no pressed-state overlay or ripple fires on a focus-only tap.
-                if (event.action == MotionEvent.ACTION_DOWN && !configMode && i != focusedIndex) {
-                    focusedIndex = i
-                    saveFocus()
-                    updateButtonStyles()
-                    true
-                } else false
-            }
+            buttons[i].index = i
+            buttons[i].onFocusRequested = { setFocus(i) }
+            buttons[i].onLongPressed    = { toggleConfigMode() }
+            buttons[i].onConfigRequest  = { showConfigDialog(i) }
+            buttons[i].loadConfig(prefs)
         }
 
-        loadButtons()
-        updateButtonStyles()
+        updateFocus()
     }
 
     override fun onResume() {
@@ -81,19 +59,20 @@ class MainActivity : Activity() {
         pressedKeys.clear()
     }
 
+    // ── Remote input ──────────────────────────────────────────────────────────
+
     private val pressedKeys = mutableSetOf<Int>()
 
     private val remoteListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != "com.thorkracing.wireddevices.keypress") return
-
             if (intent.hasExtra("key_press")) {
                 val keyCode = intent.getIntExtra("key_press", 0)
                 if (!pressedKeys.add(keyCode)) return  // auto-repeat, ignore
                 when (keyCode) {
-                    19 -> moveFocus(-1)     // UP
-                    20 -> moveFocus(+1)     // DOWN
-                    66 -> activateFocused() // ROUND BUTTON 1 — select
+                    19 -> moveFocus(-1)              // DPAD_UP
+                    20 -> moveFocus(+1)              // DPAD_DOWN
+                    66 -> buttons[focusedIndex].activate()  // ENTER / Round Button 1
                 }
             } else if (intent.hasExtra("key_release")) {
                 pressedKeys.remove(intent.getIntExtra("key_release", 0))
@@ -101,87 +80,32 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun moveFocus(delta: Int) {
-        focusedIndex = (focusedIndex + delta).coerceIn(0, buttons.lastIndex)
-        saveFocus()
-        updateButtonStyles()
-    }
+    // ── Focus management ──────────────────────────────────────────────────────
 
-    private fun saveFocus() {
+    private fun setFocus(index: Int) {
+        focusedIndex = index
         prefs.edit().putInt("focused_index", focusedIndex).apply()
+        updateFocus()
     }
 
-    private fun activateFocused() {
-        onButtonClick(focusedIndex)
+    private fun moveFocus(delta: Int) {
+        setFocus((focusedIndex + delta).coerceIn(0, buttons.lastIndex))
     }
+
+    private fun updateFocus() {
+        for (i in buttons.indices) {
+            buttons[i].isFocusedButton = (i == focusedIndex)
+        }
+    }
+
+    // ── Config mode ───────────────────────────────────────────────────────────
 
     private fun toggleConfigMode() {
         configMode = !configMode
-        updateButtonStyles()
+        for (btn in buttons) btn.isInConfigMode = configMode
     }
 
-    private fun updateButtonStyles() {
-        val configStroke = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
-        for (i in buttons.indices) {
-            val btn = buttons[i]
-            btn.foreground = if (i == focusedIndex) makeFocusRing() else null
-            if (configMode) {
-                btn.strokeColor = ColorStateList.valueOf(getColor(R.color.config_border))
-                btn.strokeWidth = configStroke
-            } else {
-                btn.strokeWidth = 0
-            }
-        }
-    }
-
-    private fun makeFocusRing(): GradientDrawable {
-        return GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dpToPx(16).toFloat()
-            setStroke(dpToPx(6), getColor(R.color.colorPrimary))
-            setColor(Color.TRANSPARENT)
-        }
-    }
-
-    private fun dpToPx(dp: Int): Int =
-        (dp * resources.displayMetrics.density + 0.5f).toInt()
-
-    private fun flashButton(index: Int) {
-        val btn = buttons[index]
-        btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
-        handler.postDelayed({
-            btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
-        }, 150L)
-    }
-
-    private fun onButtonClick(index: Int) {
-        if (configMode) {
-            showConfigDialog(index)
-        } else {
-            flashButton(index)
-            launchButton(index)
-        }
-    }
-
-    private fun launchButton(index: Int) {
-        val type = prefs.getString("btn_${index}_type", null) ?: return
-        val value = prefs.getString("btn_${index}_value", null) ?: return
-
-        when (type) {
-            "app" -> {
-                val intent = packageManager.getLaunchIntentForPackage(value)
-                if (intent != null) {
-                    startActivity(intent)
-                }
-            }
-            "url" -> {
-                val url = if (value.startsWith("http://") || value.startsWith("https://"))
-                    value else "https://$value"
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                startActivity(intent)
-            }
-        }
-    }
+    // ── Config dialogs ────────────────────────────────────────────────────────
 
     private fun showConfigDialog(index: Int) {
         val options = arrayOf(
@@ -189,14 +113,13 @@ class MainActivity : Activity() {
             getString(R.string.enter_url),
             getString(R.string.clear)
         )
-
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.configure)
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> showAppPicker(index)
                     1 -> showUrlDialog(index)
-                    2 -> clearButton(index)
+                    2 -> buttons[index].clearConfig(prefs)
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -207,29 +130,28 @@ class MainActivity : Activity() {
         val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val apps = packageManager.queryIntentActivities(mainIntent, 0)
             .sortedBy { it.loadLabel(packageManager).toString().lowercase() }
-
         val appNames = apps.map { it.loadLabel(packageManager).toString() }.toTypedArray()
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.choose_app)
             .setItems(appNames) { _, which ->
                 val app = apps[which]
-                val pkgName = app.activityInfo.packageName
-                val label = app.loadLabel(packageManager).toString()
-                saveButton(index, "app", pkgName, label)
-                loadButtons()
+                buttons[index].saveConfig(prefs, ButtonConfig.AppLauncher(
+                    packageName = app.activityInfo.packageName,
+                    label       = app.loadLabel(packageManager).toString()
+                ))
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
     private fun showUrlDialog(index: Int) {
+        val currentUrl = (buttons[index].config as? ButtonConfig.UrlLauncher)?.url ?: ""
         val input = EditText(this).apply {
             hint = getString(R.string.url_hint)
-            setText(prefs.getString("btn_${index}_value", ""))
+            setText(currentUrl)
             setSingleLine()
         }
-
         val container = FrameLayout(this).apply {
             val padding = (16 * resources.displayMetrics.density).toInt()
             setPadding(padding, padding, padding, 0)
@@ -242,66 +164,15 @@ class MainActivity : Activity() {
             .setPositiveButton(R.string.ok) { _, _ ->
                 val url = input.text.toString().trim()
                 if (url.isNotEmpty()) {
-                    saveButton(index, "url", url, url)
-                    loadButtons()
+                    buttons[index].saveConfig(prefs, ButtonConfig.UrlLauncher(url, url))
                 }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    private fun saveButton(index: Int, type: String, value: String, label: String) {
-        prefs.edit()
-            .putString("btn_${index}_type", type)
-            .putString("btn_${index}_value", value)
-            .putString("btn_${index}_label", label)
-            .apply()
-    }
-
-    private fun clearButton(index: Int) {
-        prefs.edit()
-            .remove("btn_${index}_type")
-            .remove("btn_${index}_value")
-            .remove("btn_${index}_label")
-            .apply()
-        loadButtons()
-    }
-
-    private fun loadButtons() {
-        for (i in buttons.indices) {
-            val type = prefs.getString("btn_${i}_type", null)
-            val label = prefs.getString("btn_${i}_label", null)
-
-            if (type != null && label != null) {
-                buttons[i].text = label
-                buttons[i].icon = getButtonIcon(i)
-            } else {
-                buttons[i].text = getString(R.string.empty)
-                buttons[i].icon = null
-            }
-        }
-    }
-
-    private fun getButtonIcon(index: Int): Drawable? {
-        val type = prefs.getString("btn_${index}_type", null) ?: return null
-        val value = prefs.getString("btn_${index}_value", null) ?: return null
-
-        return when (type) {
-            "app" -> {
-                try {
-                    packageManager.getApplicationIcon(value)
-                } catch (_: Exception) {
-                    null
-                }
-            }
-            else -> null
-        }
-    }
-
     override fun onBackPressed() {
-        if (configMode) {
-            toggleConfigMode()
-        }
-        // Do nothing when not in config mode - this is a home app
+        if (configMode) toggleConfigMode()
+        // Do nothing when not in config mode — this is a home app.
     }
 }
