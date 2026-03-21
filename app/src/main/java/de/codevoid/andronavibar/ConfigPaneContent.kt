@@ -2,6 +2,7 @@ package de.codevoid.andronavibar
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
 import android.text.InputType
@@ -40,7 +41,8 @@ import com.google.android.material.button.MaterialButton
 class ConfigPaneContent(
     private val context:       Context,
     private val initialConfig: ButtonConfig,
-    private val onSave:        (ButtonConfig) -> Unit
+    private val onSave:        (ButtonConfig) -> Unit,
+    private val onClear:       ()             -> Unit
 ) : PaneContent {
 
     private enum class Tab { APP, URL, CLEAR }
@@ -72,7 +74,7 @@ class ConfigPaneContent(
         // TODO: move to button.scope coroutine when performance warrants it.
         val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         apps = context.packageManager
-            .queryIntentActivities(mainIntent, 0)
+            .queryIntentActivities(mainIntent, PackageManager.MATCH_ALL)
             .sortedBy { it.loadLabel(context.packageManager).toString().lowercase() }
 
         if (initialConfig is ButtonConfig.AppLauncher) {
@@ -186,8 +188,9 @@ class ConfigPaneContent(
 
     private fun selectTab(tab: Tab) {
         if (tab == Tab.CLEAR) {
-            // Clear tapped: save Empty immediately and let caller close.
-            onSave(ButtonConfig.Empty)
+            // Clear: save Empty to the button, then stay on the config pane
+            // so the user can immediately pick a new assignment.
+            onClear()
             return
         }
         activeTab = tab

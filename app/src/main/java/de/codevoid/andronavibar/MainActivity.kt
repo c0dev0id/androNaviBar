@@ -130,6 +130,9 @@ class MainActivity : Activity() {
             onSave        = { newConfig ->
                 buttons[buttonIndex].saveConfig(prefs, newConfig)
                 dismissConfigPane()
+            },
+            onClear = {
+                buttons[buttonIndex].clearConfig(prefs)
             }
         )
 
