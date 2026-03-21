@@ -1,9 +1,13 @@
 package de.codevoid.andronavibar
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ResolveInfo
+import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
@@ -17,6 +21,7 @@ class MainActivity : Activity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var buttons: List<MaterialButton>
     private var configMode = false
+    private var focusedIndex = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +48,49 @@ class MainActivity : Activity() {
         loadButtons()
     }
 
+    override fun onResume() {
+        super.onResume()
+        registerReceiver(
+            remoteListener,
+            IntentFilter("com.thorkracing.wireddevices.keypress"),
+            Context.RECEIVER_EXPORTED
+        )
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
+    }
+
+    private val remoteListener = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != "com.thorkracing.wireddevices.keypress") return
+
+            if (intent.hasExtra("key_press")) {
+                when (intent.getIntExtra("key_press", 0)) {
+                    19 -> moveFocus(-1)   // UP
+                    20 -> moveFocus(+1)   // DOWN
+                    66 -> activateFocused() // ROUND BUTTON 1 — select
+                    111 -> onBackPressed()  // ROUND BUTTON 2 — back
+                }
+            }
+        }
+    }
+
+    // TODO: implement moveFocus
+    // delta is -1 (up) or +1 (down). Decide how to handle edges:
+    //   - Clamp: stop at button 0 / button 4
+    //   - Wrap:  UP from 0 goes to 4, DOWN from 4 goes to 0
+    // After updating focusedIndex, call updateButtonStyles().
+    private fun moveFocus(delta: Int) {
+
+    }
+
+    private fun activateFocused() {
+        if (focusedIndex < 0) return
+        onButtonClick(focusedIndex)
+    }
+
     private fun toggleConfigMode() {
         configMode = !configMode
         updateButtonStyles()
@@ -51,13 +99,16 @@ class MainActivity : Activity() {
     private fun updateButtonStyles() {
         for (i in buttons.indices) {
             val btn = buttons[i]
-            if (configMode) {
-                btn.strokeColor = android.content.res.ColorStateList.valueOf(
-                    getColor(R.color.config_border)
-                )
-                btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
-            } else {
-                btn.strokeWidth = 0
+            when {
+                i == focusedIndex -> {
+                    btn.strokeColor = ColorStateList.valueOf(getColor(R.color.remote_focus_border))
+                    btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
+                }
+                configMode -> {
+                    btn.strokeColor = ColorStateList.valueOf(getColor(R.color.config_border))
+                    btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
+                }
+                else -> btn.strokeWidth = 0
             }
         }
     }
