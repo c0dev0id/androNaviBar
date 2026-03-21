@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AbsListView
@@ -17,7 +18,7 @@ import android.widget.AbsListView
  * is created fresh on show() and removed on unload(); the widget's remote
  * views continue to be delivered as long as the AppWidgetHost is listening.
  *
- * After the view is attached, updateAppWidgetSize communicates the actual
+ * After the view is attached, updateAppWidgetOptions communicates the actual
  * pane dimensions to the widget provider so it can pick the right layout
  * for the available space.
  */
@@ -38,64 +39,49 @@ class WidgetPaneContent(
     }
 
     override fun show(container: ViewGroup) {
+        val mgr = AppWidgetManager.getInstance(context)
+
+        // Trigger the provider to re-send fresh RemoteViews BEFORE creating
+        // the host view.  After a process restart the system's cached views
+        // reference content:// URIs whose temporary grants expired with the
+        // old process.  Poking updateAppWidgetOptions() causes the provider's
+        // onAppWidgetOptionsChanged() to fire, which re-sends RemoteViews
+        // with freshly granted URIs.  Using the already-stored options avoids
+        // needing layout dimensions we don't have yet.
+        val existingOpts = mgr.getAppWidgetOptions(appWidgetId)
+        Log.d(TAG, "Triggering provider refresh for widget $appWidgetId opts=$existingOpts")
+        mgr.updateAppWidgetOptions(appWidgetId, existingOpts)
+
         val hv = appWidgetHost.createView(context, appWidgetId, providerInfo)
         hv.layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
         hostView = hv
-
-        // If the first layout hits expired FileProvider URIs (stale cached
-        // RemoteViews after a process restart), the error view is suppressed
-        // by SafeAppWidgetHostView.  Trigger a full refresh so the provider
-        // re-sends RemoteViews with valid URI grants.
-        (hv as? SafeAppWidgetHostView)?.onLayoutError = {
-            requestWidgetUpdate(hv)
-        }
-
         container.addView(hv)
 
-        // Tell the widget how much space it actually has. Posted so the
-        // container has been measured and hv.width/height are non-zero.
+        // After the view is measured, send the actual pane dimensions and
+        // poke collection adapters to reload.
         hv.post {
-            sendWidgetSize(hv)
+            val density = context.resources.displayMetrics.density
+            val wDp = (hv.width  / density).toInt()
+            val hDp = (hv.height / density).toInt()
+            if (wDp > 0 && hDp > 0) {
+                val opts = Bundle().apply {
+                    putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,  wDp)
+                    putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH,  wDp)
+                    putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp)
+                    putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp)
+                }
+                mgr.updateAppWidgetOptions(appWidgetId, opts)
+            }
+
+            for (id in findCollectionViewIds(hv)) {
+                mgr.notifyAppWidgetViewDataChanged(appWidgetId, id)
+            }
 
             onContentReady?.invoke()
             onContentReady = null
-        }
-    }
-
-    /**
-     * Communicate the actual pane dimensions to the widget provider so it
-     * can pick the right layout for the available space.
-     */
-    private fun sendWidgetSize(hv: AppWidgetHostView) {
-        val density = context.resources.displayMetrics.density
-        val wDp = (hv.width  / density).toInt()
-        val hDp = (hv.height / density).toInt()
-        if (wDp <= 0 || hDp <= 0) return
-        val opts = Bundle().apply {
-            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,  wDp)
-            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH,  wDp)
-            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp)
-            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp)
-        }
-        AppWidgetManager.getInstance(context).updateAppWidgetOptions(appWidgetId, opts)
-    }
-
-    /**
-     * Ask the provider to re-send RemoteViews with fresh URI grants.
-     *
-     * updateAppWidgetOptions() triggers onAppWidgetOptionsChanged() in the
-     * provider, which causes well-behaved providers to call updateAppWidget()
-     * with fresh RemoteViews.  notifyAppWidgetViewDataChanged() forces
-     * collection adapters to reload items.
-     */
-    private fun requestWidgetUpdate(hv: AppWidgetHostView) {
-        val mgr = AppWidgetManager.getInstance(context)
-        sendWidgetSize(hv)
-        for (id in findCollectionViewIds(hv)) {
-            mgr.notifyAppWidgetViewDataChanged(appWidgetId, id)
         }
     }
 
@@ -113,5 +99,9 @@ class WidgetPaneContent(
             for (i in 0 until view.childCount) ids.addAll(findCollectionViewIds(view.getChildAt(i)))
         }
         return ids
+    }
+
+    companion object {
+        private const val TAG = "WidgetPane"
     }
 }
