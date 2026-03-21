@@ -79,6 +79,9 @@ class LauncherButton @JvmOverloads constructor(
     /** Fired on long-press; MainActivity opens the config pane for this button. */
     var onConfigRequested: (() -> Unit)? = null
 
+    /** Fired immediately before an app is launched; used to track the last launched package. */
+    var onActivated: ((ButtonConfig) -> Unit)? = null
+
     // ── Visual state ─────────────────────────────────────────────────────────
 
     var isFocusedButton: Boolean = false
@@ -225,6 +228,7 @@ class LauncherButton @JvmOverloads constructor(
             is ButtonConfig.Empty -> Unit
             is ButtonConfig.AppLauncher -> {
                 flashActivation()
+                onActivated?.invoke(cfg)
                 val intent = context.packageManager.getLaunchIntentForPackage(cfg.packageName)
                 if (intent != null) context.startActivity(intent)
             }

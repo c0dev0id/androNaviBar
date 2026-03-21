@@ -18,6 +18,24 @@ class MainActivity : Activity() {
 
     private var focusedIndex = 0
 
+    // ── Window focus ──────────────────────────────────────────────────────────
+
+    /**
+     * True only when this window actually has input focus. False in split-screen
+     * when another window is active, or when fully backgrounded.
+     * Remote navigation (up/down/activate) is gated on this flag; Cancel (key 111)
+     * always works regardless so the config pane can always be dismissed.
+     */
+    private var isWindowFocused = false
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        isWindowFocused = hasFocus
+        prefs.edit()
+            .putBoolean(LauncherApplication.KEY_LAUNCHER_FOREGROUND, hasFocus)
+            .apply()
+    }
+
     // ── Pane coordination ─────────────────────────────────────────────────────
 
     /** Non-null while a config pane is displayed in reservedArea. */
@@ -31,7 +49,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        prefs        = getSharedPreferences("button_config", MODE_PRIVATE)
+        prefs        = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
         reservedArea = findViewById(R.id.reservedArea)
         focusedIndex = prefs.getInt("focused_index", 0)
 
@@ -44,9 +62,17 @@ class MainActivity : Activity() {
         )
 
         for (i in buttons.indices) {
-            buttons[i].index            = i
-            buttons[i].onFocusRequested = { setFocus(i) }
+            buttons[i].index             = i
+            buttons[i].onFocusRequested  = { setFocus(i) }
             buttons[i].onConfigRequested = { openConfigPane(i) }
+            buttons[i].onActivated       = { cfg ->
+                // Track last launched app for the Lever Up toggle.
+                if (cfg is ButtonConfig.AppLauncher) {
+                    prefs.edit()
+                        .putString(LauncherApplication.KEY_LAST_LAUNCHED, cfg.packageName)
+                        .apply()
+                }
+            }
             buttons[i].loadConfig(prefs)
         }
 
@@ -57,13 +83,17 @@ class MainActivity : Activity() {
         super.onResume()
         registerReceiver(
             remoteListener,
-            IntentFilter("com.thorkracing.wireddevices.keypress"),
+            IntentFilter(LauncherApplication.REMOTE_ACTION),
             Context.RECEIVER_EXPORTED
         )
     }
 
     override fun onPause() {
         super.onPause()
+        isWindowFocused = false
+        prefs.edit()
+            .putBoolean(LauncherApplication.KEY_LAUNCHER_FOREGROUND, false)
+            .apply()
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
         pressedKeys.clear()
     }
@@ -74,7 +104,7 @@ class MainActivity : Activity() {
 
     private val remoteListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != "com.thorkracing.wireddevices.keypress") return
+            if (intent.action != LauncherApplication.REMOTE_ACTION) return
 
             if (intent.hasExtra("key_press")) {
                 val keyCode = intent.getIntExtra("key_press", 0)
@@ -82,17 +112,21 @@ class MainActivity : Activity() {
 
                 if (paneFocused) {
                     when (keyCode) {
-                        111 -> dismissConfigPane()               // ROUND BUTTON 2 — cancel/discard
-                        else -> activeConfigPane?.handleKey(keyCode)
+                        // Cancel always works regardless of window focus.
+                        111  -> dismissConfigPane()               // ROUND BUTTON 2 — cancel
+                        else -> if (isWindowFocused) activeConfigPane?.handleKey(keyCode)
                     }
                 } else {
+                    // Navigation only when this window is the active one.
+                    if (!isWindowFocused) return
                     when (keyCode) {
                         19  -> moveFocus(-1)                     // DPAD_UP
                         20  -> moveFocus(+1)                     // DPAD_DOWN
-                        66  -> buttons[focusedIndex].activate()  // ROUND BUTTON 1 — activate
-                        // 21 LEFT, 22 RIGHT — reserved: pane focus in/out, tab navigation
-                        // 111 ROUND BUTTON 2 — no-op outside pane (home app never exits)
-                        // 136 LEVER UP, 137 LEVER DOWN — reserved: button list page up/down
+                        66  -> activateFocused()                 // ROUND BUTTON 1
+                        // 21 LEFT, 22 RIGHT — reserved
+                        // 111 ROUND BUTTON 2 — no-op outside pane
+                        // 136 LEVER UP — 3s hold handled by LauncherApplication
+                        // 137 LEVER DOWN — reserved
                     }
                 }
             } else if (intent.hasExtra("key_release")) {
@@ -117,6 +151,19 @@ class MainActivity : Activity() {
         for (i in buttons.indices) {
             buttons[i].isFocusedButton = (i == focusedIndex)
         }
+    }
+
+    // ── Activation ────────────────────────────────────────────────────────────
+
+    private fun activateFocused() {
+        // Track last launched app (remote path; touch path is handled via onActivated callback).
+        val cfg = buttons[focusedIndex].config
+        if (cfg is ButtonConfig.AppLauncher) {
+            prefs.edit()
+                .putString(LauncherApplication.KEY_LAST_LAUNCHED, cfg.packageName)
+                .apply()
+        }
+        buttons[focusedIndex].activate()
     }
 
     // ── Config pane ───────────────────────────────────────────────────────────
@@ -181,7 +228,7 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        // Back = dismiss without saving (cancel). Home app never exits on back.
+        // Back = dismiss config pane without saving. Home app never exits on back.
         dismissConfigPane()
     }
 
