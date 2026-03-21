@@ -6,19 +6,29 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Bundle
 import android.os.SystemClock
+import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.FrameLayout
-import android.os.Bundle
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import java.io.File
 import java.lang.ref.WeakReference
 
 class MainActivity : Activity() {
 
-    private lateinit var prefs:        SharedPreferences
-    private lateinit var buttons:      List<LauncherButton>
-    private lateinit var reservedArea: FrameLayout
+    private lateinit var prefs:           SharedPreferences
+    private lateinit var buttons:         List<LauncherButton>
+    private lateinit var reservedArea:    FrameLayout
+    private lateinit var dragHandlePanel: LinearLayout
 
     private var focusedIndex = 0
 
@@ -81,6 +91,7 @@ class MainActivity : Activity() {
             buttons[i].loadConfig(prefs)
         }
 
+        setupDragHandles()
         updateFocus()
     }
 
@@ -135,8 +146,8 @@ class MainActivity : Activity() {
                     activeConfigPane?.handleKey(keyCode)
                 } else {
                     when (keyCode) {
-                        19 -> moveFocus(-1)                  // DPAD_UP
-                        20 -> moveFocus(+1)                  // DPAD_DOWN
+                        19 -> moveFocus(-1)                    // DPAD_UP
+                        20 -> moveFocus(+1)                    // DPAD_DOWN
                         66 -> buttons[focusedIndex].activate() // ROUND BUTTON 1
                         // 21 LEFT, 22 RIGHT — reserved
                         // 136 LEVER UP, 137 LEVER DOWN — reserved
@@ -204,6 +215,7 @@ class MainActivity : Activity() {
         }
 
         activeConfigPane = pane
+        dragHandlePanel.visibility = View.VISIBLE
         pane.load { pane.show(reservedArea) }
     }
 
@@ -215,6 +227,8 @@ class MainActivity : Activity() {
         val pane = activeConfigPane ?: return
         activeConfigPane = null
         pane.unload()
+        dragHandlePanel.visibility = View.GONE
+        if (dragSourceIndex >= 0) cancelDrag()
     }
 
     // ── Image picker result ───────────────────────────────────────────────────
@@ -244,7 +258,186 @@ class MainActivity : Activity() {
         dismissConfigPane()
     }
 
+    // ── Drag-to-reorder ───────────────────────────────────────────────────────
+
+    private var dragSourceIndex = -1
+    private var dragTargetIndex = -1
+    private var ghostOverlay:   FrameLayout? = null
+    private var ghostView:      ImageView?   = null
+
+    private fun setupDragHandles() {
+        dragHandlePanel = findViewById(R.id.dragHandlePanel)
+        val m = dpToPx(4)
+        for (i in buttons.indices) {
+            dragHandlePanel.addView(TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f).apply {
+                    setMargins(m, m, m, m)
+                }
+                text     = "⠿"
+                gravity  = Gravity.CENTER
+                textSize = 18f
+                setTextColor(getColor(R.color.text_secondary))
+                val idx = i
+                setOnTouchListener { _, event -> onDragHandleTouch(idx, event) }
+            })
+        }
+    }
+
+    private fun onDragHandleTouch(index: Int, event: MotionEvent): Boolean {
+        return when (event.action) {
+            MotionEvent.ACTION_DOWN   -> { startDrag(index, event.rawY); true }
+            MotionEvent.ACTION_MOVE   -> { updateDrag(event.rawY);       true }
+            MotionEvent.ACTION_UP     -> { finishDrag();                  true }
+            MotionEvent.ACTION_CANCEL -> { cancelDrag();                  true }
+            else -> false
+        }
+    }
+
+    private fun startDrag(index: Int, rawY: Float) {
+        dragSourceIndex = index
+        dragTargetIndex = index
+
+        val btn = buttons[index]
+        val bmp = Bitmap.createBitmap(btn.width, btn.height, Bitmap.Config.ARGB_8888)
+        btn.draw(Canvas(bmp))
+        btn.alpha = 0f   // hide source; ghost takes its place
+
+        val overlay = FrameLayout(this).also {
+            it.isClickable = false
+            it.isFocusable = false
+            ghostOverlay = it
+            addContentView(it, ViewGroup.LayoutParams(MATCH, MATCH))
+        }
+
+        val loc = IntArray(2)
+        btn.getLocationOnScreen(loc)
+        ghostView = ImageView(this).apply {
+            setImageBitmap(bmp)
+            alpha = 0.85f
+            layoutParams = FrameLayout.LayoutParams(btn.width, btn.height).apply {
+                leftMargin = loc[0]
+                topMargin  = loc[1]
+            }
+            overlay.addView(this)
+        }
+    }
+
+    private fun updateDrag(rawY: Float) {
+        val ghost = ghostView ?: return
+        val anchor = buttons[0]
+        val btnH   = anchor.height
+        if (btnH == 0) return
+
+        val loc = IntArray(2)
+        anchor.getLocationOnScreen(loc)
+        val panelTop = loc[1]
+
+        // Slide ghost vertically with the finger
+        val params = ghost.layoutParams as FrameLayout.LayoutParams
+        params.topMargin = (rawY.toInt() - btnH / 2)
+            .coerceIn(panelTop, panelTop + buttons.size * btnH - btnH)
+        ghost.requestLayout()
+
+        // Recalculate drop target and animate buttons to show the gap
+        val newTarget = ((rawY - panelTop) / btnH).toInt().coerceIn(0, buttons.lastIndex)
+        if (newTarget != dragTargetIndex) {
+            dragTargetIndex = newTarget
+            animateDragShift()
+        }
+    }
+
+    /** Translate buttons to visually open a gap at the current drop target. */
+    private fun animateDragShift() {
+        val from = dragSourceIndex
+        val to   = dragTargetIndex
+        val btnH = buttons[0].height.toFloat()
+        for (i in buttons.indices) {
+            val shift = when {
+                i == from                                -> 0f
+                from < to && i in (from + 1)..to        -> -btnH
+                from > to && i in to     until from     ->  btnH
+                else                                    ->  0f
+            }
+            buttons[i].animate().translationY(shift).setDuration(120).start()
+        }
+    }
+
+    private fun finishDrag() {
+        buttons.forEach { it.alpha = 1f; it.animate().translationY(0f).setDuration(120).start() }
+        (ghostOverlay?.parent as? ViewGroup)?.removeView(ghostOverlay)
+        ghostOverlay = null
+        ghostView    = null
+        val from = dragSourceIndex
+        val to   = dragTargetIndex
+        dragSourceIndex = -1
+        dragTargetIndex = -1
+        if (from >= 0 && from != to) reorderButtons(from, to)
+    }
+
+    private fun cancelDrag() {
+        buttons.forEach { it.alpha = 1f; it.animate().translationY(0f).setDuration(120).start() }
+        (ghostOverlay?.parent as? ViewGroup)?.removeView(ghostOverlay)
+        ghostOverlay = null
+        ghostView    = null
+        dragSourceIndex = -1
+        dragTargetIndex = -1
+    }
+
+    private fun reorderButtons(from: Int, to: Int) {
+        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data")
+        // Snapshot all button prefs
+        val snap = Array(buttons.size) { i ->
+            keys.associateWith { k -> prefs.getString("btn_$i$k", null) }
+        }.toMutableList()
+        snap.add(to, snap.removeAt(from))
+
+        // Write new order
+        val edit = prefs.edit()
+        for (i in snap.indices) {
+            for (k in keys) {
+                val v = snap[i][k]
+                if (v != null) edit.putString("btn_$i$k", v) else edit.remove("btn_$i$k")
+            }
+        }
+
+        // Keep focused_index pointing at the same logical button
+        val newFocus = when {
+            focusedIndex == from                         -> to
+            from < to && focusedIndex in (from + 1)..to -> focusedIndex - 1
+            from > to && focusedIndex in to until from  -> focusedIndex + 1
+            else                                        -> focusedIndex
+        }
+        edit.putInt("focused_index", newFocus)
+        edit.apply()
+
+        rotateIconFiles(from, to)
+
+        focusedIndex = newFocus
+        for (b in buttons) b.loadConfig(prefs)
+        updateFocus()
+    }
+
+    private fun rotateIconFiles(from: Int, to: Int) {
+        fun f(i: Int) = File(filesDir, "btn_${i}_icon.png")
+        val tmp = File(filesDir, "btn_drag_tmp.png")
+        if (f(from).exists()) f(from).copyTo(tmp, overwrite = true) else tmp.delete()
+        if (from < to) {
+            for (i in from until to) {
+                if (f(i + 1).exists()) f(i + 1).copyTo(f(i), overwrite = true) else f(i).delete()
+            }
+        } else {
+            for (i in from downTo to + 1) {
+                if (f(i - 1).exists()) f(i - 1).copyTo(f(i), overwrite = true) else f(i).delete()
+            }
+        }
+        if (tmp.exists()) tmp.copyTo(f(to), overwrite = true) else f(to).delete()
+        tmp.delete()
+    }
+
+    private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density + 0.5f).toInt()
+
     companion object {
         private const val IMAGE_REQUEST_CODE = 1001
+        private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     }
 }
