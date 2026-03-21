@@ -20,7 +20,7 @@
     <style name="Widget.AndroNaviBar.Button" parent="Widget.Material3.Button">
         <item name="android:backgroundTint">@color/button_inactive</item>
         <item name="android:textColor">@color/text_primary</item>
-        <item name="iconTint">@color/text_primary</item>
+        <item name="iconTint">@null</item>
         <item name="android:textSize">28sp</item>
         <item name="iconSize">32dp</item>
         <item name="iconGravity">textStart</item>
