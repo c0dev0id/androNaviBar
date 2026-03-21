@@ -307,14 +307,17 @@ class MainActivity : Activity() {
         if (pendingWidgetConfig == null) return
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
         if (info?.configure != null) {
-            // No action — some configure activities crash when launched with
-            // ACTION_APPWIDGET_CONFIGURE. The explicit component is sufficient.
-            val intent = Intent().apply {
+            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
                 component = info.configure
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             }
-            @Suppress("DEPRECATION")
-            startActivityForResult(intent, CONFIGURE_WIDGET_REQUEST_CODE)
+            try {
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, CONFIGURE_WIDGET_REQUEST_CODE)
+            } catch (_: Exception) {
+                // Configure activity couldn't be launched; proceed with the widget as-is.
+                finishWidgetSetup()
+            }
         } else {
             finishWidgetSetup()
         }
