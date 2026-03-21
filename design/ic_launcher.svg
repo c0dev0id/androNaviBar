@@ -1,0 +1,184 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+
+    <!-- ═══ METALLIC OUTER RING ═══════════════════════════════════ -->
+    <!-- Linear: diagonal light source top-left → bottom-right       -->
+    <linearGradient id="gRingLin" x1="15%" y1="8%" x2="85%" y2="92%">
+      <stop offset="0%"   stop-color="#D0D0D0"/>
+      <stop offset="12%"  stop-color="#A0A0A0"/>
+      <stop offset="28%"  stop-color="#646464"/>
+      <stop offset="46%"  stop-color="#424242"/>
+      <stop offset="60%"  stop-color="#525252"/>
+      <stop offset="80%"  stop-color="#2C2C2C"/>
+      <stop offset="100%" stop-color="#121212"/>
+    </linearGradient>
+    <!-- Radial overlay: adds dome curvature / specular pop -->
+    <radialGradient id="gRingRad" cx="36%" cy="27%" r="68%">
+      <stop offset="0%"   stop-color="#E8E8E8" stop-opacity="0.42"/>
+      <stop offset="38%"  stop-color="#909090" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.40"/>
+    </radialGradient>
+
+    <!-- ═══ INNER BEVEL (ring → center transition) ════════════════ -->
+    <radialGradient id="gBevel" cx="36%" cy="28%" r="52%">
+      <stop offset="0%"   stop-color="#505050" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.00"/>
+    </radialGradient>
+
+    <!-- ═══ CENTER DISC ════════════════════════════════════════════ -->
+    <!-- userSpaceOnUse so the same gradient aligns on icon cutout    -->
+    <radialGradient id="gCenter" gradientUnits="userSpaceOnUse"
+                    cx="210" cy="176" r="285">
+      <stop offset="0%"   stop-color="#303030"/>
+      <stop offset="40%"  stop-color="#181818"/>
+      <stop offset="100%" stop-color="#060606"/>
+    </radialGradient>
+
+    <!-- ═══ ORANGE ICON ════════════════════════════════════════════ -->
+    <linearGradient id="gOrange" gradientUnits="userSpaceOnUse"
+                    x1="256" y1="148" x2="256" y2="298">
+      <stop offset="0%"   stop-color="#FFD54F"/>
+      <stop offset="28%"  stop-color="#F57C00"/>
+      <stop offset="100%" stop-color="#B53000"/>
+    </linearGradient>
+
+    <!-- ═══ ROCKET FINS ════════════════════════════════════════════ -->
+    <linearGradient id="gFins" gradientUnits="userSpaceOnUse"
+                    x1="256" y1="298" x2="256" y2="338">
+      <stop offset="0%"   stop-color="#EF6C00"/>
+      <stop offset="100%" stop-color="#7A2200"/>
+    </linearGradient>
+
+    <!-- ═══ AMBIENT ORANGE GLOW (inside center disc) ══════════════ -->
+    <radialGradient id="gAmbient" cx="50%" cy="62%" r="44%">
+      <stop offset="0%"   stop-color="#F57C00" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#F57C00" stop-opacity="0.00"/>
+    </radialGradient>
+
+    <!-- ═══ GLASS SHEEN ════════════════════════════════════════════ -->
+    <radialGradient id="gGlass" cx="30%" cy="15%" r="70%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="55%"  stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.00"/>
+    </radialGradient>
+
+    <!-- ═══ FILTERS ════════════════════════════════════════════════ -->
+    <!-- Overall drop shadow for the whole icon -->
+    <filter id="fDrop" x="-10%" y="-6%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16"
+                    flood-color="#000000" flood-opacity="0.75"/>
+    </filter>
+    <!-- Gaussian blur only — used for orange glow halo -->
+    <filter id="fBlur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+
+    <!-- ═══ CLIP PATH ══════════════════════════════════════════════ -->
+    <!-- Constrains glow + sheen to the center disc area             -->
+    <clipPath id="cCenter">
+      <circle cx="256" cy="256" r="184"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ════════════════════════════════════════════════════════════════
+       RENDER STACK (back → front)
+       ════════════════════════════════════════════════════════════════ -->
+  <g filter="url(#fDrop)">
+
+    <!-- 1 ── OUTER METALLIC RING ──────────────────────────────────── -->
+    <circle cx="256" cy="256" r="248" fill="url(#gRingLin)"/>
+    <!-- Dome highlight overlay -->
+    <circle cx="256" cy="256" r="248" fill="url(#gRingRad)"/>
+
+    <!-- Catch light: bright arc at ~10-1 o'clock (top-left face)     -->
+    <path d="M 104,146 A 170,170 0 0,1 348,88"
+          stroke="white" stroke-width="28" fill="none"
+          stroke-linecap="round" opacity="0.25"/>
+    <path d="M 116,158 A 156,156 0 0,1 340,100"
+          stroke="white" stroke-width="10" fill="none"
+          stroke-linecap="round" opacity="0.32"/>
+
+    <!-- Shadow arc at ~4-7 o'clock (bottom-right face)               -->
+    <path d="M 394,350 A 158,158 0 0,1 164,418"
+          stroke="#030303" stroke-width="22" fill="none"
+          stroke-linecap="round" opacity="0.60"/>
+
+    <!-- Outer rim edge lines (chrome border illusion)                 -->
+    <circle cx="256" cy="256" r="247.5"
+            stroke="#B8B8B8" stroke-width="1.2" fill="none" opacity="0.22"/>
+    <circle cx="256" cy="256" r="248.8"
+            stroke="#080808" stroke-width="1.5" fill="none" opacity="0.45"/>
+
+    <!-- 2 ── INNER BEVEL TRANSITION ──────────────────────────────── -->
+    <!-- Hard dark step at the junction -->
+    <circle cx="256" cy="256" r="197" fill="#050505"/>
+    <!-- Soft radial overlay for gentle gradient into center           -->
+    <circle cx="256" cy="256" r="197" fill="url(#gBevel)"/>
+
+    <!-- 3 ── GLOSSY CENTER DISC ───────────────────────────────────── -->
+    <circle cx="256" cy="256" r="184" fill="url(#gCenter)"/>
+
+    <!-- 4 ── AMBIENT ORANGE GLOW ────────────────────────────────── -->
+    <circle cx="256" cy="256" r="184" fill="url(#gAmbient)"/>
+
+    <!-- 5 ── ICON GLOW HALO (blurred, clipped to center disc) ──── -->
+    <g clip-path="url(#cCenter)">
+      <!-- Blurred A body glow -->
+      <polygon points="256,148 174,298 338,298"
+               fill="#F57C00" filter="url(#fBlur)" opacity="0.38"/>
+      <!-- Blurred fins glow -->
+      <path d="M 174,298 L 152,338 L 205,317 Z M 338,298 L 360,338 L 307,317 Z"
+            fill="#EF6C00" filter="url(#fBlur)" opacity="0.30"/>
+    </g>
+
+    <!-- 6 ── ICON: ORANGE A / LAUNCH ARROW ──────────────────────── -->
+    <!-- Main body: outer triangle minus inner triangle (the "A hole")
+         fill-rule=evenodd subtracts the inner path from the outer.
+         The hole reveals the gCenter gradient behind.               -->
+    <path fill-rule="evenodd"
+          d="M 256,148 L 174,298 L 338,298 Z
+             M 256,198 L 222,268 L 290,268 Z"
+          fill="url(#gOrange)"
+          clip-path="url(#cCenter)"/>
+
+    <!-- Rocket fins flanking the base -->
+    <path d="M 174,298 L 152,338 L 205,317 Z
+             M 338,298 L 360,338 L 307,317 Z"
+          fill="url(#gFins)"
+          clip-path="url(#cCenter)"/>
+
+    <!-- Exhaust glow pooling at the very bottom                      -->
+    <ellipse cx="256" cy="332" rx="32" ry="11"
+             fill="#FF9800" opacity="0.32" clip-path="url(#cCenter)"/>
+    <ellipse cx="256" cy="336" rx="18" ry="6"
+             fill="#FFCC44" opacity="0.25" clip-path="url(#cCenter)"/>
+
+    <!-- Top-edge highlight: where light catches the leading edge      -->
+    <path d="M 234,196 L 256,150 L 278,196"
+          stroke="#FFE57F" stroke-width="2.5" fill="none"
+          stroke-linecap="round" stroke-linejoin="round"
+          opacity="0.70" clip-path="url(#cCenter)"/>
+
+    <!-- Inner-hole edge highlight (makes the hollow look recessed)   -->
+    <path d="M 248,202 L 256,198 L 264,202"
+          stroke="#FFD54F" stroke-width="1.5" fill="none"
+          stroke-linecap="round" stroke-linejoin="round"
+          opacity="0.50" clip-path="url(#cCenter)"/>
+
+    <!-- 7 ── GLASS SHEEN OVER CENTER DISC ───────────────────────── -->
+    <!-- Ellipse rotated to simulate an off-angle light reflection    -->
+    <ellipse cx="208" cy="190" rx="124" ry="76"
+             fill="url(#gGlass)"
+             transform="rotate(-26, 208, 190)"
+             clip-path="url(#cCenter)"/>
+
+    <!-- 8 ── SUBTLE ORANGE ACCENT RING (inner chrome trim) ───────── -->
+    <circle cx="256" cy="256" r="188"
+            stroke="#F57C00" stroke-width="1.2" fill="none" opacity="0.20"/>
+    <circle cx="256" cy="256" r="184.5"
+            stroke="#FF9800" stroke-width="0.6" fill="none" opacity="0.12"/>
+
+  </g>
+
+</svg>

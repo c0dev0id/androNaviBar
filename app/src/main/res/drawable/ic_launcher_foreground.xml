@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon foreground layer — 108dp canvas, 72dp safe zone.
+  Viewport matches the reference SVG (512×512) so all coordinates
+  transfer directly. The launcher clips this to its icon shape.
+
+  Layer order (back → front):
+    1. Outer metallic ring  (linear + radial gradient)
+    2. Specular arcs        (bright top-left, dark bottom-right)
+    3. Inner bevel          (hard dark step + soft radial)
+    4. Center disc          (radial gradient)
+    5. Ambient orange glow  (radial)
+    6. Icon body            (orange A, evenodd cutout)
+    7. Rocket fins          (darker orange)
+    8. Exhaust dots         (pale orange)
+    9. Top-edge highlight   (stroke)
+   10. Glass sheen          (semi-transparent ellipse)
+   11. Orange accent rings  (stroked circles)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- ── 1a. OUTER RING: linear metallic gradient ─────────────── -->
+    <!-- Full circle r=248 with diagonal light-source gradient       -->
+    <path android:pathData="M256,8 A248,248 0 1,0 256.001,8 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="77"  android:startY="41"
+                android:endX="435"   android:endY="471">
+                <item android:offset="0.00" android:color="#FFD0D0D0"/>
+                <item android:offset="0.12" android:color="#FFA0A0A0"/>
+                <item android:offset="0.28" android:color="#FF646464"/>
+                <item android:offset="0.46" android:color="#FF424242"/>
+                <item android:offset="0.60" android:color="#FF525252"/>
+                <item android:offset="0.80" android:color="#FF2C2C2C"/>
+                <item android:offset="1.00" android:color="#FF121212"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ── 1b. OUTER RING: radial dome overlay ──────────────────── -->
+    <!-- Layered on top — brightens top-left, darkens bottom-right   -->
+    <path android:pathData="M256,8 A248,248 0 1,0 256.001,8 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="184"  android:centerY="138"
+                android:gradientRadius="344">
+                <item android:offset="0.00" android:color="#66E8E8E8"/>
+                <item android:offset="0.40" android:color="#14909090"/>
+                <item android:offset="1.00" android:color="#66000000"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ── 2a. CATCH LIGHT: broad bright arc (top-left, ~10–1 o'clock) -->
+    <path
+        android:pathData="M 104,146 A 170,170 0 0,1 348,88"
+        android:strokeWidth="28"
+        android:strokeColor="#40FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"/>
+    <!-- Inner, sharper catch light -->
+    <path
+        android:pathData="M 116,158 A 156,156 0 0,1 340,100"
+        android:strokeWidth="10"
+        android:strokeColor="#52FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"/>
+
+    <!-- ── 2b. SHADOW ARC (bottom-right, ~4–7 o'clock) ─────────── -->
+    <path
+        android:pathData="M 394,350 A 158,158 0 0,1 164,418"
+        android:strokeWidth="22"
+        android:strokeColor="#99030303"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"/>
+
+    <!-- ── 2c. OUTER RIM EDGE (chrome border illusion) ──────────── -->
+    <path
+        android:pathData="M256,7.2 A248.8,248.8 0 1,0 256.001,7.2 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#73080808"
+        android:fillColor="#00000000"/>
+    <path
+        android:pathData="M256,8.5 A247.5,247.5 0 1,0 256.001,8.5 Z"
+        android:strokeWidth="1.2"
+        android:strokeColor="#38B8B8B8"
+        android:fillColor="#00000000"/>
+
+    <!-- ── 3. INNER BEVEL (hard dark step + soft radial overlay) ── -->
+    <path android:pathData="M256,59 A197,197 0 1,0 256.001,59 Z"
+          android:fillColor="#FF050505"/>
+    <path android:pathData="M256,59 A197,197 0 1,0 256.001,59 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="184"  android:centerY="143"
+                android:gradientRadius="266">
+                <item android:offset="0.00" android:color="#47505050"/>
+                <item android:offset="1.00" android:color="#00000000"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ── 4. CENTER DISC (radial gradient, glossy dark) ─────────── -->
+    <path android:pathData="M256,72 A184,184 0 1,0 256.001,72 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="210"  android:centerY="176"
+                android:gradientRadius="285">
+                <item android:offset="0.00" android:color="#FF303030"/>
+                <item android:offset="0.40" android:color="#FF181818"/>
+                <item android:offset="1.00" android:color="#FF060606"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ── 5. AMBIENT ORANGE GLOW (inside center disc) ───────────── -->
+    <path android:pathData="M256,72 A184,184 0 1,0 256.001,72 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="256"  android:centerY="367"
+                android:gradientRadius="228">
+                <item android:offset="0.00" android:color="#38F57C00"/>
+                <item android:offset="1.00" android:color="#00F57C00"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ── 6. ICON BODY: orange A / launch arrow ─────────────────── -->
+    <!--
+      evenOdd fill: outer triangle (256,148 → 174,298 → 338,298) minus
+      inner triangle (256,198 → 222,268 → 290,268) = hollow A shape.
+      The hole shows the center disc behind, making it look recessed.
+    -->
+    <path
+        android:pathData="M 256,148 L 174,298 L 338,298 Z
+                          M 256,198 L 222,268 L 290,268 Z"
+        android:fillType="evenOdd">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="256" android:startY="148"
+                android:endX="256"   android:endY="298">
+                <item android:offset="0.00" android:color="#FFFFD54F"/>
+                <item android:offset="0.28" android:color="#FFF57C00"/>
+                <item android:offset="1.00" android:color="#FFB53000"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ── 7. ROCKET FINS ──────────────────────────────────────────── -->
+    <path
+        android:pathData="M 174,298 L 152,338 L 205,317 Z
+                          M 338,298 L 360,338 L 307,317 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="256" android:startY="298"
+                android:endX="256"   android:endY="338">
+                <item android:offset="0.00" android:color="#FFEF6C00"/>
+                <item android:offset="1.00" android:color="#FF7A2200"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- ── 8. EXHAUST GLOW ─────────────────────────────────────────── -->
+    <!-- Two layered ellipses simulate a warm exhaust bloom            -->
+    <path
+        android:pathData="M224,332 A32,11 0 1,0 224.001,332 Z"
+        android:fillColor="#52FF9800"/>
+    <path
+        android:pathData="M238,336 A18,6 0 1,0 238.001,336 Z"
+        android:fillColor="#40FFCC44"/>
+
+    <!-- ── 9. ICON TOP-EDGE HIGHLIGHT ─────────────────────────────── -->
+    <!-- Bright stroke where light catches the leading edge of the A  -->
+    <path
+        android:pathData="M 234,196 L 256,150 L 278,196"
+        android:strokeWidth="2.5"
+        android:strokeColor="#B3FFE57F"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+
+    <!-- ── 10. GLASS SHEEN (semi-transparent white ellipse) ─────────── -->
+    <!--
+      Simulates a diffuse reflection from an overhead light source.
+      Rotated group to angle the sheen without needing path-level transforms.
+    -->
+    <group
+        android:pivotX="208"
+        android:pivotY="190"
+        android:rotation="-26">
+        <path android:pathData="M84,190 A124,76 0 1,0 84.001,190 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="radial"
+                    android:centerX="146"  android:centerY="143"
+                    android:gradientRadius="175">
+                    <item android:offset="0.00" android:color="#2EFFFFFF"/>
+                    <item android:offset="0.55" android:color="#0AFFFFFF"/>
+                    <item android:offset="1.00" android:color="#00FFFFFF"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+
+    <!-- ── 11. ACCENT RINGS (inner chrome trim) ───────────────────── -->
+    <path
+        android:pathData="M256,68 A188,188 0 1,0 256.001,68 Z"
+        android:strokeWidth="1.2"
+        android:strokeColor="#33F57C00"
+        android:fillColor="#00000000"/>
+    <path
+        android:pathData="M256,71.5 A184.5,184.5 0 1,0 256.001,71.5 Z"
+        android:strokeWidth="0.6"
+        android:strokeColor="#1EFF9800"
+        android:fillColor="#00000000"/>
+
+</vector>
