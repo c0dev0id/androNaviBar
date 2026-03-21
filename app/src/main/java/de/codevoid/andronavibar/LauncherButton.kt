@@ -115,6 +115,15 @@ class LauncherButton @JvmOverloads constructor(
             foreground = if (value) makeFocusRing() else null
         }
 
+    /** Persistent highlight showing this button's content pane is displayed. */
+    var isActiveButton: Boolean = false
+        set(value) {
+            field = value
+            backgroundTintList = ColorStateList.valueOf(
+                context.getColor(if (value) R.color.colorPrimary else R.color.button_inactive)
+            )
+        }
+
     // ── Full-height icon ──────────────────────────────────────────────────────
 
     /**
