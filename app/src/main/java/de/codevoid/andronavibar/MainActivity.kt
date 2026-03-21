@@ -307,7 +307,9 @@ class MainActivity : Activity() {
         if (pendingWidgetConfig == null) return
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
         if (info?.configure != null) {
-            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+            // No action — some configure activities crash when launched with
+            // ACTION_APPWIDGET_CONFIGURE. The explicit component is sufficient.
+            val intent = Intent().apply {
                 component = info.configure
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             }
