@@ -1,6 +1,5 @@
 package de.codevoid.andronavibar
 
-import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -318,7 +317,7 @@ class LauncherButton @JvmOverloads constructor(
                 }
             }
             is ButtonConfig.WidgetLauncher -> {
-                text = cfg.label.ifEmpty { cfg.provider.shortClassName.trimStart('.') }
+                text = cfg.label.ifEmpty { cfg.provider.packageName }
                 buttonIcon = when (val ico = cfg.icon) {
                     is UrlIcon.None       -> null
                     is UrlIcon.CustomFile -> loadIconFile()

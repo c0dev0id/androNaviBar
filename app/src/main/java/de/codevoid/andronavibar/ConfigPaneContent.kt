@@ -700,6 +700,7 @@ class ConfigPaneContent(
                                      initialConfig.provider == prov.provider)
                                      initialConfig.appWidgetId else -1
                 val label = widgetLabelEdit?.text?.toString()?.trim().orEmpty()
+                    .ifEmpty { prov.loadLabel(context.packageManager) }
                 val icon  = when (selectedIconOption) {
                     IconOption.NONE   -> UrlIcon.None
                     IconOption.CUSTOM -> UrlIcon.CustomFile

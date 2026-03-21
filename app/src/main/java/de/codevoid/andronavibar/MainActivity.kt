@@ -256,10 +256,10 @@ class MainActivity : Activity() {
     // ── Widget binding ────────────────────────────────────────────────────────
 
     private fun completeWidgetBinding(appWidgetId: Int) {
-        val cfg  = pendingWidgetConfig ?: return
+        if (pendingWidgetConfig == null) return
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
         if (info?.configure != null) {
-            val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+            val intent = Intent().apply {
                 component = info.configure
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             }
@@ -274,6 +274,11 @@ class MainActivity : Activity() {
         val cfg = pendingWidgetConfig ?: return
         pendingWidgetConfig = null
         buttons[pendingWidgetButtonIndex].saveConfig(prefs, cfg)
+        // Show the widget pane immediately so the user sees the result.
+        if (cfg.appWidgetId != -1) {
+            appWidgetHost.startListening()   // ensure host is active before creating view
+            showWidgetPane(cfg.appWidgetId)
+        }
     }
 
     // ── Config pane ───────────────────────────────────────────────────────────
