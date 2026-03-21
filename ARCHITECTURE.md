@@ -393,8 +393,8 @@ while already in the set is ignored. The set is cleared on `onPause()`.
 | 21 | DPAD_LEFT | Reserved: navigate into left pane |
 | 22 | DPAD_RIGHT | Reserved: navigate out of pane to button row |
 | 111 | Round Button 2 | No-op (home app never exits) |
-| 136 | Switch In | Reserved: button list page up |
-| 137 | Switch Out | Reserved: button list page down |
+| 136 | Lever Up | Reserved: button list page up |
+| 137 | Lever Down | Reserved: button list page down |
 
 **Config pane focus:**
 

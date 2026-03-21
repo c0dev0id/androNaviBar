@@ -91,7 +91,7 @@ class MainActivity : Activity() {
                         66  -> buttons[focusedIndex].activate()  // ROUND BUTTON 1 — activate
                         // 21 LEFT, 22 RIGHT — reserved: pane focus in/out, tab navigation
                         // 111 ROUND BUTTON 2 — no-op outside pane (home app never exits)
-                        // 136 SWITCH IN, 137 SWITCH OUT — reserved: button list page up/down
+                        // 136 LEVER UP, 137 LEVER DOWN — reserved: button list page up/down
                     }
                 }
             } else if (intent.hasExtra("key_release")) {
