@@ -45,7 +45,7 @@ class ConfigPaneContent(
     private val onClear:       ()             -> Unit
 ) : PaneContent {
 
-    private enum class Tab { APP, URL, WIDGET, CLEAR }
+    private enum class Tab { APP, URL, WIDGET, APPS, CLEAR }
     private enum class IconOption { NONE, CUSTOM, EMOJI }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -54,16 +54,23 @@ class ConfigPaneContent(
         is ButtonConfig.AppLauncher    -> Tab.APP
         is ButtonConfig.UrlLauncher    -> Tab.URL
         is ButtonConfig.WidgetLauncher -> Tab.WIDGET
+        is ButtonConfig.AppsGrid       -> Tab.APPS
         is ButtonConfig.Empty          -> Tab.APP
     }
 
     private var apps:             List<ResolveInfo> = emptyList()
     private var selectedAppIndex: Int               = 0
 
+    private var selectedPackages: MutableSet<String> = when (initialConfig) {
+        is ButtonConfig.AppsGrid -> initialConfig.apps.map { it.packageName }.toMutableSet()
+        else                     -> mutableSetOf()
+    }
+
     private var selectedIconOption: IconOption = run {
         val icon = when (initialConfig) {
             is ButtonConfig.UrlLauncher    -> initialConfig.icon
             is ButtonConfig.WidgetLauncher -> initialConfig.icon
+            is ButtonConfig.AppsGrid       -> initialConfig.icon
             else                           -> null
         }
         when (icon) {
@@ -106,6 +113,10 @@ class ConfigPaneContent(
     private var widgetRows:           List<View>                  = emptyList()
     private var widgetScrollView:     ScrollView?                 = null
     private var widgetLabelEdit:      EditText?                   = null
+
+    private var appsScrollView:    ScrollView? = null
+    private var appsCheckRows:     List<View>  = emptyList()
+    private var appsGridLabelEdit: EditText?   = null
 
     // ── PaneContent ───────────────────────────────────────────────────────────
 
@@ -158,6 +169,9 @@ class ConfigPaneContent(
         widgetRows            = emptyList()
         widgetScrollView      = null
         widgetLabelEdit       = null
+        appsScrollView        = null
+        appsCheckRows         = emptyList()
+        appsGridLabelEdit     = null
     }
 
     // ── Key handling ──────────────────────────────────────────────────────────
@@ -168,6 +182,8 @@ class ConfigPaneContent(
             keyCode == 20 && activeTab == Tab.APP    -> moveAppSelection(+1)
             keyCode == 19 && activeTab == Tab.WIDGET -> moveWidgetSelection(-1)
             keyCode == 20 && activeTab == Tab.WIDGET -> moveWidgetSelection(+1)
+            keyCode == 19 && activeTab == Tab.APPS   -> { appsScrollView?.smoothScrollBy(0, -px(56)); true }
+            keyCode == 20 && activeTab == Tab.APPS   -> { appsScrollView?.smoothScrollBy(0, +px(56)); true }
             keyCode == 66                            -> { save(); true }
             else                                     -> false
         }
@@ -253,6 +269,7 @@ class ConfigPaneContent(
             ).apply {
                 text         = label
                 cornerRadius = px(8)
+                textSize     = 12f
                 setTextColor(context.getColor(R.color.text_primary))
                 layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
                     if (!last) marginEnd = px(4)
@@ -264,9 +281,10 @@ class ConfigPaneContent(
             built[tab] = btn
         }
 
-        addTab(Tab.APP,    context.getString(R.string.choose_app))
-        addTab(Tab.URL,    context.getString(R.string.enter_url))
+        addTab(Tab.APP,    context.getString(R.string.tab_app))
+        addTab(Tab.URL,    context.getString(R.string.tab_url))
         addTab(Tab.WIDGET, context.getString(R.string.widget_tab))
+        addTab(Tab.APPS,   context.getString(R.string.tab_apps))
         addTab(Tab.CLEAR,  context.getString(R.string.clear), last = true)
 
         tabButtons = built
@@ -298,6 +316,7 @@ class ConfigPaneContent(
             Tab.APP    -> container.addView(buildAppPicker())
             Tab.URL    -> container.addView(buildUrlEditor())
             Tab.WIDGET -> container.addView(buildWidgetPicker())
+            Tab.APPS   -> container.addView(buildAppsGridPicker())
             Tab.CLEAR  -> Unit
         }
     }
@@ -524,6 +543,97 @@ class ConfigPaneContent(
     private fun rowBg(selected: Boolean) =
         context.getColor(if (selected) R.color.button_inactive else R.color.surface_dark)
 
+    // ── Apps grid picker ──────────────────────────────────────────────────────
+
+    private fun buildAppsGridPicker(): View {
+        val outer = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, MATCH)
+        }
+
+        val scroll = ScrollView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
+        }
+        appsScrollView = scroll
+
+        val list = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
+        }
+
+        val rows = mutableListOf<View>()
+        for (app in apps) {
+            val pkg = app.activityInfo.packageName
+            val row = buildAppCheckRow(app, selectedPackages.contains(pkg))
+            list.addView(row)
+            rows.add(row)
+        }
+        appsCheckRows = rows
+
+        scroll.addView(list)
+        outer.addView(scroll)
+
+        val labelEdit = EditText(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+            hint      = context.getString(R.string.label_hint)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            setTextColor(context.getColor(R.color.text_primary))
+            setHintTextColor(context.getColor(R.color.text_secondary))
+            setText(if (initialConfig is ButtonConfig.AppsGrid) initialConfig.label else "")
+        }
+        appsGridLabelEdit = labelEdit
+        outer.addView(labelEdit)
+
+        outer.addView(buildIconOptionRow())
+        val iconDetail = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+        }
+        iconDetailArea = iconDetail
+        outer.addView(iconDetail)
+        refreshIconDetail()
+
+        return outer
+    }
+
+    private fun buildAppCheckRow(app: android.content.pm.ResolveInfo, checked: Boolean): View {
+        return LinearLayout(context).apply {
+            orientation  = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, px(56))
+            setPadding(px(8), px(8), px(8), px(8))
+            gravity      = Gravity.CENTER_VERTICAL
+
+            val cb = CheckBox(context).apply {
+                isChecked = checked
+                setOnCheckedChangeListener { _, isChecked ->
+                    val pkg = app.activityInfo.packageName
+                    if (isChecked) selectedPackages.add(pkg) else selectedPackages.remove(pkg)
+                }
+            }
+            addView(cb)
+
+            addView(ImageView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(px(36), px(36)).apply {
+                    marginStart = px(8); marginEnd = px(12)
+                }
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setImageDrawable(try {
+                    context.packageManager.getApplicationIcon(app.activityInfo.packageName)
+                } catch (_: Exception) { null })
+            })
+
+            addView(TextView(context).apply {
+                text     = app.loadLabel(context.packageManager)
+                textSize = 16f
+                setTextColor(context.getColor(R.color.text_primary))
+            })
+
+            // Tapping anywhere on the row toggles the checkbox.
+            setOnClickListener { cb.isChecked = !cb.isChecked }
+        }
+    }
+
     // ── URL editor ────────────────────────────────────────────────────────────
 
     private fun buildUrlEditor(): View {
@@ -645,6 +755,7 @@ class ConfigPaneContent(
                     setText(when {
                         initialConfig is ButtonConfig.UrlLauncher    && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
                         initialConfig is ButtonConfig.WidgetLauncher && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
+                        initialConfig is ButtonConfig.AppsGrid       && initialConfig.icon is UrlIcon.Emoji -> initialConfig.icon.emoji
                         else -> ""
                     })
                     setTextColor(context.getColor(R.color.text_primary))
@@ -658,7 +769,8 @@ class ConfigPaneContent(
                 val statusText = when {
                     hasPendingImage -> context.getString(R.string.image_picked)
                     (initialConfig is ButtonConfig.UrlLauncher    && initialConfig.icon is UrlIcon.CustomFile) ||
-                    (initialConfig is ButtonConfig.WidgetLauncher && initialConfig.icon is UrlIcon.CustomFile) ->
+                    (initialConfig is ButtonConfig.WidgetLauncher && initialConfig.icon is UrlIcon.CustomFile) ||
+                    (initialConfig is ButtonConfig.AppsGrid       && initialConfig.icon is UrlIcon.CustomFile) ->
                         context.getString(R.string.image_current)
                     else -> null
                 }
@@ -722,6 +834,18 @@ class ConfigPaneContent(
                     )
                 }
                 ButtonConfig.WidgetLauncher(prov.provider, existingId, label, icon)
+            }
+            Tab.APPS -> {
+                val selectedApps = apps
+                    .filter { selectedPackages.contains(it.activityInfo.packageName) }
+                    .map { AppEntry(it.activityInfo.packageName, it.loadLabel(context.packageManager).toString()) }
+                val label = appsGridLabelEdit?.text?.toString()?.trim().orEmpty()
+                val icon  = when (selectedIconOption) {
+                    IconOption.NONE   -> UrlIcon.None
+                    IconOption.CUSTOM -> UrlIcon.CustomFile
+                    IconOption.EMOJI  -> UrlIcon.Emoji(emojiEdit?.text?.toString()?.trim() ?: "")
+                }
+                ButtonConfig.AppsGrid(selectedApps, label, icon)
             }
             Tab.CLEAR -> ButtonConfig.Empty
         }

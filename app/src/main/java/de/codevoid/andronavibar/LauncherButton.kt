@@ -37,6 +37,10 @@ sealed class UrlIcon {
     data class Emoji(val emoji: String) : UrlIcon()
 }
 
+// ── Apps grid entry ───────────────────────────────────────────────────────────
+
+data class AppEntry(val packageName: String, val label: String)
+
 // ── Button configuration ──────────────────────────────────────────────────────
 
 sealed class ButtonConfig {
@@ -57,6 +61,12 @@ sealed class ButtonConfig {
     data class WidgetLauncher(
         val provider: ComponentName,
         val appWidgetId: Int,           // -1 until bound
+        val label: String,
+        val icon: UrlIcon = UrlIcon.None
+    ) : ButtonConfig()
+
+    data class AppsGrid(
+        val apps: List<AppEntry>,
         val label: String,
         val icon: UrlIcon = UrlIcon.None
     ) : ButtonConfig()
@@ -93,6 +103,9 @@ class LauncherButton @JvmOverloads constructor(
 
     /** Fired when a Widget button is activated; MainActivity shows the widget pane. */
     var onWidgetActivated: ((Int) -> Unit)? = null
+
+    /** Fired when an Apps Grid button is activated; MainActivity shows the apps grid pane. */
+    var onAppsGridActivated: ((List<AppEntry>) -> Unit)? = null
 
     // ── Visual state ─────────────────────────────────────────────────────────
 
@@ -218,6 +231,26 @@ class LauncherButton @JvmOverloads constructor(
                 val openInBrowser = prefs.getString("btn_${index}_open_browser", null) == "true"
                 ButtonConfig.UrlLauncher(value, label, icon, openInBrowser)
             }
+            type == "apps" -> {
+                val labelRaw = prefs.getString("btn_${index}_label", "") ?: ""
+                val iconType = prefs.getString("btn_${index}_icon_type", null)
+                val iconData = prefs.getString("btn_${index}_icon_data", null)
+                val icon = when (iconType) {
+                    "custom" -> UrlIcon.CustomFile
+                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
+                    else     -> UrlIcon.None
+                }
+                val appsRaw = prefs.getString("btn_${index}_apps", "") ?: ""
+                val entries = appsRaw.split("|").filter { it.isNotEmpty() }.mapNotNull { pkg ->
+                    val label = try {
+                        context.packageManager.getApplicationLabel(
+                            context.packageManager.getApplicationInfo(pkg, 0)
+                        ).toString()
+                    } catch (_: Exception) { return@mapNotNull null }
+                    AppEntry(pkg, label)
+                }
+                ButtonConfig.AppsGrid(entries, labelRaw, icon)
+            }
             else -> ButtonConfig.Empty
         }
         applyConfig()
@@ -278,6 +311,27 @@ class LauncherButton @JvmOverloads constructor(
                 }
             }
 
+            is ButtonConfig.AppsGrid -> {
+                val edit = prefs.edit()
+                    .putString("btn_${index}_type",  "apps")
+                    .putString("btn_${index}_value", "")
+                    .putString("btn_${index}_label", newConfig.label)
+                    .putString("btn_${index}_apps",  newConfig.apps.joinToString("|") { it.packageName })
+                when (val ico = newConfig.icon) {
+                    is UrlIcon.None       -> edit.removeIconKeys()
+                    is UrlIcon.CustomFile -> edit
+                        .putString("btn_${index}_icon_type", "custom")
+                        .remove("btn_${index}_icon_data")
+                    is UrlIcon.Emoji      -> edit
+                        .putString("btn_${index}_icon_type", "emoji")
+                        .putString("btn_${index}_icon_data", ico.emoji)
+                }
+                edit.apply()
+                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
+                    iconFile().delete()
+                }
+            }
+
             is ButtonConfig.Empty -> clearConfig(prefs)
         }
         applyConfig()
@@ -291,6 +345,7 @@ class LauncherButton @JvmOverloads constructor(
             .remove("btn_${index}_value")
             .remove("btn_${index}_label")
             .remove("btn_${index}_widget_id")
+            .remove("btn_${index}_apps")
             .removeIconKeys()
             .apply()
         applyConfig()
@@ -328,6 +383,14 @@ class LauncherButton @JvmOverloads constructor(
                     is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
                 }
             }
+            is ButtonConfig.AppsGrid -> {
+                text = cfg.label.ifEmpty { context.getString(R.string.tab_apps) }
+                buttonIcon = when (val ico = cfg.icon) {
+                    is UrlIcon.None       -> null
+                    is UrlIcon.CustomFile -> loadIconFile()
+                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
+                }
+            }
         }
     }
 
@@ -354,6 +417,10 @@ class LauncherButton @JvmOverloads constructor(
             is ButtonConfig.WidgetLauncher -> {
                 flashActivation()
                 if (cfg.appWidgetId != -1) onWidgetActivated?.invoke(cfg.appWidgetId)
+            }
+            is ButtonConfig.AppsGrid -> {
+                flashActivation()
+                onAppsGridActivated?.invoke(cfg.apps)
             }
         }
     }

@@ -70,6 +70,9 @@ class MainActivity : Activity() {
     /** Non-null while a widget pane is displayed in reservedArea. */
     private var activeWidgetPane: WidgetPaneContent? = null
 
+    /** Non-null while an apps grid pane is displayed in reservedArea. */
+    private var activeAppsGridPane: AppsGridPaneContent? = null
+
     /** Non-null while a config pane is displayed in reservedArea. */
     private var activeConfigPane: ConfigPaneContent? = null
 
@@ -84,7 +87,7 @@ class MainActivity : Activity() {
      */
     private var configPaneButtonIndex = -1
 
-    private val paneFocused get() = activeConfigPane != null
+    private val paneFocused get() = activeConfigPane != null || activeAppsGridPane != null
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -112,7 +115,8 @@ class MainActivity : Activity() {
             buttons[i].onFocusRequested  = { setFocus(i) }
             buttons[i].onConfigRequested = { openConfigPane(i) }
             buttons[i].onUrlActivated    = { url -> showWebPane(url) }
-            buttons[i].onWidgetActivated = { widgetId -> showWidgetPane(widgetId) }
+            buttons[i].onWidgetActivated    = { widgetId -> showWidgetPane(widgetId) }
+            buttons[i].onAppsGridActivated  = { apps -> showAppsGridPane(apps) }
             buttons[i].loadConfig(prefs)
         }
 
@@ -170,7 +174,7 @@ class MainActivity : Activity() {
                 if (!isWindowFocused) return
 
                 if (paneFocused) {
-                    activeConfigPane?.handleKey(keyCode)
+                    activeConfigPane?.handleKey(keyCode) ?: activeAppsGridPane?.handleKey(keyCode)
                 } else {
                     when (keyCode) {
                         19 -> moveFocus(-1)                    // DPAD_UP
@@ -193,6 +197,7 @@ class MainActivity : Activity() {
                             activeConfigPane != null         -> dismissConfigPane()
                             activeWebPane?.goBack() == false -> dismissWebPane()
                             activeWidgetPane != null         -> dismissWidgetPane()
+                            activeAppsGridPane != null       -> dismissAppsGridPane()
                         }
                     }
                     // Long press already handled by LauncherApplication.
@@ -250,6 +255,24 @@ class MainActivity : Activity() {
     private fun dismissWidgetPane() {
         val pane = activeWidgetPane ?: return
         activeWidgetPane = null
+        pane.unload()
+    }
+
+    // ── Apps grid pane ────────────────────────────────────────────────────────
+
+    private fun showAppsGridPane(apps: List<AppEntry>) {
+        dismissConfigPane()
+        dismissWebPane()
+        dismissWidgetPane()
+        dismissAppsGridPane()
+        val pane = AppsGridPaneContent(this, apps)
+        activeAppsGridPane = pane
+        pane.load { pane.show(reservedArea) }
+    }
+
+    private fun dismissAppsGridPane() {
+        val pane = activeAppsGridPane ?: return
+        activeAppsGridPane = null
         pane.unload()
     }
 
@@ -422,6 +445,7 @@ class MainActivity : Activity() {
             activeConfigPane != null         -> dismissConfigPane()
             activeWebPane?.goBack() == false -> dismissWebPane()
             activeWidgetPane != null         -> dismissWidgetPane()
+            activeAppsGridPane != null       -> dismissAppsGridPane()
         }
         // If nothing is open, do nothing — home launcher never exits on back.
     }
@@ -552,7 +576,7 @@ class MainActivity : Activity() {
     }
 
     private fun reorderButtons(from: Int, to: Int) {
-        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data", "_widget_id", "_open_browser")
+        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data", "_widget_id", "_open_browser", "_apps")
         // Snapshot all button prefs
         val snap = Array(buttons.size) { i ->
             keys.associateWith { k -> prefs.getString("btn_$i$k", null) }
