@@ -68,22 +68,18 @@ class MainActivity : Activity() {
 
             if (intent.hasExtra("key_press")) {
                 when (intent.getIntExtra("key_press", 0)) {
-                    19 -> moveFocus(-1)   // UP
-                    20 -> moveFocus(+1)   // DOWN
+                    19 -> moveFocus(-1)     // UP
+                    20 -> moveFocus(+1)     // DOWN
                     66 -> activateFocused() // ROUND BUTTON 1 — select
-                    111 -> onBackPressed()  // ROUND BUTTON 2 — back
                 }
             }
         }
     }
 
-    // TODO: implement moveFocus
-    // delta is -1 (up) or +1 (down). Decide how to handle edges:
-    //   - Clamp: stop at button 0 / button 4
-    //   - Wrap:  UP from 0 goes to 4, DOWN from 4 goes to 0
-    // After updating focusedIndex, call updateButtonStyles().
     private fun moveFocus(delta: Int) {
-
+        focusedIndex = if (focusedIndex < 0) 0
+                       else (focusedIndex + delta).coerceIn(0, buttons.lastIndex)
+        updateButtonStyles()
     }
 
     private fun activateFocused() {
@@ -102,7 +98,7 @@ class MainActivity : Activity() {
             when {
                 i == focusedIndex -> {
                     btn.strokeColor = ColorStateList.valueOf(getColor(R.color.remote_focus_border))
-                    btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
+                    btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.focus_stroke_width)
                 }
                 configMode -> {
                     btn.strokeColor = ColorStateList.valueOf(getColor(R.color.config_border))
