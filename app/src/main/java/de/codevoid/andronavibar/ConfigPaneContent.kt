@@ -478,7 +478,7 @@ class ConfigPaneContent(
         val area = iconDetailArea ?: return
         area.removeAllViews()
         when (selectedIconOption) {
-            IconOption.NONE, IconOption.FAVICON -> Unit
+            IconOption.NONE -> Unit
 
             IconOption.EMOJI -> {
                 val edit = EditText(context).apply {
