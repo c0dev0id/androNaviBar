@@ -50,7 +50,8 @@ sealed class ButtonConfig {
     data class UrlLauncher(
         val url: String,
         val label: String,              // empty = fall back to url for display
-        val icon: UrlIcon = UrlIcon.None
+        val icon: UrlIcon = UrlIcon.None,
+        val openInBrowser: Boolean = false
     ) : ButtonConfig()
 
     data class WidgetLauncher(
@@ -214,7 +215,8 @@ class LauncherButton @JvmOverloads constructor(
                     "emoji"  -> UrlIcon.Emoji(iconData ?: "")
                     else     -> UrlIcon.None   // includes legacy "favicon" → no icon
                 }
-                ButtonConfig.UrlLauncher(value, label, icon)
+                val openInBrowser = prefs.getString("btn_${index}_open_browser", null) == "true"
+                ButtonConfig.UrlLauncher(value, label, icon, openInBrowser)
             }
             else -> ButtonConfig.Empty
         }
@@ -236,6 +238,8 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_type",  "url")
                     .putString("btn_${index}_value", newConfig.url)
                     .putString("btn_${index}_label", newConfig.label)
+                if (newConfig.openInBrowser) edit.putString("btn_${index}_open_browser", "true")
+                else edit.remove("btn_${index}_open_browser")
                 when (val ico = newConfig.icon) {
                     is UrlIcon.None -> edit.removeIconKeys()
                     is UrlIcon.CustomFile -> edit
@@ -341,7 +345,11 @@ class LauncherButton @JvmOverloads constructor(
                 flashActivation()
                 val url = if (cfg.url.startsWith("http://") || cfg.url.startsWith("https://"))
                     cfg.url else "https://${cfg.url}"
-                onUrlActivated?.invoke(url)
+                if (cfg.openInBrowser) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                } else {
+                    onUrlActivated?.invoke(url)
+                }
             }
             is ButtonConfig.WidgetLauncher -> {
                 flashActivation()

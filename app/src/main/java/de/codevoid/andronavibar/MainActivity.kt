@@ -552,7 +552,7 @@ class MainActivity : Activity() {
     }
 
     private fun reorderButtons(from: Int, to: Int) {
-        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data", "_widget_id")
+        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data", "_widget_id", "_open_browser")
         // Snapshot all button prefs
         val snap = Array(buttons.size) { i ->
             keys.associateWith { k -> prefs.getString("btn_$i$k", null) }

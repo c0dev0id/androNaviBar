@@ -12,6 +12,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -93,8 +94,9 @@ class ConfigPaneContent(
     private var appRows:        List<View>                      = emptyList()
     private var appScrollView:  ScrollView?                     = null
     private var appLabelEdit:   EditText?                       = null
-    private var urlEditText:    EditText?                       = null
-    private var urlLabelEdit:   EditText?                       = null
+    private var urlEditText:       EditText?  = null
+    private var urlLabelEdit:      EditText?  = null
+    private var urlOpenInBrowser:  CheckBox?  = null
     private var iconOptionBtns: Map<IconOption, MaterialButton> = emptyMap()
     private var iconDetailArea: ViewGroup?                      = null
     private var emojiEdit:      EditText?                       = null
@@ -147,8 +149,9 @@ class ConfigPaneContent(
         appRows         = emptyList()
         appScrollView   = null
         appLabelEdit    = null
-        urlEditText     = null
-        urlLabelEdit    = null
+        urlEditText      = null
+        urlLabelEdit     = null
+        urlOpenInBrowser = null
         iconOptionBtns        = emptyMap()
         iconDetailArea        = null
         emojiEdit             = null
@@ -554,6 +557,15 @@ class ConfigPaneContent(
             urlLabelEdit = labelEdit
             addView(labelEdit)
 
+            val browserCheck = CheckBox(context).apply {
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
+                text         = context.getString(R.string.open_in_browser)
+                isChecked    = (initialConfig as? ButtonConfig.UrlLauncher)?.openInBrowser == true
+                setTextColor(context.getColor(R.color.text_primary))
+            }
+            urlOpenInBrowser = browserCheck
+            addView(browserCheck)
+
             addView(buildIconOptionRow())
 
             val iconDetail = LinearLayout(context).apply {
@@ -690,7 +702,8 @@ class ConfigPaneContent(
                         emojiEdit?.text?.toString()?.trim() ?: ""
                     )
                 }
-                ButtonConfig.UrlLauncher(url, label, icon)
+                ButtonConfig.UrlLauncher(url, label, icon,
+                    openInBrowser = urlOpenInBrowser?.isChecked == true)
             }
             Tab.WIDGET -> {
                 val prov = widgetProviders.getOrNull(selectedProviderIndex)
