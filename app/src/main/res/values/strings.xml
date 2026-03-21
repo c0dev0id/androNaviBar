@@ -28,4 +28,5 @@
     <string name="tab_apps">Apps</string>
     <string name="tab_music">Music</string>
     <string name="no_music_playing">No music playing</string>
+    <string name="widget_expired">Widget expired.\nTap to reconfigure.</string>
 </resources>

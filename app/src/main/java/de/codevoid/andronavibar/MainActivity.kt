@@ -330,6 +330,7 @@ class MainActivity : Activity() {
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId) ?: return
         val pane = WidgetPaneContent(this, appWidgetHost, appWidgetId, info)
         pane.onContentReady = { hideLoading() }
+        pane.onReconfigureNeeded = { reconfigureWidget(appWidgetId, info) }
         activeWidgetPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
@@ -410,6 +411,29 @@ class MainActivity : Activity() {
         } else {
             deactivateActiveButton()
             setFocusOwner(FocusOwner.BUTTONS)
+        }
+    }
+
+    // ── Widget reconfigure (stale cached views) ───────────────────────────────
+
+    private var reconfigureWidgetId = -1
+
+    /**
+     * Re-launch the widget's configure activity with the existing widget ID.
+     * The configure activity will call updateAppWidget() on save, which
+     * delivers fresh RemoteViews with valid URI grants.
+     */
+    private fun reconfigureWidget(appWidgetId: Int, info: AppWidgetProviderInfo) {
+        if (info.configure != null) {
+            reconfigureWidgetId = appWidgetId
+            val opts = android.app.ActivityOptions.makeBasic().apply {
+                pendingIntentBackgroundActivityStartMode =
+                    android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+            @Suppress("DEPRECATION")
+            appWidgetHost.startAppWidgetConfigureActivityForResult(
+                this, appWidgetId, 0, RECONFIGURE_WIDGET_REQUEST_CODE, opts.toBundle()
+            )
         }
     }
 
@@ -538,6 +562,16 @@ class MainActivity : Activity() {
                     clearPendingWidgetId()
                     deactivateActiveButton()
                     setFocusOwner(FocusOwner.BUTTONS)
+                }
+                return
+            }
+            RECONFIGURE_WIDGET_REQUEST_CODE -> {
+                val wid = reconfigureWidgetId
+                reconfigureWidgetId = -1
+                if (resultCode == RESULT_OK && wid != -1) {
+                    // Provider sent fresh RemoteViews during configure — re-show the pane
+                    dismissCurrentPane()
+                    showWidgetPane(wid)
                 }
                 return
             }
@@ -767,10 +801,11 @@ class MainActivity : Activity() {
     private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density + 0.5f).toInt()
 
     companion object {
-        private const val IMAGE_REQUEST_CODE          = 1001
-        private const val BIND_WIDGET_REQUEST_CODE    = 1002
-        private const val CONFIGURE_WIDGET_REQUEST_CODE = 1003
-        private const val APP_WIDGET_HOST_ID          = 1536
+        private const val IMAGE_REQUEST_CODE              = 1001
+        private const val BIND_WIDGET_REQUEST_CODE        = 1002
+        private const val CONFIGURE_WIDGET_REQUEST_CODE   = 1003
+        private const val RECONFIGURE_WIDGET_REQUEST_CODE = 1004
+        private const val APP_WIDGET_HOST_ID              = 1536
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     }
 }

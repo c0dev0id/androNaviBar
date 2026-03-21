@@ -7,9 +7,11 @@ import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AbsListView
+import android.widget.TextView
 
 /**
  * PaneContent that hosts an AppWidgetHostView in the left pane.
@@ -21,6 +23,11 @@ import android.widget.AbsListView
  * After the view is attached, updateAppWidgetOptions communicates the actual
  * pane dimensions to the widget provider so it can pick the right layout
  * for the available space.
+ *
+ * If the cached RemoteViews fail to inflate (stale content:// URI grants
+ * after a process restart), a recovery view is shown instead and
+ * [onReconfigureNeeded] is invoked so the host Activity can re-launch
+ * the widget's configure activity.
  */
 class WidgetPaneContent(
     private val context: Context,
@@ -29,10 +36,15 @@ class WidgetPaneContent(
     private val providerInfo: AppWidgetProviderInfo
 ) : PaneContent {
 
+    /** The view added to the container — either the host view or a recovery view. */
+    private var addedView: View? = null
     private var hostView: AppWidgetHostView? = null
 
     /** Called once after the host view is attached and sized. */
     var onContentReady: (() -> Unit)? = null
+
+    /** Called when cached RemoteViews are stale and the widget needs reconfiguration. */
+    var onReconfigureNeeded: (() -> Unit)? = null
 
     override fun load(onReady: () -> Unit) {
         onReady()   // host view is cheap to create; widget updates arrive async
@@ -53,11 +65,21 @@ class WidgetPaneContent(
         mgr.updateAppWidgetOptions(appWidgetId, existingOpts)
 
         val hv = appWidgetHost.createView(context, appWidgetId, providerInfo)
+
+        // Check if the cached RemoteViews failed to inflate (stale URI grants).
+        val safeView = hv as? SafeAppWidgetHostView
+        if (safeView?.updateFailed == true) {
+            Log.w(TAG, "Widget $appWidgetId has stale cached views — showing recovery")
+            showRecoveryView(container)
+            return
+        }
+
         hv.layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
         hostView = hv
+        addedView = hv
         container.addView(hv)
 
         // After the view is measured, send the actual pane dimensions and
@@ -86,9 +108,28 @@ class WidgetPaneContent(
     }
 
     override fun unload() {
-        val hv = hostView ?: return
+        val view = addedView ?: return
+        addedView = null
         hostView = null
-        (hv.parent as? ViewGroup)?.removeView(hv)
+        (view.parent as? ViewGroup)?.removeView(view)
+    }
+
+    private fun showRecoveryView(container: ViewGroup) {
+        val tv = TextView(context).apply {
+            text = context.getString(R.string.widget_expired)
+            textSize = 18f
+            gravity = Gravity.CENTER
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setTextColor(context.getColor(R.color.text_secondary))
+            setOnClickListener { onReconfigureNeeded?.invoke() }
+        }
+        addedView = tv
+        container.addView(tv)
+        onContentReady?.invoke()
+        onContentReady = null
     }
 
     /** Recursively find view IDs of ListView/GridView instances in the widget layout. */
