@@ -6,7 +6,9 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.os.Bundle
+import android.view.View
 import android.view.ViewGroup
+import android.widget.AbsListView
 
 /**
  * PaneContent that hosts an AppWidgetHostView in the left pane.
@@ -50,6 +52,7 @@ class WidgetPaneContent(
             val density = context.resources.displayMetrics.density
             val wDp = (hv.width  / density).toInt()
             val hDp = (hv.height / density).toInt()
+            val mgr = AppWidgetManager.getInstance(context)
             if (wDp > 0 && hDp > 0) {
                 val opts = Bundle().apply {
                     putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,  wDp)
@@ -57,9 +60,19 @@ class WidgetPaneContent(
                     putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp)
                     putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp)
                 }
-                AppWidgetManager.getInstance(context)
-                    .updateAppWidgetOptions(appWidgetId, opts)
+                // Triggers onAppWidgetOptionsChanged() in the provider, which
+                // causes well-behaved providers to send fresh RemoteViews with
+                // valid URI permissions (the cached views from before a restart
+                // may reference content:// URIs whose grants have expired).
+                mgr.updateAppWidgetOptions(appWidgetId, opts)
             }
+
+            // For collection widgets (ListView/GridView), force the adapter to
+            // reload items. Walk the view hierarchy to find collection view IDs.
+            for (id in findCollectionViewIds(hv)) {
+                mgr.notifyAppWidgetViewDataChanged(appWidgetId, id)
+            }
+
             onContentReady?.invoke()
             onContentReady = null
         }
@@ -69,5 +82,15 @@ class WidgetPaneContent(
         val hv = hostView ?: return
         hostView = null
         (hv.parent as? ViewGroup)?.removeView(hv)
+    }
+
+    /** Recursively find view IDs of ListView/GridView instances in the widget layout. */
+    private fun findCollectionViewIds(view: View): List<Int> {
+        val ids = mutableListOf<Int>()
+        if (view is AbsListView && view.id != View.NO_ID) ids.add(view.id)
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) ids.addAll(findCollectionViewIds(view.getChildAt(i)))
+        }
+        return ids
     }
 }
