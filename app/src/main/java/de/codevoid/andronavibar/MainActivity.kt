@@ -62,18 +62,25 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
+        pressedKeys.clear()
     }
+
+    private val pressedKeys = mutableSetOf<Int>()
 
     private val remoteListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != "com.thorkracing.wireddevices.keypress") return
 
             if (intent.hasExtra("key_press")) {
-                when (intent.getIntExtra("key_press", 0)) {
+                val keyCode = intent.getIntExtra("key_press", 0)
+                if (!pressedKeys.add(keyCode)) return  // auto-repeat, ignore
+                when (keyCode) {
                     19 -> moveFocus(-1)     // UP
                     20 -> moveFocus(+1)     // DOWN
                     66 -> activateFocused() // ROUND BUTTON 1 — select
                 }
+            } else if (intent.hasExtra("key_release")) {
+                pressedKeys.remove(intent.getIntExtra("key_release", 0))
             }
         }
     }
