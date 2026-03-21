@@ -28,6 +28,9 @@ class WidgetPaneContent(
 
     private var hostView: AppWidgetHostView? = null
 
+    /** Called once after the host view is attached and sized. */
+    var onContentReady: (() -> Unit)? = null
+
     override fun load(onReady: () -> Unit) {
         onReady()   // host view is cheap to create; widget updates arrive async
     }
@@ -57,6 +60,8 @@ class WidgetPaneContent(
                 AppWidgetManager.getInstance(context)
                     .updateAppWidgetOptions(appWidgetId, opts)
             }
+            onContentReady?.invoke()
+            onContentReady = null
         }
     }
 

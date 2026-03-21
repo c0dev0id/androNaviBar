@@ -4,6 +4,7 @@ import android.content.Context
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.graphics.Bitmap
 
 /**
  * PaneContent that loads a URL in a full-pane WebView.
@@ -19,6 +20,9 @@ class WebPaneContent(
 
     private var webView: WebView? = null
 
+    /** Called once when the initial page finishes loading. */
+    var onContentReady: (() -> Unit)? = null
+
     override fun load(onReady: () -> Unit) {
         onReady()   // WebView is lightweight to create; page loads async after show()
     }
@@ -32,7 +36,14 @@ class WebPaneContent(
             )
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            webViewClient = WebViewClient()   // keep all navigation inside this WebView
+            webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    // Fire on first meaningful paint — onPageStarted indicates the
+                    // server responded and the WebView has begun rendering.
+                    onContentReady?.invoke()
+                    onContentReady = null
+                }
+            }
             loadUrl(targetUrl)
         }
         webView = wv

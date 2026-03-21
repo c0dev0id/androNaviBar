@@ -23,6 +23,9 @@ class AppsGridPaneContent(
     private var focusIndex: Int          = 0
     private var columns:    Int          = 4
 
+    /** Called once after the grid is built and visible. */
+    var onContentReady: (() -> Unit)? = null
+
     // ── PaneContent ───────────────────────────────────────────────────────────
 
     override fun load(onReady: () -> Unit) { onReady() }
@@ -109,6 +112,8 @@ class AppsGridPaneContent(
         scroll.addView(col)
         root.addView(scroll)
         scrollToFocused()
+        onContentReady?.invoke()
+        onContentReady = null
     }
 
     private fun buildCell(app: AppEntry, focused: Boolean, tileW: Int): View {

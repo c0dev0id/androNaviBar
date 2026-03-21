@@ -23,6 +23,7 @@ import android.view.WindowInsetsController
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import java.io.File
 import java.lang.ref.WeakReference
@@ -86,6 +87,9 @@ class MainActivity : Activity() {
      * target the right slot even after buttons have been moved around.
      */
     private var configPaneButtonIndex = -1
+
+    /** Loading spinner overlay, shown while a pane's content is being prepared. */
+    private var loadingSpinner: ProgressBar? = null
 
     private val paneFocused get() = activeConfigPane != null || activeAppsGridPane != null
 
@@ -225,6 +229,26 @@ class MainActivity : Activity() {
         }
     }
 
+    // ── Loading spinner ────────────────────────────────────────────────────────
+
+    private fun showLoading() {
+        hideLoading()
+        val spinner = ProgressBar(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER
+            )
+        }
+        loadingSpinner = spinner
+        reservedArea.addView(spinner)
+    }
+
+    private fun hideLoading() {
+        loadingSpinner?.let { reservedArea.removeView(it) }
+        loadingSpinner = null
+    }
+
     // ── Web pane ──────────────────────────────────────────────────────────────
 
     private fun showWebPane(url: String) {
@@ -233,14 +257,16 @@ class MainActivity : Activity() {
         dismissWidgetPane()
         dismissAppsGridPane()
         val pane = WebPaneContent(this, url)
+        pane.onContentReady = { hideLoading() }
         activeWebPane = pane
-        pane.load { pane.show(reservedArea) }
+        pane.load { pane.show(reservedArea); showLoading() }
     }
 
     private fun dismissWebPane() {
         val pane = activeWebPane ?: return
         activeWebPane = null
         pane.unload()
+        hideLoading()
     }
 
     // ── Widget pane ───────────────────────────────────────────────────────────
@@ -252,14 +278,16 @@ class MainActivity : Activity() {
         dismissAppsGridPane()
         val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId) ?: return
         val pane = WidgetPaneContent(this, appWidgetHost, appWidgetId, info)
+        pane.onContentReady = { hideLoading() }
         activeWidgetPane = pane
-        pane.load { pane.show(reservedArea) }
+        pane.load { pane.show(reservedArea); showLoading() }
     }
 
     private fun dismissWidgetPane() {
         val pane = activeWidgetPane ?: return
         activeWidgetPane = null
         pane.unload()
+        hideLoading()
     }
 
     // ── Apps grid pane ────────────────────────────────────────────────────────
@@ -270,14 +298,16 @@ class MainActivity : Activity() {
         dismissWidgetPane()
         dismissAppsGridPane()
         val pane = AppsGridPaneContent(this, apps)
+        pane.onContentReady = { hideLoading() }
         activeAppsGridPane = pane
-        pane.load { pane.show(reservedArea) }
+        pane.load { pane.show(reservedArea); showLoading() }
     }
 
     private fun dismissAppsGridPane() {
         val pane = activeAppsGridPane ?: return
         activeAppsGridPane = null
         pane.unload()
+        hideLoading()
     }
 
     // ── Widget binding ────────────────────────────────────────────────────────
