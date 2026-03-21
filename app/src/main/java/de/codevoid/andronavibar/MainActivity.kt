@@ -11,7 +11,6 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.InsetDrawable
 import android.net.Uri
 import android.view.MotionEvent
 import android.os.Bundle
@@ -135,15 +134,13 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun makeFocusRing(): InsetDrawable {
-        val gap = dpToPx(4)
-        val ring = GradientDrawable().apply {
+    private fun makeFocusRing(): GradientDrawable {
+        return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dpToPx(20).toFloat()  // button 16dp corner + 4dp gap
+            cornerRadius = dpToPx(16).toFloat()
             setStroke(dpToPx(6), getColor(R.color.colorPrimary))
             setColor(Color.TRANSPARENT)
         }
-        return InsetDrawable(ring, -gap)
     }
 
     private fun dpToPx(dp: Int): Int =
