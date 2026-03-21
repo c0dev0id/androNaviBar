@@ -11,5 +11,4 @@
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#B0B0B0</color>
     <color name="config_border">#F57C00</color>
-    <color name="remote_focus_border">#FFFFFF</color>
 </resources>

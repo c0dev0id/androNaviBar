@@ -8,9 +8,14 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.InsetDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.EditText
 import android.widget.FrameLayout
 import com.google.android.material.button.MaterialButton
@@ -22,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var buttons: List<MaterialButton>
     private var configMode = false
     private var focusedIndex = 0
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +102,6 @@ class MainActivity : Activity() {
     }
 
     private fun activateFocused() {
-        if (focusedIndex < 0) return
         onButtonClick(focusedIndex)
     }
 
@@ -106,20 +111,43 @@ class MainActivity : Activity() {
     }
 
     private fun updateButtonStyles() {
+        val accentCSL = ColorStateList.valueOf(getColor(R.color.colorPrimary))
+        val noRippleCSL = ColorStateList.valueOf(Color.TRANSPARENT)
+        val configStroke = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
+
         for (i in buttons.indices) {
             val btn = buttons[i]
-            when {
-                i == focusedIndex -> {
-                    btn.strokeColor = ColorStateList.valueOf(getColor(R.color.remote_focus_border))
-                    btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.focus_stroke_width)
-                }
-                configMode -> {
-                    btn.strokeColor = ColorStateList.valueOf(getColor(R.color.config_border))
-                    btn.strokeWidth = resources.getDimensionPixelSize(R.dimen.config_stroke_width)
-                }
-                else -> btn.strokeWidth = 0
+            btn.foreground = if (i == focusedIndex) makeFocusRing() else null
+            btn.rippleColor = if (i == focusedIndex) accentCSL else noRippleCSL
+            if (configMode) {
+                btn.strokeColor = ColorStateList.valueOf(getColor(R.color.config_border))
+                btn.strokeWidth = configStroke
+            } else {
+                btn.strokeWidth = 0
             }
         }
+    }
+
+    private fun makeFocusRing(): InsetDrawable {
+        val gap = dpToPx(4)
+        val ring = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dpToPx(20).toFloat()  // button 16dp corner + 4dp gap
+            setStroke(dpToPx(3), getColor(R.color.colorPrimary))
+            setColor(Color.TRANSPARENT)
+        }
+        return InsetDrawable(ring, -gap)
+    }
+
+    private fun dpToPx(dp: Int): Int =
+        (dp * resources.displayMetrics.density + 0.5f).toInt()
+
+    private fun flashButton(index: Int) {
+        val btn = buttons[index]
+        btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
+        handler.postDelayed({
+            btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
+        }, 150L)
     }
 
     private fun onButtonClick(index: Int) {
@@ -130,6 +158,7 @@ class MainActivity : Activity() {
             saveFocus()
             updateButtonStyles()
         } else {
+            flashButton(index)
             launchButton(index)
         }
     }
