@@ -4,12 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -33,7 +29,6 @@ import java.net.URL as JavaURL
 
 sealed class UrlIcon {
     object None : UrlIcon()
-    data class Emoji(val emoji: String) : UrlIcon()
     /** Fetched async from the page's domain; stored at the button's icon file. */
     object Favicon : UrlIcon()
     /** User-provided image; stored at the button's icon file. */
@@ -136,7 +131,6 @@ class LauncherButton @JvmOverloads constructor(
                 val iconType = prefs.getString("btn_${index}_icon_type", null)
                 val iconData = prefs.getString("btn_${index}_icon_data", null)
                 val icon = when (iconType) {
-                    "emoji"   -> if (iconData != null) UrlIcon.Emoji(iconData) else UrlIcon.None
                     "favicon" -> UrlIcon.Favicon
                     "custom"  -> UrlIcon.CustomFile
                     else      -> UrlIcon.None
@@ -163,11 +157,8 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_type",  "url")
                     .putString("btn_${index}_value", newConfig.url)
                     .putString("btn_${index}_label", newConfig.label)
-                when (val ic = newConfig.icon) {
+                when (newConfig.icon) {
                     is UrlIcon.None -> edit.removeIconKeys()
-                    is UrlIcon.Emoji -> edit
-                        .putString("btn_${index}_icon_type", "emoji")
-                        .putString("btn_${index}_icon_data", ic.emoji)
                     is UrlIcon.Favicon -> edit
                         .putString("btn_${index}_icon_type", "favicon")
                         .remove("btn_${index}_icon_data")
@@ -178,7 +169,7 @@ class LauncherButton @JvmOverloads constructor(
                 edit.apply()
 
                 // Delete stale icon file when switching away from file-based icon.
-                if (newConfig.icon == UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
+                if (newConfig.icon == UrlIcon.None) {
                     iconFile().delete()
                 }
                 // Trigger async favicon fetch.
@@ -219,11 +210,9 @@ class LauncherButton @JvmOverloads constructor(
             }
             is ButtonConfig.UrlLauncher -> {
                 text = cfg.label.ifEmpty { cfg.url }
-                icon = when (val ic = cfg.icon) {
-                    is UrlIcon.None       -> null
-                    is UrlIcon.Emoji      -> emojiToDrawable(ic.emoji)
-                    is UrlIcon.Favicon,
-                    is UrlIcon.CustomFile -> loadIconFile()
+                icon = when (cfg.icon) {
+                    is UrlIcon.None                        -> null
+                    is UrlIcon.Favicon, is UrlIcon.CustomFile -> loadIconFile()
                 }
             }
         }
@@ -257,19 +246,6 @@ class LauncherButton @JvmOverloads constructor(
         val file = iconFile()
         if (!file.exists()) return null
         val bmp = BitmapFactory.decodeFile(file.path) ?: return null
-        return BitmapDrawable(resources, bmp)
-    }
-
-    private fun emojiToDrawable(emoji: String): Drawable {
-        val size = dpToPx(32)
-        val bmp  = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize  = size * 0.75f
-            textAlign = Paint.Align.CENTER
-        }
-        val bounds = Rect()
-        paint.getTextBounds(emoji, 0, emoji.length, bounds)
-        Canvas(bmp).drawText(emoji, size / 2f, size / 2f - bounds.exactCenterY(), paint)
         return BitmapDrawable(resources, bmp)
     }
 

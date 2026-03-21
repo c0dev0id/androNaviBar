@@ -12,10 +12,8 @@
     <string name="display_name_hint">Display name (optional)</string>
     <string name="label_hint">Button label (optional)</string>
     <string name="icon_none">None</string>
-    <string name="icon_emoji">Emoji</string>
     <string name="icon_favicon">Favicon</string>
     <string name="icon_image">Image</string>
-    <string name="emoji_hint">Enter emoji</string>
     <string name="pick_image">Pick image…</string>
     <string name="image_picked">New image selected</string>
     <string name="image_current">Using current image</string>
