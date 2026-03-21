@@ -7,41 +7,40 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
+import java.lang.ref.WeakReference
 
 /**
- * Registers a persistent remote listener for the launcher ↔ app toggle.
+ * Registers a persistent remote listener for the global home/app toggle.
  *
  * As a HOME launcher, Android keeps this process alive indefinitely, so a
  * receiver registered here stays active even when another app is in the
  * foreground — no foreground service or notification required.
  *
- * Toggle trigger: hold Lever Up (key 136) for 3 seconds.
- *   Launcher in foreground → launch last app that was started from the launcher.
+ * Trigger: hold Round Button 2 (key 111) for 3 seconds.
+ *   Launcher in foreground → moveTaskToBack(true); Android reveals the previous app.
  *   Other app in foreground → bring launcher to front.
  *
- * State is shared with MainActivity via SharedPreferences (PREFS_NAME):
- *   KEY_LAUNCHER_FOREGROUND  – written by MainActivity.onWindowFocusChanged / onPause
- *   KEY_LAST_LAUNCHED        – written by MainActivity when an AppLauncher button fires
+ * Short presses of key 111 (< 3 s) are handled by MainActivity (cancel/dismiss).
+ * This receiver only acts when the full hold duration elapses.
  */
 class LauncherApplication : Application() {
 
     private val toggleHandler = Handler(Looper.getMainLooper())
-    private val heldKeys = mutableSetOf<Int>()
+    private var key111Held = false
 
     private val remoteReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
             if (intent.action != REMOTE_ACTION) return
             when {
                 intent.hasExtra("key_press") -> {
-                    val key = intent.getIntExtra("key_press", 0)
-                    if (key == TOGGLE_KEY && heldKeys.add(key)) {
+                    if (intent.getIntExtra("key_press", 0) == TOGGLE_KEY && !key111Held) {
+                        key111Held = true
                         toggleHandler.postDelayed(::performToggle, TOGGLE_HOLD_MS)
                     }
                 }
                 intent.hasExtra("key_release") -> {
-                    val key = intent.getIntExtra("key_release", 0)
-                    if (key == TOGGLE_KEY) {
-                        heldKeys.remove(key)
+                    if (intent.getIntExtra("key_release", 0) == TOGGLE_KEY) {
+                        key111Held = false
                         toggleHandler.removeCallbacksAndMessages(null)
                     }
                 }
@@ -50,17 +49,13 @@ class LauncherApplication : Application() {
     }
 
     private fun performToggle() {
-        heldKeys.remove(TOGGLE_KEY)
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-
-        if (prefs.getBoolean(KEY_LAUNCHER_FOREGROUND, true)) {
-            // Launcher is up — switch to the last app launched from this launcher.
-            val pkg = prefs.getString(KEY_LAST_LAUNCHED, null) ?: return
-            packageManager.getLaunchIntentForPackage(pkg)
-                ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                ?.let(::startActivity)
+        key111Held = false
+        val activity = mainActivity?.get()
+        if (activity != null) {
+            // Launcher is in the foreground — let Android switch back to the previous app.
+            activity.moveTaskToBack(true)
         } else {
-            // Another app is up — bring launcher to front.
+            // Another app is in the foreground — bring the launcher to front.
             startActivity(
                 Intent(this, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
@@ -74,12 +69,13 @@ class LauncherApplication : Application() {
     }
 
     companion object {
-        const val PREFS_NAME              = "button_config"
-        const val KEY_LAUNCHER_FOREGROUND = "launcher_foreground"
-        const val KEY_LAST_LAUNCHED       = "last_launched_package"
-        const val REMOTE_ACTION           = "com.thorkracing.wireddevices.keypress"
-        /** Lever Up key code on the DMD remote. Change here to remap the toggle. */
-        const val TOGGLE_KEY              = 136
-        const val TOGGLE_HOLD_MS          = 3_000L
+        const val REMOTE_ACTION  = "com.thorkracing.wireddevices.keypress"
+        const val PREFS_NAME     = "button_config"
+        /** Round Button 2 — short press cancels; 3-second hold triggers global toggle. */
+        const val TOGGLE_KEY     = 111
+        const val TOGGLE_HOLD_MS = 3_000L
+
+        /** Weak reference to the active MainActivity; set in onResume, cleared in onPause. */
+        var mainActivity: WeakReference<MainActivity>? = null
     }
 }

@@ -6,9 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.os.SystemClock
 import android.widget.FrameLayout
 import android.os.Bundle
 import java.io.File
+import java.lang.ref.WeakReference
 
 class MainActivity : Activity() {
 
@@ -23,17 +25,16 @@ class MainActivity : Activity() {
     /**
      * True only when this window actually has input focus. False in split-screen
      * when another window is active, or when fully backgrounded.
-     * Remote navigation (up/down/activate) is gated on this flag; Cancel (key 111)
-     * always works regardless so the config pane can always be dismissed.
+     *
+     * Remote navigation (up/down/activate, config pane keys) is gated on this flag.
+     * Key 111 (Round Button 2) is exempt: short press always dismisses the config
+     * pane; long press is handled globally by LauncherApplication.
      */
     private var isWindowFocused = false
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         isWindowFocused = hasFocus
-        prefs.edit()
-            .putBoolean(LauncherApplication.KEY_LAUNCHER_FOREGROUND, hasFocus)
-            .apply()
     }
 
     // ── Pane coordination ─────────────────────────────────────────────────────
@@ -65,14 +66,6 @@ class MainActivity : Activity() {
             buttons[i].index             = i
             buttons[i].onFocusRequested  = { setFocus(i) }
             buttons[i].onConfigRequested = { openConfigPane(i) }
-            buttons[i].onActivated       = { cfg ->
-                // Track last launched app for the Lever Up toggle.
-                if (cfg is ButtonConfig.AppLauncher) {
-                    prefs.edit()
-                        .putString(LauncherApplication.KEY_LAST_LAUNCHED, cfg.packageName)
-                        .apply()
-                }
-            }
             buttons[i].loadConfig(prefs)
         }
 
@@ -81,6 +74,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        LauncherApplication.mainActivity = WeakReference(this)
         registerReceiver(
             remoteListener,
             IntentFilter(LauncherApplication.REMOTE_ACTION),
@@ -90,17 +84,23 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        LauncherApplication.mainActivity = null
         isWindowFocused = false
-        prefs.edit()
-            .putBoolean(LauncherApplication.KEY_LAUNCHER_FOREGROUND, false)
-            .apply()
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
         pressedKeys.clear()
+        key111PressedAt = 0L
     }
 
     // ── Remote input ──────────────────────────────────────────────────────────
 
     private val pressedKeys = mutableSetOf<Int>()
+
+    /**
+     * Monotonic timestamp of the most recent key-111 press. Used to distinguish
+     * a short press (< TOGGLE_HOLD_MS → cancel) from a long press (≥ TOGGLE_HOLD_MS
+     * → handled by LauncherApplication; no additional action here).
+     */
+    private var key111PressedAt = 0L
 
     private val remoteListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -110,27 +110,40 @@ class MainActivity : Activity() {
                 val keyCode = intent.getIntExtra("key_press", 0)
                 if (!pressedKeys.add(keyCode)) return  // auto-repeat, ignore
 
+                if (keyCode == LauncherApplication.TOGGLE_KEY) {
+                    // Record press time; act on release to distinguish short vs long.
+                    key111PressedAt = SystemClock.elapsedRealtime()
+                    return
+                }
+
+                // All other keys are gated on window focus.
+                if (!isWindowFocused) return
+
                 if (paneFocused) {
-                    when (keyCode) {
-                        // Cancel always works regardless of window focus.
-                        111  -> dismissConfigPane()               // ROUND BUTTON 2 — cancel
-                        else -> if (isWindowFocused) activeConfigPane?.handleKey(keyCode)
-                    }
+                    activeConfigPane?.handleKey(keyCode)
                 } else {
-                    // Navigation only when this window is the active one.
-                    if (!isWindowFocused) return
                     when (keyCode) {
-                        19  -> moveFocus(-1)                     // DPAD_UP
-                        20  -> moveFocus(+1)                     // DPAD_DOWN
-                        66  -> activateFocused()                 // ROUND BUTTON 1
+                        19 -> moveFocus(-1)                  // DPAD_UP
+                        20 -> moveFocus(+1)                  // DPAD_DOWN
+                        66 -> buttons[focusedIndex].activate() // ROUND BUTTON 1
                         // 21 LEFT, 22 RIGHT — reserved
-                        // 111 ROUND BUTTON 2 — no-op outside pane
-                        // 136 LEVER UP — 3s hold handled by LauncherApplication
-                        // 137 LEVER DOWN — reserved
+                        // 136 LEVER UP, 137 LEVER DOWN — reserved
                     }
                 }
+
             } else if (intent.hasExtra("key_release")) {
-                pressedKeys.remove(intent.getIntExtra("key_release", 0))
+                val keyCode = intent.getIntExtra("key_release", 0)
+                pressedKeys.remove(keyCode)
+
+                if (keyCode == LauncherApplication.TOGGLE_KEY && key111PressedAt > 0L) {
+                    val held = SystemClock.elapsedRealtime() - key111PressedAt
+                    key111PressedAt = 0L
+                    if (held < LauncherApplication.TOGGLE_HOLD_MS) {
+                        // Short press → dismiss config pane (cancel); no focus check needed.
+                        dismissConfigPane()
+                    }
+                    // Long press already handled by LauncherApplication.
+                }
             }
         }
     }
@@ -151,19 +164,6 @@ class MainActivity : Activity() {
         for (i in buttons.indices) {
             buttons[i].isFocusedButton = (i == focusedIndex)
         }
-    }
-
-    // ── Activation ────────────────────────────────────────────────────────────
-
-    private fun activateFocused() {
-        // Track last launched app (remote path; touch path is handled via onActivated callback).
-        val cfg = buttons[focusedIndex].config
-        if (cfg is ButtonConfig.AppLauncher) {
-            prefs.edit()
-                .putString(LauncherApplication.KEY_LAST_LAUNCHED, cfg.packageName)
-                .apply()
-        }
-        buttons[focusedIndex].activate()
     }
 
     // ── Config pane ───────────────────────────────────────────────────────────
