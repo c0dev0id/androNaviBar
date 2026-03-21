@@ -44,37 +44,58 @@ class WidgetPaneContent(
             ViewGroup.LayoutParams.MATCH_PARENT
         )
         hostView = hv
+
+        // If the first layout hits expired FileProvider URIs (stale cached
+        // RemoteViews after a process restart), the error view is suppressed
+        // by SafeAppWidgetHostView.  Trigger a full refresh so the provider
+        // re-sends RemoteViews with valid URI grants.
+        (hv as? SafeAppWidgetHostView)?.onLayoutError = {
+            requestWidgetUpdate(hv)
+        }
+
         container.addView(hv)
 
         // Tell the widget how much space it actually has. Posted so the
         // container has been measured and hv.width/height are non-zero.
         hv.post {
-            val density = context.resources.displayMetrics.density
-            val wDp = (hv.width  / density).toInt()
-            val hDp = (hv.height / density).toInt()
-            val mgr = AppWidgetManager.getInstance(context)
-            if (wDp > 0 && hDp > 0) {
-                val opts = Bundle().apply {
-                    putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,  wDp)
-                    putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH,  wDp)
-                    putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp)
-                    putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp)
-                }
-                // Triggers onAppWidgetOptionsChanged() in the provider, which
-                // causes well-behaved providers to send fresh RemoteViews with
-                // valid URI permissions (the cached views from before a restart
-                // may reference content:// URIs whose grants have expired).
-                mgr.updateAppWidgetOptions(appWidgetId, opts)
-            }
-
-            // For collection widgets (ListView/GridView), force the adapter to
-            // reload items. Walk the view hierarchy to find collection view IDs.
-            for (id in findCollectionViewIds(hv)) {
-                mgr.notifyAppWidgetViewDataChanged(appWidgetId, id)
-            }
+            sendWidgetSize(hv)
 
             onContentReady?.invoke()
             onContentReady = null
+        }
+    }
+
+    /**
+     * Communicate the actual pane dimensions to the widget provider so it
+     * can pick the right layout for the available space.
+     */
+    private fun sendWidgetSize(hv: AppWidgetHostView) {
+        val density = context.resources.displayMetrics.density
+        val wDp = (hv.width  / density).toInt()
+        val hDp = (hv.height / density).toInt()
+        if (wDp <= 0 || hDp <= 0) return
+        val opts = Bundle().apply {
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,  wDp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH,  wDp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, hDp)
+            putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, hDp)
+        }
+        AppWidgetManager.getInstance(context).updateAppWidgetOptions(appWidgetId, opts)
+    }
+
+    /**
+     * Ask the provider to re-send RemoteViews with fresh URI grants.
+     *
+     * updateAppWidgetOptions() triggers onAppWidgetOptionsChanged() in the
+     * provider, which causes well-behaved providers to call updateAppWidget()
+     * with fresh RemoteViews.  notifyAppWidgetViewDataChanged() forces
+     * collection adapters to reload items.
+     */
+    private fun requestWidgetUpdate(hv: AppWidgetHostView) {
+        val mgr = AppWidgetManager.getInstance(context)
+        sendWidgetSize(hv)
+        for (id in findCollectionViewIds(hv)) {
+            mgr.notifyAppWidgetViewDataChanged(appWidgetId, id)
         }
     }
 
