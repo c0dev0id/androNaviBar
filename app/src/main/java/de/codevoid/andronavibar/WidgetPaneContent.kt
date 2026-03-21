@@ -82,14 +82,16 @@ class WidgetPaneContent(
         // Set a callback so we can swap the error view for recovery UI.
         safeView?.onUpdateFailed = {
             Log.w(TAG, "Widget $appWidgetId has stale cached views (async) — showing recovery")
-            val c = this.container ?: return@onUpdateFailed
-            val existing = addedView
-            if (existing != null) {
-                (existing.parent as? ViewGroup)?.removeView(existing)
+            val c = this.container
+            if (c != null) {
+                val existing = addedView
+                if (existing != null) {
+                    (existing.parent as? ViewGroup)?.removeView(existing)
+                }
+                hostView = null
+                addedView = null
+                showRecoveryView(c)
             }
-            hostView = null
-            addedView = null
-            showRecoveryView(c)
         }
 
         hv.layoutParams = ViewGroup.LayoutParams(
