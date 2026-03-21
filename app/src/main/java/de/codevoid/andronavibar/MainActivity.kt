@@ -8,6 +8,8 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.RectF
+import com.caverock.androidsvg.SVG
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
@@ -251,8 +253,21 @@ class MainActivity : Activity() {
             val uri = data?.data ?: return
             val dest = File(filesDir, "btn_${pendingIconButtonIndex}_icon.png")
             try {
-                contentResolver.openInputStream(uri)?.use { input ->
-                    dest.outputStream().use { output -> input.copyTo(output) }
+                val isSvg = contentResolver.getType(uri) == "image/svg+xml"
+                if (isSvg) {
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        val svg = SVG.getFromInputStream(input)
+                        val bmp = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888)
+                        svg.renderToCanvas(Canvas(bmp), RectF(0f, 0f, 512f, 512f))
+                        dest.outputStream().use { out ->
+                            bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+                        }
+                        bmp.recycle()
+                    }
+                } else {
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        dest.outputStream().use { output -> input.copyTo(output) }
+                    }
                 }
                 activeConfigPane?.onImageReady()
             } catch (_: Exception) { /* ignore failed pick */ }
