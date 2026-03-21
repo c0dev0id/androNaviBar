@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
