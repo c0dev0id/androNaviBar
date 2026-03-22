@@ -1,6 +1,7 @@
 package de.codevoid.andronavibar
 
 import android.app.Activity
+import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.BroadcastReceiver
@@ -35,6 +36,7 @@ class MainActivity : Activity() {
     private lateinit var reservedArea:    FrameLayout
     private lateinit var dragHandlePanel: LinearLayout
     private lateinit var appWidgetHost:   SafeAppWidgetHost
+    private val widgetViews = mutableMapOf<Int, AppWidgetHostView>()
 
     private var focusedIndex = 0
 
@@ -142,6 +144,8 @@ class MainActivity : Activity() {
             buttons[i].loadConfig(prefs)
         }
 
+        preCreateWidgetViews()
+
         setupDragHandles()
         updateFocus()
     }
@@ -159,7 +163,6 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        appWidgetHost.stopListening()
         LauncherApplication.mainActivity = null
         isWindowFocused = false
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
@@ -328,10 +331,9 @@ class MainActivity : Activity() {
     }
 
     private fun showWidgetPane(appWidgetId: Int) {
-        val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId) ?: return
-        val pane = WidgetPaneContent(this, appWidgetHost, appWidgetId, info)
+        val hv = widgetViews[appWidgetId] ?: return
+        val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading() }
-        pane.onReconfigureNeeded = { reconfigureWidget(appWidgetId, info) }
         activeWidgetPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
@@ -361,6 +363,7 @@ class MainActivity : Activity() {
         val orphan = prefs.getInt("pending_widget_id", -1)
         if (orphan != -1) {
             appWidgetHost.deleteAppWidgetId(orphan)
+            widgetViews.remove(orphan)
             prefs.edit().remove("pending_widget_id").apply()
         }
     }
@@ -405,7 +408,10 @@ class MainActivity : Activity() {
         clearPendingWidgetId()
         buttons[pendingWidgetButtonIndex].saveConfig(prefs, cfg)
         if (cfg.appWidgetId != -1) {
-            appWidgetHost.startListening()
+            val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(cfg.appWidgetId)
+            if (info != null) {
+                widgetViews[cfg.appWidgetId] = appWidgetHost.createView(this, cfg.appWidgetId, info)
+            }
             // Button is already active from the config→bind flow
             showWidgetPane(cfg.appWidgetId)
             setFocusOwner(FocusOwner.PANE)
@@ -415,26 +421,20 @@ class MainActivity : Activity() {
         }
     }
 
-    // ── Widget reconfigure (stale cached views) ───────────────────────────────
-
-    private var reconfigureWidgetId = -1
-
     /**
-     * Re-launch the widget's configure activity with the existing widget ID.
-     * The configure activity will call updateAppWidget() on save, which
-     * delivers fresh RemoteViews with valid URI grants.
+     * Pre-create AppWidgetHostViews for all configured widgets.
+     * Called in onCreate() before startListening() so the views are
+     * registered in the host's mViews map when the system delivers
+     * cached RemoteViews — matching the standard launcher pattern.
      */
-    private fun reconfigureWidget(appWidgetId: Int, info: AppWidgetProviderInfo) {
-        if (info.configure != null) {
-            reconfigureWidgetId = appWidgetId
-            val opts = android.app.ActivityOptions.makeBasic().apply {
-                pendingIntentBackgroundActivityStartMode =
-                    android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+    private fun preCreateWidgetViews() {
+        val mgr = AppWidgetManager.getInstance(this)
+        for (btn in buttons) {
+            val cfg = btn.config
+            if (cfg is ButtonConfig.WidgetLauncher && cfg.appWidgetId != -1) {
+                val info = mgr.getAppWidgetInfo(cfg.appWidgetId) ?: continue
+                widgetViews[cfg.appWidgetId] = appWidgetHost.createView(this, cfg.appWidgetId, info)
             }
-            @Suppress("DEPRECATION")
-            appWidgetHost.startAppWidgetConfigureActivityForResult(
-                this, appWidgetId, 0, RECONFIGURE_WIDGET_REQUEST_CODE, opts.toBundle()
-            )
         }
     }
 
@@ -461,6 +461,7 @@ class MainActivity : Activity() {
                     val oldCfg  = buttons[configPaneButtonIndex].config
                     if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
                         appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
+                        widgetViews.remove(oldCfg.appWidgetId)
                     }
                     pendingWidgetConfig       = newConfig.copy(appWidgetId = newId)
                     pendingWidgetButtonIndex  = configPaneButtonIndex
@@ -482,6 +483,7 @@ class MainActivity : Activity() {
                         (newConfig !is ButtonConfig.WidgetLauncher ||
                          newConfig.appWidgetId != oldCfg.appWidgetId)) {
                         appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
+                        widgetViews.remove(oldCfg.appWidgetId)
                     }
                     buttons[configPaneButtonIndex].saveConfig(prefs, newConfig)
                     dismissConfigPane()
@@ -498,6 +500,7 @@ class MainActivity : Activity() {
                 val oldCfg = buttons[configPaneButtonIndex].config
                 if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
                     appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
+                    widgetViews.remove(oldCfg.appWidgetId)
                 }
                 buttons[configPaneButtonIndex].clearConfig(prefs)
             }
@@ -543,7 +546,10 @@ class MainActivity : Activity() {
                     if (id != -1) completeWidgetBinding(id)
                 } else {
                     pendingWidgetConfig?.let {
-                        if (it.appWidgetId != -1) appWidgetHost.deleteAppWidgetId(it.appWidgetId)
+                        if (it.appWidgetId != -1) {
+                            appWidgetHost.deleteAppWidgetId(it.appWidgetId)
+                            widgetViews.remove(it.appWidgetId)
+                        }
                     }
                     pendingWidgetConfig = null
                     clearPendingWidgetId()
@@ -557,22 +563,15 @@ class MainActivity : Activity() {
                     finishWidgetSetup()
                 } else {
                     pendingWidgetConfig?.let {
-                        if (it.appWidgetId != -1) appWidgetHost.deleteAppWidgetId(it.appWidgetId)
+                        if (it.appWidgetId != -1) {
+                            appWidgetHost.deleteAppWidgetId(it.appWidgetId)
+                            widgetViews.remove(it.appWidgetId)
+                        }
                     }
                     pendingWidgetConfig = null
                     clearPendingWidgetId()
                     deactivateActiveButton()
                     setFocusOwner(FocusOwner.BUTTONS)
-                }
-                return
-            }
-            RECONFIGURE_WIDGET_REQUEST_CODE -> {
-                val wid = reconfigureWidgetId
-                reconfigureWidgetId = -1
-                if (resultCode == RESULT_OK && wid != -1) {
-                    // Provider sent fresh RemoteViews during configure — re-show the pane
-                    dismissCurrentPane()
-                    showWidgetPane(wid)
                 }
                 return
             }
@@ -805,7 +804,6 @@ class MainActivity : Activity() {
         private const val IMAGE_REQUEST_CODE              = 1001
         private const val BIND_WIDGET_REQUEST_CODE        = 1002
         private const val CONFIGURE_WIDGET_REQUEST_CODE   = 1003
-        private const val RECONFIGURE_WIDGET_REQUEST_CODE = 1004
         private const val APP_WIDGET_HOST_ID              = 1536
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     }
