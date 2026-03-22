@@ -1,30 +1,29 @@
 package de.codevoid.andronavibar
 
 import android.content.Context
-import android.view.Gravity
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import com.google.android.material.button.MaterialButton
-import de.codevoid.andronavibar.ui.SquareButton
+import de.codevoid.andronavibar.ui.LauncherButton
 
 class AppsGridPaneContent(
     private val context: Context,
     private val apps:    List<AppEntry>
 ) : PaneContent {
 
-    private var rootView:   FrameLayout?       = null
-    private var scrollView: ScrollView?        = null
-    private var cells:      List<SquareButton> = emptyList()
-    private var focusIndex: Int               = 0
-    private val columns:    Int               = 2
+    private var rootView:   FrameLayout?         = null
+    private var scrollView: ScrollView?          = null
+    private var cells:      List<LauncherButton> = emptyList()
+    private var focusIndex: Int                  = 0
+    private val columns:    Int                  = 2
 
     /** Called once after the grid is built and visible. */
     var onContentReady: (() -> Unit)? = null
 
-    // ── PaneContent ───────────────────────────────────────────────────────────
+    // ── PaneContent ─────────────────────────────────────────────────────────────
 
     override fun load(onReady: () -> Unit) { onReady() }
 
@@ -44,7 +43,7 @@ class AppsGridPaneContent(
         cells      = emptyList()
     }
 
-    // ── Key handling ──────────────────────────────────────────────────────────
+    // ── Key handling ────────────────────────────────────────────────────────────
 
     fun handleKey(keyCode: Int): Boolean {
         if (apps.isEmpty()) return false
@@ -63,10 +62,12 @@ class AppsGridPaneContent(
         }
     }
 
-    // ── Grid construction ─────────────────────────────────────────────────────
+    // ── Grid construction ───────────────────────────────────────────────────────
 
     private fun buildGrid(root: FrameLayout) {
-        val tileW = root.width / columns
+        val marginPx = dpToPx(MARGIN_DP)
+        val tileW = root.width / columns - marginPx * 2
+        val tileH = root.height / VISIBLE_ROWS - marginPx * 2
 
         val scroll = ScrollView(context).apply {
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
@@ -78,7 +79,7 @@ class AppsGridPaneContent(
             layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
         }
 
-        val builtCells = mutableListOf<SquareButton>()
+        val builtCells = mutableListOf<LauncherButton>()
         var rowLayout: LinearLayout? = null
 
         for (i in apps.indices) {
@@ -89,8 +90,8 @@ class AppsGridPaneContent(
                 }
                 col.addView(rowLayout)
             }
-            val cell = buildCell(apps[i], i, tileW)
-            rowLayout!!.addView(cell)
+            val cell = buildCell(apps[i], i, rowLayout!!, tileW, tileH, marginPx)
+            rowLayout.addView(cell)
             builtCells.add(cell)
         }
 
@@ -99,7 +100,9 @@ class AppsGridPaneContent(
         if (rem != 0) {
             repeat(columns - rem) {
                 rowLayout?.addView(View(context).apply {
-                    layoutParams = LinearLayout.LayoutParams(tileW, tileW)
+                    layoutParams = LinearLayout.LayoutParams(tileW, tileH).apply {
+                        setMargins(marginPx, marginPx, marginPx, marginPx)
+                    }
                 })
             }
         }
@@ -112,30 +115,28 @@ class AppsGridPaneContent(
         onContentReady = null
     }
 
-    private fun buildCell(app: AppEntry, index: Int, tileW: Int): SquareButton {
-        val iconSz = (tileW * 0.50f).toInt()
-        return SquareButton(context).apply {
-            layoutParams = LinearLayout.LayoutParams(tileW, tileW)
+    private fun buildCell(
+        app: AppEntry, index: Int, parent: ViewGroup,
+        tileW: Int, tileH: Int, marginPx: Int
+    ): LauncherButton {
+        val cell = LayoutInflater.from(context).inflate(
+            R.layout.launcher_button_item, parent, false
+        ) as LauncherButton
 
-            icon = try { context.packageManager.getApplicationIcon(app.packageName) }
-                   catch (_: Exception) { null }
-            iconGravity = MaterialButton.ICON_GRAVITY_TOP
-            this.iconSize = iconSz
-            iconPadding = dpToPx(4)
-
-            text = app.label
-            textSize = 12f
-            setTextColor(context.getColor(R.color.text_primary))
-            maxLines = 2
-            gravity = Gravity.CENTER
-
-            isFocusedButton = (index == focusIndex)
-            onFocusRequested = { moveFocus(index) }
-            setOnClickListener { launchApp(app) }
+        cell.layoutParams = LinearLayout.LayoutParams(tileW, tileH).apply {
+            setMargins(marginPx, marginPx, marginPx, marginPx)
         }
+        cell.buttonIcon = try {
+            context.packageManager.getApplicationIcon(app.packageName)
+        } catch (_: Exception) { null }
+        cell.text = app.label
+        cell.isFocusedButton = (index == focusIndex)
+        cell.onFocusRequested = { moveFocus(index) }
+        cell.setOnClickListener { launchApp(app) }
+        return cell
     }
 
-    // ── Focus ─────────────────────────────────────────────────────────────────
+    // ── Focus ───────────────────────────────────────────────────────────────────
 
     fun setInitialFocus() {
         cells.getOrNull(focusIndex)?.isFocusedButton = true
@@ -163,7 +164,7 @@ class AppsGridPaneContent(
         }
     }
 
-    // ── Launch ────────────────────────────────────────────────────────────────
+    // ── Launch ──────────────────────────────────────────────────────────────────
 
     private fun launchFocused() {
         launchApp(apps.getOrNull(focusIndex) ?: return)
@@ -174,12 +175,14 @@ class AppsGridPaneContent(
         context.startActivity(intent)
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Helpers ─────────────────────────────────────────────────────────────────
 
     private fun dpToPx(dp: Int) = (dp * context.resources.displayMetrics.density + 0.5f).toInt()
 
     companion object {
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP  = ViewGroup.LayoutParams.WRAP_CONTENT
+        private const val VISIBLE_ROWS = 6
+        private const val MARGIN_DP = 4
     }
 }
