@@ -2,6 +2,7 @@ package de.codevoid.andronavibar
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.graphics.Color
 import android.util.AttributeSet
 
 /**
@@ -28,6 +29,7 @@ class SquareButton @JvmOverloads constructor(
         iconTint = null
         elevation = 0f
         stateListAnimator = null
+        backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
         cornerRadius = dpToPx(CORNER_RADIUS_DP)
         rippleColor = ColorStateList.valueOf(
             context.getColor(R.color.colorPrimary) and 0x33FFFFFF

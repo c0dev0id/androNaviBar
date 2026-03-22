@@ -1,8 +1,6 @@
 package de.codevoid.andronavibar
 
 import android.content.Context
-import android.content.res.ColorStateList
-import android.graphics.Color
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -129,8 +127,6 @@ class AppsGridPaneContent(
             setTextColor(context.getColor(R.color.text_primary))
             maxLines = 2
             gravity = Gravity.CENTER
-
-            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
 
             isFocusedButton = (index == focusIndex)
             onFocusRequested = { moveFocus(index) }
