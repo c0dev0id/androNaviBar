@@ -67,21 +67,24 @@ class WidgetPaneContent(
         mgr.updateAppWidgetOptions(appWidgetId, existingOpts)
 
         val hv = appWidgetHost.createView(context, appWidgetId, providerInfo)
+
+        // createView() fetches cached RemoteViews via getAppWidgetViews(),
+        // which does NOT re-grant content:// URI permissions.  After a
+        // process restart the grants from the old process have expired,
+        // so inflation fails with "Couldn't add widget."
+        //
+        // Calling startListening() again re-delivers the cached views
+        // through the normal update channel, which DOES re-grant URI
+        // permissions.  The view is now registered in the host's mViews
+        // (createView put it there), so the re-delivered views are applied
+        // to it — replacing the error view with the actual widget content.
+        appWidgetHost.startListening()
+
         val safeView = hv as? SafeAppWidgetHostView
 
-        // Sync path: on some devices inflation is synchronous and the error
-        // has already been detected by the time createView() returns.
-        if (safeView?.updateFailed == true) {
-            Log.w(TAG, "Widget $appWidgetId has stale cached views (sync) — showing recovery")
-            showRecoveryView(container)
-            return
-        }
-
-        // Async path (API 31+): inflation runs on a background executor.
-        // The error arrives on the main thread after createView() returns.
-        // Set a callback so we can swap the error view for recovery UI.
+        // Fallback: if the re-delivery still fails, show a recovery view.
         safeView?.onUpdateFailed = {
-            Log.w(TAG, "Widget $appWidgetId has stale cached views (async) — showing recovery")
+            Log.w(TAG, "Widget $appWidgetId inflation failed — showing recovery")
             val c = this.container
             if (c != null) {
                 val existing = addedView
