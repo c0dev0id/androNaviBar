@@ -4,12 +4,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.BitmapDrawable
 import android.media.MediaMetadata
 import android.media.browse.MediaBrowser
 import android.media.session.MediaController
@@ -18,10 +18,10 @@ import android.service.media.MediaBrowserService
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.android.material.button.MaterialButton
 
 class MusicPlayerPaneContent(
     private val context: Context,
@@ -37,9 +37,8 @@ class MusicPlayerPaneContent(
     private var albumView: TextView? = null
     private var placeholderView: TextView? = null
 
-    // Control buttons: [prev, play/pause, next, shuffle]
-    private var controlViews: List<FrameLayout> = emptyList()
-    private var controlIcons: List<ImageView> = emptyList()
+    // Transport controls — SquareButtons with shared focus ring and two-tap model
+    private var controlViews: List<SquareButton> = emptyList()
     private var focusIndex: Int = 1  // default: play/pause
 
     // Media browser — connects directly to the player's MediaBrowserService.
@@ -75,7 +74,6 @@ class MusicPlayerPaneContent(
         albumView = null
         placeholderView = null
         controlViews = emptyList()
-        controlIcons = emptyList()
     }
 
     // ── Key handling ────────────────────────────────────────────────────────
@@ -177,43 +175,60 @@ class MusicPlayerPaneContent(
         }
 
         val btnSize = dpToPx(108)
-        val iconSize = dpToPx(54)
+        val iconSz  = dpToPx(54)
         val spacing = dpToPx(30)
         val iconColor = context.getColor(R.color.text_primary)
 
         val icons = listOf(
-            drawPrev(iconSize, iconColor),
-            drawPlay(iconSize, iconColor),
-            drawNext(iconSize, iconColor),
-            drawShuffle(iconSize, iconColor)
+            drawPrev(iconSz, iconColor),
+            drawPlay(iconSz, iconColor),
+            drawNext(iconSz, iconColor),
+            drawShuffle(iconSz, iconColor)
         )
 
-        val builtViews = mutableListOf<FrameLayout>()
-        val builtIcons = mutableListOf<ImageView>()
+        val builtViews = mutableListOf<SquareButton>()
 
         for (i in icons.indices) {
-            val frame = FrameLayout(context).apply {
+            val idx = i
+            val btn = SquareButton(context).apply {
                 layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).apply {
                     if (i > 0) marginStart = spacing
                 }
-                background = makeButtonBg()
-                if (i == focusIndex) foreground = makeFocusRing(btnSize)
-                val idx = i
+                insetBottom = 0
+                insetTop = 0
+                minimumHeight = 0
+                minimumWidth = 0
+                minHeight = 0
+                minWidth = 0
+
+                icon = BitmapDrawable(context.resources, icons[i])
+                this.iconSize = iconSz
+                iconTint = null
+                iconPadding = 0
+                iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
+                setPadding(0, 0, 0, 0)
+
+                backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
+                cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP)
+                this.elevation = 0f
+                stateListAnimator = null
+                rippleColor = ColorStateList.valueOf(
+                    context.getColor(R.color.colorPrimary) and 0x33FFFFFF
+                )
+
+                isFocusedButton = (i == focusIndex)
+                onFocusRequested = {
+                    controlViews.getOrNull(focusIndex)?.isFocusedButton = false
+                    focusIndex = idx
+                    controlViews.getOrNull(idx)?.isFocusedButton = true
+                }
                 setOnClickListener { activateControl(idx) }
             }
-
-            val iv = ImageView(context).apply {
-                layoutParams = FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER)
-                setImageBitmap(icons[i])
-            }
-            frame.addView(iv)
-            controlRow.addView(frame)
-            builtViews.add(frame)
-            builtIcons.add(iv)
+            controlRow.addView(btn)
+            builtViews.add(btn)
         }
 
         controlViews = builtViews
-        controlIcons = builtIcons
         lower.addView(controlRow)
         root.addView(lower)
 
@@ -228,22 +243,20 @@ class MusicPlayerPaneContent(
     private fun moveFocus(newIndex: Int) {
         val clamped = newIndex.coerceIn(0, controlViews.lastIndex)
         if (clamped == focusIndex) return
-        val btnSize = controlViews.getOrNull(0)?.width ?: dpToPx(108)
-        controlViews.getOrNull(focusIndex)?.foreground = null
+        controlViews.getOrNull(focusIndex)?.isFocusedButton = false
         focusIndex = clamped
-        controlViews.getOrNull(focusIndex)?.foreground = makeFocusRing(btnSize)
+        controlViews.getOrNull(focusIndex)?.isFocusedButton = true
     }
 
     fun setInitialFocus() {
         focusIndex = 1
-        val btnSize = controlViews.getOrNull(0)?.width ?: dpToPx(108)
         for (i in controlViews.indices) {
-            controlViews[i].foreground = if (i == focusIndex) makeFocusRing(btnSize) else null
+            controlViews[i].isFocusedButton = (i == focusIndex)
         }
     }
 
     fun clearFocus() {
-        controlViews.getOrNull(focusIndex)?.foreground = null
+        controlViews.getOrNull(focusIndex)?.isFocusedButton = false
     }
 
     // ── Control actions ─────────────────────────────────────────────────────
@@ -383,17 +396,17 @@ class MusicPlayerPaneContent(
     }
 
     private fun updatePlayPauseIcon(isPlaying: Boolean) {
-        val iconSize = dpToPx(54)
+        val iconSz = dpToPx(54)
         val color = context.getColor(R.color.text_primary)
-        val bmp = if (isPlaying) drawPause(iconSize, color) else drawPlay(iconSize, color)
-        controlIcons.getOrNull(1)?.setImageBitmap(bmp)
+        val bmp = if (isPlaying) drawPause(iconSz, color) else drawPlay(iconSz, color)
+        controlViews.getOrNull(1)?.icon = BitmapDrawable(context.resources, bmp)
     }
 
     private fun updateShuffleVisual() {
-        val iconSize = dpToPx(54)
+        val iconSz = dpToPx(54)
         val color = if (isShuffleOn)
             context.getColor(R.color.colorPrimary) else context.getColor(R.color.text_primary)
-        controlIcons.getOrNull(3)?.setImageBitmap(drawShuffle(iconSize, color))
+        controlViews.getOrNull(3)?.icon = BitmapDrawable(context.resources, drawShuffle(iconSz, color))
     }
 
     private fun showPlaceholder() {
@@ -492,20 +505,7 @@ class MusicPlayerPaneContent(
         return bmp
     }
 
-    // ── Visual helpers ──────────────────────────────────────────────────────
-
-    private fun makeButtonBg(): GradientDrawable = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(24).toFloat()
-        setColor(context.getColor(R.color.button_inactive))
-    }
-
-    private fun makeFocusRing(size: Int): GradientDrawable = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
-        setStroke(dpToPx(FocusableButton.STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
-        setColor(Color.TRANSPARENT)
-    }
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun dpToPx(dp: Int) = (dp * context.resources.displayMetrics.density + 0.5f).toInt()
 

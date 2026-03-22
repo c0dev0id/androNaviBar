@@ -1,27 +1,26 @@
 package de.codevoid.andronavibar
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
+import com.google.android.material.button.MaterialButton
 
 class AppsGridPaneContent(
     private val context: Context,
     private val apps:    List<AppEntry>
 ) : PaneContent {
 
-    private var rootView:   FrameLayout? = null
-    private var scrollView: ScrollView?  = null
-    private var cells:      List<View>   = emptyList()
-    private var focusIndex: Int          = 0
-    private var columns:    Int          = 4
+    private var rootView:   FrameLayout?       = null
+    private var scrollView: ScrollView?        = null
+    private var cells:      List<SquareButton> = emptyList()
+    private var focusIndex: Int               = 0
+    private val columns:    Int               = 2
 
     /** Called once after the grid is built and visible. */
     var onContentReady: (() -> Unit)? = null
@@ -68,7 +67,6 @@ class AppsGridPaneContent(
     // ── Grid construction ─────────────────────────────────────────────────────
 
     private fun buildGrid(root: FrameLayout) {
-        columns = 4
         val tileW = root.width / columns
 
         val scroll = ScrollView(context).apply {
@@ -81,7 +79,7 @@ class AppsGridPaneContent(
             layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
         }
 
-        val builtCells = mutableListOf<View>()
+        val builtCells = mutableListOf<SquareButton>()
         var rowLayout: LinearLayout? = null
 
         for (i in apps.indices) {
@@ -92,9 +90,7 @@ class AppsGridPaneContent(
                 }
                 col.addView(rowLayout)
             }
-            val cell = buildCell(apps[i], i == focusIndex, tileW)
-            val idx  = i
-            cell.setOnClickListener { launchApp(apps[idx]) }
+            val cell = buildCell(apps[i], i, tileW)
             rowLayout!!.addView(cell)
             builtCells.add(cell)
         }
@@ -117,54 +113,62 @@ class AppsGridPaneContent(
         onContentReady = null
     }
 
-    private fun buildCell(app: AppEntry, focused: Boolean, tileW: Int): View {
-        val iconSize = (tileW * 0.55f).toInt()
-        return LinearLayout(context).apply {
-            orientation  = LinearLayout.VERTICAL
+    private fun buildCell(app: AppEntry, index: Int, tileW: Int): SquareButton {
+        val iconSz = (tileW * 0.50f).toInt()
+        val idx = index
+        return SquareButton(context).apply {
             layoutParams = LinearLayout.LayoutParams(tileW, tileW)
-            gravity      = Gravity.CENTER
-            val p = dpToPx(6)
-            setPadding(p, p, p, p)
-            if (focused) foreground = makeFocusRing()
+            insetBottom = 0
+            insetTop = 0
+            minimumHeight = 0
+            minimumWidth = 0
+            minHeight = 0
+            minWidth = 0
 
-            addView(ImageView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).also {
-                    it.gravity = Gravity.CENTER_HORIZONTAL
-                }
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageDrawable(
-                    try { context.packageManager.getApplicationIcon(app.packageName) }
-                    catch (_: Exception) { null }
-                )
-            })
+            icon = try { context.packageManager.getApplicationIcon(app.packageName) }
+                   catch (_: Exception) { null }
+            iconGravity = MaterialButton.ICON_GRAVITY_TOP
+            this.iconSize = iconSz
+            iconTint = null
+            iconPadding = dpToPx(4)
 
-            addView(TextView(context).apply {
-                text         = app.label
-                textSize     = 10f
-                gravity      = Gravity.CENTER
-                maxLines     = 2
-                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
-                setTextColor(context.getColor(R.color.text_primary))
-            })
+            text = app.label
+            textSize = 12f
+            setTextColor(context.getColor(R.color.text_primary))
+            isAllCaps = false
+            maxLines = 2
+            gravity = Gravity.CENTER
+
+            backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            strokeWidth = 0
+            this.elevation = 0f
+            stateListAnimator = null
+            rippleColor = ColorStateList.valueOf(
+                context.getColor(R.color.colorPrimary) and 0x33FFFFFF
+            )
+
+            isFocusedButton = (index == focusIndex)
+            onFocusRequested = { moveFocus(idx) }
+            setOnClickListener { launchApp(app) }
         }
     }
 
     // ── Focus ─────────────────────────────────────────────────────────────────
 
     fun setInitialFocus() {
-        cells.getOrNull(focusIndex)?.foreground = makeFocusRing()
+        cells.getOrNull(focusIndex)?.isFocusedButton = true
     }
 
     fun clearFocus() {
-        cells.getOrNull(focusIndex)?.foreground = null
+        cells.getOrNull(focusIndex)?.isFocusedButton = false
     }
 
     private fun moveFocus(newIndex: Int) {
         val clamped = newIndex.coerceIn(0, apps.lastIndex)
         if (clamped == focusIndex) return
-        cells.getOrNull(focusIndex)?.foreground = null
+        cells.getOrNull(focusIndex)?.isFocusedButton = false
         focusIndex = clamped
-        cells.getOrNull(focusIndex)?.foreground = makeFocusRing()
+        cells.getOrNull(focusIndex)?.isFocusedButton = true
         scrollToFocused()
     }
 
@@ -189,13 +193,6 @@ class AppsGridPaneContent(
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private fun makeFocusRing(): GradientDrawable = GradientDrawable().apply {
-        shape        = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
-        setStroke(dpToPx(FocusableButton.STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
-        setColor(Color.TRANSPARENT)
-    }
 
     private fun dpToPx(dp: Int) = (dp * context.resources.displayMetrics.density + 0.5f).toInt()
 
