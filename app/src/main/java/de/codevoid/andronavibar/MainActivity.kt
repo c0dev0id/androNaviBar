@@ -79,9 +79,6 @@ class MainActivity : Activity() {
     /** Non-null while a music player pane is displayed in reservedArea. */
     private var activeMusicPlayerPane: MusicPlayerPaneContent? = null
 
-    /** Non-null while a per-button config pane is displayed in reservedArea. */
-    private var activeConfigPane: ConfigPaneContent? = null
-
     /** Non-null while the global config pane is displayed in reservedArea. */
     private var activeGlobalConfigPane: GlobalConfigPaneContent? = null
 
@@ -89,9 +86,6 @@ class MainActivity : Activity() {
     private var pendingWidgetConfig: ButtonConfig.WidgetLauncher? = null
     private var pendingWidgetButtonIndex: Int = 0
     private var pendingWidgetFromGlobalConfig = false
-
-    /** Slot index of the button whose config pane is open (-1 = none). */
-    private var configPaneButtonIndex = -1
 
     /** Loading spinner overlay, shown while a pane's content is being prepared. */
     private var loadingSpinner: ProgressBar? = null
@@ -194,15 +188,11 @@ class MainActivity : Activity() {
 
                 when (focusOwner) {
                     FocusOwner.PANE -> {
-                        if (activeConfigPane != null) {
-                            activeConfigPane?.handleKey(keyCode)
-                        } else {
-                            val handled = activeAppsGridPane?.handleKey(keyCode)
-                                ?: activeMusicPlayerPane?.handleKey(keyCode)
-                                ?: false
-                            if (!handled && keyCode == 22) {    // RIGHT at pane edge
-                                setFocusOwner(FocusOwner.BUTTONS)
-                            }
+                        val handled = activeAppsGridPane?.handleKey(keyCode)
+                            ?: activeMusicPlayerPane?.handleKey(keyCode)
+                            ?: false
+                        if (!handled && keyCode == 22) {    // RIGHT at pane edge
+                            setFocusOwner(FocusOwner.BUTTONS)
                         }
                     }
                     FocusOwner.BUTTONS -> when (keyCode) {
@@ -224,14 +214,8 @@ class MainActivity : Activity() {
                     val held = SystemClock.elapsedRealtime() - key111PressedAt
                     key111PressedAt = 0L
                     if (held < LauncherApplication.TOGGLE_HOLD_MS) {
-                        when {
-                            activeConfigPane != null -> {
-                                dismissConfigPane()
-                                deactivateActiveButton()
-                                setFocusOwner(FocusOwner.BUTTONS)
-                            }
-                            focusOwner == FocusOwner.PANE ->
-                                setFocusOwner(FocusOwner.BUTTONS)
+                        if (focusOwner == FocusOwner.PANE) {
+                            setFocusOwner(FocusOwner.BUTTONS)
                         }
                     }
                     // Long press already handled by LauncherApplication.
@@ -450,97 +434,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // ── Config pane ───────────────────────────────────────────────────────────
-
-    private fun openConfigPane(buttonIndex: Int) {
-        dismissConfigPane()
-        dismissCurrentPane()
-        deactivateActiveButton()
-        setFocus(buttonIndex)
-        configPaneButtonIndex = buttonIndex
-        activeButtonIndex = buttonIndex
-        buttons[buttonIndex].isActiveButton = true
-
-        val pane = ConfigPaneContent(
-            context       = this,
-            buttonIndex   = buttonIndex,
-            initialConfig = buttons[buttonIndex].config,
-            onSave        = { newConfig ->
-                if (newConfig is ButtonConfig.WidgetLauncher && newConfig.appWidgetId == -1) {
-                    // Widget bind flow — button stays active through the process.
-                    val newId   = appWidgetHost.allocateAppWidgetId()
-                    savePendingWidgetId(newId)
-                    val oldCfg  = buttons[configPaneButtonIndex].config
-                    if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
-                        appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
-                        widgetViews.remove(oldCfg.appWidgetId)
-                    }
-                    pendingWidgetConfig       = newConfig.copy(appWidgetId = newId)
-                    pendingWidgetButtonIndex  = configPaneButtonIndex
-                    dismissConfigPane()
-                    val mgr = AppWidgetManager.getInstance(this)
-                    if (mgr.bindAppWidgetIdIfAllowed(newId, newConfig.provider)) {
-                        completeWidgetBinding(newId)
-                    } else {
-                        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newId)
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, newConfig.provider)
-                        }
-                        @Suppress("DEPRECATION")
-                        startActivityForResult(intent, BIND_WIDGET_REQUEST_CODE)
-                    }
-                } else {
-                    val oldCfg = buttons[configPaneButtonIndex].config
-                    if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1 &&
-                        (newConfig !is ButtonConfig.WidgetLauncher ||
-                         newConfig.appWidgetId != oldCfg.appWidgetId)) {
-                        appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
-                        widgetViews.remove(oldCfg.appWidgetId)
-                    }
-                    buttons[configPaneButtonIndex].saveConfig(prefs, newConfig)
-                    dismissConfigPane()
-                    deactivateActiveButton()
-                    setFocusOwner(FocusOwner.BUTTONS)
-                }
-            },
-            onCancel = {
-                dismissConfigPane()
-                deactivateActiveButton()
-                setFocusOwner(FocusOwner.BUTTONS)
-            },
-            onClear  = {
-                val oldCfg = buttons[configPaneButtonIndex].config
-                if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
-                    appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
-                    widgetViews.remove(oldCfg.appWidgetId)
-                }
-                buttons[configPaneButtonIndex].clearConfig(prefs)
-            }
-        )
-
-        pane.onPickImageRequest = {
-            pendingIconButtonIndex = configPaneButtonIndex
-            val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
-            @Suppress("DEPRECATION")
-            startActivityForResult(intent, IMAGE_REQUEST_CODE)
-        }
-
-        activeConfigPane = pane
-        pane.load { pane.show(reservedArea) }
-        setFocusOwner(FocusOwner.PANE)
-    }
-
-    /**
-     * Remove the config pane without saving. Always safe to call; no-op when
-     * no pane is open. onSave is never fired from here.
-     */
-    private fun dismissConfigPane() {
-        val pane = activeConfigPane ?: return
-        activeConfigPane = null
-        configPaneButtonIndex = -1
-        pane.unload()
-    }
-
     // ── Image picker result ───────────────────────────────────────────────────
 
     private var pendingIconButtonIndex: Int = 0
@@ -622,7 +515,6 @@ class MainActivity : Activity() {
                         dest.outputStream().use { output -> input.copyTo(output) }
                     }
                 }
-                activeConfigPane?.onImageReady()
                 activeGlobalConfigPane?.let {
                     buttons.getOrNull(pendingIconButtonIndex)?.loadConfig(prefs)
                     it.rebuild()
@@ -635,14 +527,8 @@ class MainActivity : Activity() {
 
     @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        when {
-            activeConfigPane != null -> {
-                dismissConfigPane()
-                deactivateActiveButton()
-                setFocusOwner(FocusOwner.BUTTONS)
-            }
-            focusOwner == FocusOwner.PANE ->
-                setFocusOwner(FocusOwner.BUTTONS)
+        if (focusOwner == FocusOwner.PANE) {
+            setFocusOwner(FocusOwner.BUTTONS)
         }
         // Home launcher never exits on back.
     }
@@ -651,10 +537,8 @@ class MainActivity : Activity() {
 
     private fun wireButton(btn: LauncherButton, i: Int) {
         btn.onFocusRequested = {
-            if (activeConfigPane == null) {
-                if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
-                setFocus(i)
-            }
+            if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
+            setFocus(i)
         }
         btn.onUrlActivated         = { url  -> activateToggleButton(i) { showWebPane(url) } }
         btn.onWidgetActivated      = { id   -> activateToggleButton(i) { showWidgetPane(id) } }
