@@ -251,7 +251,8 @@ class ConfigPaneContent(
                 com.google.android.material.R.attr.materialButtonOutlinedStyle
             ).apply {
                 text         = context.getString(R.string.cancel)
-                cornerRadius = px(8)
+                cornerRadius = px(16)
+                textSize     = 18f
                 setTextColor(context.getColor(R.color.text_primary))
                 strokeColor  = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
                 strokeWidth  = px(1)
@@ -261,7 +262,8 @@ class ConfigPaneContent(
 
             addView(MaterialButton(context).apply {
                 text               = context.getString(R.string.save)
-                cornerRadius       = px(8)
+                cornerRadius       = px(16)
+                textSize           = 18f
                 backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.colorPrimary))
                 setTextColor(context.getColor(R.color.text_primary))
                 layoutParams       = LinearLayout.LayoutParams(0, WRAP, 1f)
@@ -286,8 +288,8 @@ class ConfigPaneContent(
                 com.google.android.material.R.attr.materialButtonOutlinedStyle
             ).apply {
                 text         = label
-                cornerRadius = px(8)
-                textSize     = 12f
+                cornerRadius = px(16)
+                textSize     = 16f
                 setTextColor(context.getColor(R.color.text_primary))
                 layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
                     if (!last) marginEnd = px(4)
@@ -400,13 +402,13 @@ class ConfigPaneContent(
     private fun buildAppRow(app: ResolveInfo, selected: Boolean): View {
         return LinearLayout(context).apply {
             orientation  = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, px(56))
+            layoutParams = LinearLayout.LayoutParams(MATCH, px(64))
             setPadding(px(8), px(8), px(8), px(8))
             gravity      = Gravity.CENTER_VERTICAL
             setBackgroundColor(rowBg(selected))
 
             addView(ImageView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(px(36), px(36)).apply { marginEnd = px(12) }
+                layoutParams = LinearLayout.LayoutParams(px(44), px(44)).apply { marginEnd = px(12) }
                 scaleType    = ImageView.ScaleType.FIT_CENTER
                 setImageDrawable(try {
                     context.packageManager.getApplicationIcon(app.activityInfo.packageName)
@@ -415,7 +417,7 @@ class ConfigPaneContent(
 
             addView(TextView(context).apply {
                 text     = app.loadLabel(context.packageManager)
-                textSize = 16f
+                textSize = 18f
                 setTextColor(context.getColor(R.color.text_primary))
             })
         }
@@ -454,7 +456,7 @@ class ConfigPaneContent(
         if (widgetProviders.isEmpty()) {
             outer.addView(TextView(context).apply {
                 text     = context.getString(R.string.no_widgets)
-                textSize = 16f
+                textSize = 18f
                 setTextColor(context.getColor(R.color.text_secondary))
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = px(8) }
             })
@@ -523,13 +525,13 @@ class ConfigPaneContent(
     private fun buildWidgetRow(info: AppWidgetProviderInfo, selected: Boolean): View {
         return LinearLayout(context).apply {
             orientation  = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, px(56))
+            layoutParams = LinearLayout.LayoutParams(MATCH, px(64))
             setPadding(px(8), px(8), px(8), px(8))
             gravity      = Gravity.CENTER_VERTICAL
             setBackgroundColor(rowBg(selected))
 
             addView(ImageView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(px(36), px(36)).apply { marginEnd = px(12) }
+                layoutParams = LinearLayout.LayoutParams(px(44), px(44)).apply { marginEnd = px(12) }
                 scaleType    = ImageView.ScaleType.FIT_CENTER
                 setImageDrawable(try {
                     info.loadIcon(context, context.resources.displayMetrics.densityDpi)
@@ -538,7 +540,7 @@ class ConfigPaneContent(
 
             addView(TextView(context).apply {
                 text     = info.loadLabel(context.packageManager)
-                textSize = 16f
+                textSize = 18f
                 setTextColor(context.getColor(R.color.text_primary))
             })
         }
@@ -620,7 +622,7 @@ class ConfigPaneContent(
     private fun buildAppCheckRow(app: android.content.pm.ResolveInfo, checked: Boolean): View {
         return LinearLayout(context).apply {
             orientation  = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, px(56))
+            layoutParams = LinearLayout.LayoutParams(MATCH, px(64))
             setPadding(px(8), px(8), px(8), px(8))
             gravity      = Gravity.CENTER_VERTICAL
 
@@ -634,7 +636,7 @@ class ConfigPaneContent(
             addView(cb)
 
             addView(ImageView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(px(36), px(36)).apply {
+                layoutParams = LinearLayout.LayoutParams(px(44), px(44)).apply {
                     marginStart = px(8); marginEnd = px(12)
                 }
                 scaleType = ImageView.ScaleType.FIT_CENTER
@@ -645,7 +647,7 @@ class ConfigPaneContent(
 
             addView(TextView(context).apply {
                 text     = app.loadLabel(context.packageManager)
-                textSize = 16f
+                textSize = 18f
                 setTextColor(context.getColor(R.color.text_primary))
             })
 
@@ -801,8 +803,8 @@ class ConfigPaneContent(
                 com.google.android.material.R.attr.materialButtonOutlinedStyle
             ).apply {
                 text         = label
-                cornerRadius = px(8)
-                textSize     = 12f
+                cornerRadius = px(16)
+                textSize     = 16f
                 setTextColor(context.getColor(R.color.text_primary))
                 layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
                     if (!last) marginEnd = px(4)

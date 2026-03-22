@@ -15,7 +15,6 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
@@ -117,7 +116,22 @@ class LauncherButton @JvmOverloads constructor(
     var isFocusedButton: Boolean = false
         set(value) {
             field = value
-            foreground = if (value) makeFocusRing() else null
+            foreground = null
+            if (value) {
+                elevation = dpToPx(24).toFloat()
+                outlineAmbientShadowColor = context.getColor(R.color.colorPrimary)
+                outlineSpotShadowColor = context.getColor(R.color.colorPrimary)
+                backgroundTintList = ColorStateList.valueOf(
+                    context.getColor(if (isActiveButton) R.color.colorPrimary else R.color.button_focused)
+                )
+            } else {
+                elevation = dpToPx(4).toFloat()
+                outlineAmbientShadowColor = Color.BLACK
+                outlineSpotShadowColor = Color.BLACK
+                backgroundTintList = ColorStateList.valueOf(
+                    context.getColor(if (isActiveButton) R.color.colorPrimary else R.color.button_inactive)
+                )
+            }
         }
 
     /** Persistent highlight showing this button's content pane is displayed. */
@@ -125,7 +139,8 @@ class LauncherButton @JvmOverloads constructor(
         set(value) {
             field = value
             backgroundTintList = ColorStateList.valueOf(
-                context.getColor(if (value) R.color.colorPrimary else R.color.button_inactive)
+                context.getColor(if (value) R.color.colorPrimary else
+                    if (isFocusedButton) R.color.button_focused else R.color.button_inactive)
             )
         }
 
@@ -521,13 +536,6 @@ class LauncherButton @JvmOverloads constructor(
         handler.postDelayed({
             backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
         }, 150L)
-    }
-
-    private fun makeFocusRing(): GradientDrawable = GradientDrawable().apply {
-        shape        = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(16).toFloat()
-        setStroke(dpToPx(6), context.getColor(R.color.colorPrimary))
-        setColor(Color.TRANSPARENT)
     }
 
     private fun dpToPx(dp: Int): Int =

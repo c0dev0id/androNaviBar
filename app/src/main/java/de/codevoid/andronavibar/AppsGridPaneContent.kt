@@ -139,7 +139,7 @@ class AppsGridPaneContent(
 
             addView(TextView(context).apply {
                 text         = app.label
-                textSize     = 10f
+                textSize     = 14f
                 gravity      = Gravity.CENTER
                 maxLines     = 2
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)

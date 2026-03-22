@@ -5,6 +5,7 @@
     <color name="colorAccent">#F57C00</color>
     <color name="button_active">#F57C00</color>
     <color name="button_inactive">#444444</color>
+    <color name="button_focused">#555555</color>
     <color name="surface_dark">#2B2B2B</color>
     <color name="surface_card">#3C3C3C</color>
     <color name="background_dark">#1A1A1A</color>
