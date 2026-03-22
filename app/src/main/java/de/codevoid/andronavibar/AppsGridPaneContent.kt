@@ -130,7 +130,6 @@ class AppsGridPaneContent(
             context.packageManager.getApplicationIcon(app.packageName)
         } catch (_: Exception) { null }
         cell.text = app.label
-        cell.isFocusedButton = (index == focusIndex)
         cell.onFocusRequested = { moveFocus(index) }
         cell.setOnClickListener { launchApp(app) }
         return cell
@@ -139,7 +138,12 @@ class AppsGridPaneContent(
     // ── Focus ───────────────────────────────────────────────────────────────────
 
     fun setInitialFocus() {
+        // Snap to rightmost column of current row — spatial navigation enters
+        // from the button column on the right, so focus appears at the right edge.
+        val row = focusIndex / columns
+        focusIndex = minOf(row * columns + columns - 1, apps.lastIndex)
         cells.getOrNull(focusIndex)?.isFocusedButton = true
+        scrollToFocused()
     }
 
     fun clearFocus() {
