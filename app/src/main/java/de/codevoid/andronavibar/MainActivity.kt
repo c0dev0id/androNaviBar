@@ -88,6 +88,7 @@ class MainActivity : Activity() {
     /** Holds a partially-bound widget config while waiting for the system bind dialog result. */
     private var pendingWidgetConfig: ButtonConfig.WidgetLauncher? = null
     private var pendingWidgetButtonIndex: Int = 0
+    private var pendingWidgetFromGlobalConfig = false
 
     /** Slot index of the button whose config pane is open (-1 = none). */
     private var configPaneButtonIndex = -1
@@ -410,7 +411,9 @@ class MainActivity : Activity() {
 
     private fun finishWidgetSetup() {
         val cfg = pendingWidgetConfig ?: return
+        val fromGlobalConfig = pendingWidgetFromGlobalConfig
         pendingWidgetConfig = null
+        pendingWidgetFromGlobalConfig = false
         clearPendingWidgetId()
         buttons[pendingWidgetButtonIndex].saveConfig(prefs, cfg)
         if (cfg.appWidgetId != -1) {
@@ -418,7 +421,10 @@ class MainActivity : Activity() {
             if (info != null) {
                 widgetViews[cfg.appWidgetId] = appWidgetHost.createView(this, cfg.appWidgetId, info)
             }
-            // Button is already active from the config→bind flow
+        }
+        if (fromGlobalConfig) {
+            activeGlobalConfigPane?.rebuild()
+        } else if (cfg.appWidgetId != -1) {
             showWidgetPane(cfg.appWidgetId)
             setFocusOwner(FocusOwner.PANE)
         } else {
@@ -548,6 +554,7 @@ class MainActivity : Activity() {
                     val id = pendingWidgetConfig?.appWidgetId ?: -1
                     if (id != -1) completeWidgetBinding(id)
                 } else {
+                    val fromGlobalConfig = pendingWidgetFromGlobalConfig
                     pendingWidgetConfig?.let {
                         if (it.appWidgetId != -1) {
                             appWidgetHost.deleteAppWidgetId(it.appWidgetId)
@@ -555,9 +562,16 @@ class MainActivity : Activity() {
                         }
                     }
                     pendingWidgetConfig = null
+                    pendingWidgetFromGlobalConfig = false
                     clearPendingWidgetId()
-                    deactivateActiveButton()
-                    setFocusOwner(FocusOwner.BUTTONS)
+                    if (fromGlobalConfig) {
+                        prefs.edit().remove("btn_${pendingWidgetButtonIndex}_widget_id").apply()
+                        buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(prefs)
+                        activeGlobalConfigPane?.rebuild()
+                    } else {
+                        deactivateActiveButton()
+                        setFocusOwner(FocusOwner.BUTTONS)
+                    }
                 }
                 return
             }
@@ -565,6 +579,7 @@ class MainActivity : Activity() {
                 if (resultCode == RESULT_OK) {
                     finishWidgetSetup()
                 } else {
+                    val fromGlobalConfig = pendingWidgetFromGlobalConfig
                     pendingWidgetConfig?.let {
                         if (it.appWidgetId != -1) {
                             appWidgetHost.deleteAppWidgetId(it.appWidgetId)
@@ -572,9 +587,16 @@ class MainActivity : Activity() {
                         }
                     }
                     pendingWidgetConfig = null
+                    pendingWidgetFromGlobalConfig = false
                     clearPendingWidgetId()
-                    deactivateActiveButton()
-                    setFocusOwner(FocusOwner.BUTTONS)
+                    if (fromGlobalConfig) {
+                        prefs.edit().remove("btn_${pendingWidgetButtonIndex}_widget_id").apply()
+                        buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(prefs)
+                        activeGlobalConfigPane?.rebuild()
+                    } else {
+                        deactivateActiveButton()
+                        setFocusOwner(FocusOwner.BUTTONS)
+                    }
                 }
                 return
             }
@@ -738,6 +760,45 @@ class MainActivity : Activity() {
                 val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
                 @Suppress("DEPRECATION")
                 startActivityForResult(intent, IMAGE_REQUEST_CODE)
+            }
+            override fun onWidgetBind(buttonIndex: Int, provider: android.content.ComponentName) {
+                // Clean up old widget for this button
+                val oldCfg = buttons.getOrNull(buttonIndex)?.config
+                if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
+                    appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
+                    widgetViews.remove(oldCfg.appWidgetId)
+                }
+
+                val label = prefs.getString("btn_${buttonIndex}_label", "") ?: ""
+                val iconType = prefs.getString("btn_${buttonIndex}_icon_type", null)
+                val iconData = prefs.getString("btn_${buttonIndex}_icon_data", null)
+                val icon = when (iconType) {
+                    "custom" -> UrlIcon.CustomFile
+                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
+                    else     -> UrlIcon.None
+                }
+
+                val newId = appWidgetHost.allocateAppWidgetId()
+                savePendingWidgetId(newId)
+                pendingWidgetConfig = ButtonConfig.WidgetLauncher(provider, newId, label, icon)
+                pendingWidgetButtonIndex = buttonIndex
+                pendingWidgetFromGlobalConfig = true
+
+                val mgr = AppWidgetManager.getInstance(this@MainActivity)
+                if (mgr.bindAppWidgetIdIfAllowed(newId, provider)) {
+                    completeWidgetBinding(newId)
+                } else {
+                    val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newId)
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+                    }
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(intent, BIND_WIDGET_REQUEST_CODE)
+                }
+            }
+            override fun onWidgetCleanup(appWidgetId: Int) {
+                appWidgetHost.deleteAppWidgetId(appWidgetId)
+                widgetViews.remove(appWidgetId)
             }
         })
         activeGlobalConfigPane = pane

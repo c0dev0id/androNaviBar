@@ -1,18 +1,31 @@
 package de.codevoid.andronavibar
 
+import android.app.AlertDialog
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
+import android.text.InputType
 import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.Spinner
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import java.io.File
@@ -21,7 +34,8 @@ import java.io.File
  * Global configuration pane shown by the Configure button.
  *
  * Displays a scrollable list of all button slots. Each slot shows:
- * type selector, label editor, icon selector, and move up/down controls.
+ * type selector, label editor, type-specific config (app/URL/widget/apps/music
+ * picker), icon selector, and move up/down controls.
  * Changes are written to SharedPreferences immediately (no save/cancel).
  */
 class GlobalConfigPaneContent(
@@ -36,14 +50,30 @@ class GlobalConfigPaneContent(
         fun onAddButton()
         fun onRemoveLastButton()
         fun onPickImage(buttonIndex: Int)
+        fun onWidgetBind(buttonIndex: Int, provider: ComponentName)
+        fun onWidgetCleanup(appWidgetId: Int)
     }
 
     private var rootView: ScrollView? = null
     private var listContainer: LinearLayout? = null
 
+    private var installedApps: List<ResolveInfo> = emptyList()
+    private var widgetProviders: List<AppWidgetProviderInfo> = emptyList()
+
     // ── PaneContent ─────────────────────────────────────────────────────────
 
-    override fun load(onReady: () -> Unit) { onReady() }
+    override fun load(onReady: () -> Unit) {
+        val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        installedApps = context.packageManager
+            .queryIntentActivities(mainIntent, PackageManager.MATCH_ALL)
+            .sortedBy { it.loadLabel(context.packageManager).toString().lowercase() }
+
+        widgetProviders = AppWidgetManager.getInstance(context)
+            .installedProviders
+            .sortedBy { it.loadLabel(context.packageManager).lowercase() }
+
+        onReady()
+    }
 
     override fun show(container: ViewGroup) {
         val root = buildLayout()
@@ -119,6 +149,11 @@ class GlobalConfigPaneContent(
         // ── Label field (only for non-empty buttons) ────────────────────
         if (type != null) {
             card.addView(buildLabelField(index, label))
+        }
+
+        // ── Type-specific config ────────────────────────────────────────
+        if (type != null) {
+            buildTypeConfig(index, type)?.let { card.addView(it) }
         }
 
         // ── Icon selector (non-empty, non-app buttons) ─────────────────
@@ -231,6 +266,309 @@ class GlobalConfigPaneContent(
         })
 
         row.addView(edit)
+        return row
+    }
+
+    // ── Type-specific configuration ──────────────────────────────────────────
+
+    private fun buildTypeConfig(index: Int, type: String): View? {
+        return when (type) {
+            "app"    -> buildAppConfig(index)
+            "url"    -> buildUrlConfig(index)
+            "widget" -> buildWidgetConfig(index)
+            "apps"   -> buildAppsGridConfig(index)
+            "music"  -> buildMusicConfig(index)
+            else     -> null
+        }
+    }
+
+    private fun buildAppConfig(index: Int): View {
+        val currentPkg = prefs.getString("btn_${index}_value", null)
+
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        row.addView(TextView(context).apply {
+            text = "App: "
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        })
+
+        if (installedApps.isEmpty()) {
+            row.addView(TextView(context).apply {
+                text = "No apps found"
+                textSize = 14f
+                setTextColor(context.getColor(R.color.text_secondary))
+            })
+            return row
+        }
+
+        val labels = installedApps.map { it.loadLabel(context.packageManager).toString() }
+        val selectedIndex = if (currentPkg != null) {
+            installedApps.indexOfFirst { it.activityInfo.packageName == currentPkg }
+                .coerceAtLeast(0)
+        } else 0
+
+        val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
+            val app = installedApps[position]
+            val appLabel = app.loadLabel(context.packageManager).toString()
+            prefs.edit()
+                .putString("btn_${index}_value", app.activityInfo.packageName)
+                .putString("btn_${index}_label", appLabel)
+                .apply()
+            callbacks.onReloadButton(index)
+            rebuildPreservingScroll()
+        }
+        row.addView(spinner)
+
+        return row
+    }
+
+    private fun buildUrlConfig(index: Int): View {
+        val currentUrl = prefs.getString("btn_${index}_value", "") ?: ""
+        val currentOpenBrowser = prefs.getString("btn_${index}_open_browser", null) == "true"
+
+        val wrapper = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+        }
+
+        // URL field
+        val urlRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        urlRow.addView(TextView(context).apply {
+            text = "URL: "
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        })
+
+        val urlEdit = EditText(context).apply {
+            setText(currentUrl)
+            hint = "https://\u2026"
+            textSize = 14f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setTextColor(context.getColor(R.color.text_primary))
+            setHintTextColor(context.getColor(R.color.text_secondary))
+            setSingleLine(true)
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+
+        urlEdit.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                prefs.edit().putString("btn_${index}_value", s?.toString() ?: "").apply()
+                callbacks.onReloadButton(index)
+            }
+        })
+
+        urlRow.addView(urlEdit)
+        wrapper.addView(urlRow)
+
+        // Open in browser checkbox
+        val checkbox = CheckBox(context).apply {
+            text = "Open in browser"
+            isChecked = currentOpenBrowser
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_primary))
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(4) }
+        }
+        checkbox.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) prefs.edit().putString("btn_${index}_open_browser", "true").apply()
+            else prefs.edit().remove("btn_${index}_open_browser").apply()
+            callbacks.onReloadButton(index)
+        }
+
+        wrapper.addView(checkbox)
+        return wrapper
+    }
+
+    private fun buildWidgetConfig(index: Int): View {
+        val currentValue = prefs.getString("btn_${index}_value", null)
+        val currentProvider = currentValue?.let { ComponentName.unflattenFromString(it) }
+        val currentWidgetId = prefs.getString("btn_${index}_widget_id", null)
+            ?.toIntOrNull() ?: -1
+
+        val wrapper = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+        }
+
+        if (widgetProviders.isEmpty()) {
+            wrapper.addView(TextView(context).apply {
+                text = "No widget providers found"
+                textSize = 14f
+                setTextColor(context.getColor(R.color.text_secondary))
+            })
+            return wrapper
+        }
+
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        row.addView(TextView(context).apply {
+            text = "Widget: "
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        })
+
+        // Placeholder + real providers
+        val placeholder = "Select widget\u2026"
+        val labels = listOf(placeholder) +
+            widgetProviders.map { it.loadLabel(context.packageManager) }
+        val selectedIndex = if (currentProvider != null) {
+            val provIdx = widgetProviders.indexOfFirst { it.provider == currentProvider }
+            if (provIdx >= 0) provIdx + 1 else 0
+        } else 0
+
+        val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
+            if (position == 0) return@makeDarkSpinner // placeholder
+            val provider = widgetProviders[position - 1]
+            prefs.edit()
+                .putString("btn_${index}_value", provider.provider.flattenToString())
+                .apply()
+            val label = prefs.getString("btn_${index}_label", "") ?: ""
+            if (label.isEmpty()) {
+                prefs.edit().putString(
+                    "btn_${index}_label",
+                    provider.loadLabel(context.packageManager)
+                ).apply()
+            }
+            callbacks.onWidgetBind(index, provider.provider)
+        }
+        row.addView(spinner)
+        wrapper.addView(row)
+
+        // Bind status + retry button
+        if (currentWidgetId != -1) {
+            wrapper.addView(TextView(context).apply {
+                text = "\u2713 Widget bound"
+                textSize = 12f
+                setTextColor(context.getColor(R.color.text_secondary))
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = dpToPx(4)
+                }
+            })
+        } else if (currentProvider != null) {
+            wrapper.addView(makeActionButton("Bind widget\u2026") {
+                callbacks.onWidgetBind(index, currentProvider)
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
+                    topMargin = dpToPx(4)
+                }
+            })
+        }
+
+        return wrapper
+    }
+
+    private fun buildAppsGridConfig(index: Int): View {
+        val currentApps = prefs.getString("btn_${index}_apps", "") ?: ""
+        val selectedPkgs = currentApps.split("|").filter { it.isNotEmpty() }.toMutableSet()
+
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        row.addView(TextView(context).apply {
+            text = "${selectedPkgs.size} app${if (selectedPkgs.size != 1) "s" else ""} selected"
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
+        })
+
+        row.addView(makeActionButton("Choose\u2026") {
+            showAppsPickerDialog(index)
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        })
+
+        return row
+    }
+
+    private fun showAppsPickerDialog(index: Int) {
+        val currentApps = prefs.getString("btn_${index}_apps", "") ?: ""
+        val selectedPkgs = currentApps.split("|").filter { it.isNotEmpty() }.toMutableSet()
+
+        val labels = installedApps.map {
+            it.loadLabel(context.packageManager).toString()
+        }.toTypedArray()
+        val packages = installedApps.map { it.activityInfo.packageName }
+        val checked = packages.map { selectedPkgs.contains(it) }.toBooleanArray()
+
+        AlertDialog.Builder(context)
+            .setTitle("Select apps")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                if (isChecked) selectedPkgs.add(packages[which])
+                else selectedPkgs.remove(packages[which])
+            }
+            .setPositiveButton("Done") { _, _ ->
+                prefs.edit()
+                    .putString("btn_${index}_apps", selectedPkgs.joinToString("|"))
+                    .apply()
+                callbacks.onReloadButton(index)
+                rebuildPreservingScroll()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun buildMusicConfig(index: Int): View {
+        val currentPkg = prefs.getString("btn_${index}_value", null)
+
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        row.addView(TextView(context).apply {
+            text = "Player: "
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        })
+
+        if (installedApps.isEmpty()) {
+            row.addView(TextView(context).apply {
+                text = "No apps found"
+                textSize = 14f
+                setTextColor(context.getColor(R.color.text_secondary))
+            })
+            return row
+        }
+
+        val labels = installedApps.map { it.loadLabel(context.packageManager).toString() }
+        val selectedIndex = if (currentPkg != null) {
+            installedApps.indexOfFirst { it.activityInfo.packageName == currentPkg }
+                .coerceAtLeast(0)
+        } else 0
+
+        val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
+            val app = installedApps[position]
+            prefs.edit()
+                .putString("btn_${index}_value", app.activityInfo.packageName)
+                .apply()
+            callbacks.onReloadButton(index)
+        }
+        row.addView(spinner)
+
         return row
     }
 
@@ -350,6 +688,14 @@ class GlobalConfigPaneContent(
     // ── Type change ─────────────────────────────────────────────────────────
 
     private fun changeButtonType(index: Int, typeKey: String?) {
+        // Clean up old widget if changing away from widget type
+        val oldType = prefs.getString("btn_${index}_type", null)
+        if (oldType == "widget") {
+            val widgetId = prefs.getString("btn_${index}_widget_id", null)
+                ?.toIntOrNull() ?: -1
+            if (widgetId != -1) callbacks.onWidgetCleanup(widgetId)
+        }
+
         val edit = prefs.edit()
             .remove("btn_${index}_type")
             .remove("btn_${index}_value")
@@ -362,12 +708,30 @@ class GlobalConfigPaneContent(
 
         if (typeKey != null) {
             edit.putString("btn_${index}_type", typeKey)
-            val defaultLabel = when (typeKey) {
-                "apps"  -> "Apps"
-                "music" -> "Music"
-                else    -> ""
+            when (typeKey) {
+                "app" -> {
+                    val first = installedApps.firstOrNull()
+                    if (first != null) {
+                        edit.putString("btn_${index}_value",
+                            first.activityInfo.packageName)
+                        edit.putString("btn_${index}_label",
+                            first.loadLabel(context.packageManager).toString())
+                    } else {
+                        edit.putString("btn_${index}_label", "")
+                    }
+                }
+                "url" -> edit.putString("btn_${index}_label", "")
+                "widget" -> edit.putString("btn_${index}_label", "")
+                "apps" -> edit.putString("btn_${index}_label", "Apps")
+                "music" -> {
+                    val first = installedApps.firstOrNull()
+                    if (first != null) {
+                        edit.putString("btn_${index}_value",
+                            first.activityInfo.packageName)
+                    }
+                    edit.putString("btn_${index}_label", "Music")
+                }
             }
-            edit.putString("btn_${index}_label", defaultLabel)
         }
 
         edit.apply()
@@ -425,6 +789,65 @@ class GlobalConfigPaneContent(
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private fun rebuildPreservingScroll() {
+        val scrollY = rootView?.scrollY ?: 0
+        rebuild()
+        rootView?.post { rootView?.scrollTo(0, scrollY) }
+    }
+
+    private fun makeDarkSpinner(
+        labels: List<String>,
+        selectedIndex: Int,
+        onSelected: (Int) -> Unit
+    ): Spinner {
+        val spinner = Spinner(context).apply {
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
+            setPopupBackgroundDrawable(
+                ColorDrawable(context.getColor(R.color.surface_card))
+            )
+        }
+
+        val adapter = object : ArrayAdapter<String>(
+            context, android.R.layout.simple_spinner_item, labels
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return (super.getView(position, convertView, parent) as TextView).apply {
+                    setTextColor(context.getColor(R.color.text_primary))
+                    textSize = 14f
+                }
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return (super.getDropDownView(position, convertView, parent) as TextView).apply {
+                    setTextColor(context.getColor(R.color.text_primary))
+                    textSize = 14f
+                    val p = dpToPx(12)
+                    setPadding(p, p, p, p)
+                }
+            }
+        }
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinner.adapter = adapter
+        spinner.setSelection(selectedIndex)
+
+        // Only fire callback on genuine user interaction, not programmatic selection.
+        var userTouched = false
+        spinner.setOnTouchListener { _, _ ->
+            userTouched = true
+            false
+        }
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?, view: View?, position: Int, id: Long
+            ) {
+                if (!userTouched) return
+                onSelected(position)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        return spinner
+    }
 
     private fun makeSmallButton(
         label: String,
