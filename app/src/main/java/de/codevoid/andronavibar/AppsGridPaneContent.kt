@@ -115,40 +115,25 @@ class AppsGridPaneContent(
 
     private fun buildCell(app: AppEntry, index: Int, tileW: Int): SquareButton {
         val iconSz = (tileW * 0.50f).toInt()
-        val idx = index
         return SquareButton(context).apply {
             layoutParams = LinearLayout.LayoutParams(tileW, tileW)
-            insetBottom = 0
-            insetTop = 0
-            minimumHeight = 0
-            minimumWidth = 0
-            minHeight = 0
-            minWidth = 0
 
             icon = try { context.packageManager.getApplicationIcon(app.packageName) }
                    catch (_: Exception) { null }
             iconGravity = MaterialButton.ICON_GRAVITY_TOP
             this.iconSize = iconSz
-            iconTint = null
             iconPadding = dpToPx(4)
 
             text = app.label
             textSize = 12f
             setTextColor(context.getColor(R.color.text_primary))
-            isAllCaps = false
             maxLines = 2
             gravity = Gravity.CENTER
 
             backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-            strokeWidth = 0
-            this.elevation = 0f
-            stateListAnimator = null
-            rippleColor = ColorStateList.valueOf(
-                context.getColor(R.color.colorPrimary) and 0x33FFFFFF
-            )
 
             isFocusedButton = (index == focusIndex)
-            onFocusRequested = { moveFocus(idx) }
+            onFocusRequested = { moveFocus(index) }
             setOnClickListener { launchApp(app) }
         }
     }

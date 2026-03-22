@@ -194,34 +194,17 @@ class MusicPlayerPaneContent(
                 layoutParams = LinearLayout.LayoutParams(btnSize, btnSize).apply {
                     if (i > 0) marginStart = spacing
                 }
-                insetBottom = 0
-                insetTop = 0
-                minimumHeight = 0
-                minimumWidth = 0
-                minHeight = 0
-                minWidth = 0
 
                 icon = BitmapDrawable(context.resources, icons[i])
                 this.iconSize = iconSz
-                iconTint = null
                 iconPadding = 0
                 iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
                 setPadding(0, 0, 0, 0)
 
                 backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
-                cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP)
-                this.elevation = 0f
-                stateListAnimator = null
-                rippleColor = ColorStateList.valueOf(
-                    context.getColor(R.color.colorPrimary) and 0x33FFFFFF
-                )
 
                 isFocusedButton = (i == focusIndex)
-                onFocusRequested = {
-                    controlViews.getOrNull(focusIndex)?.isFocusedButton = false
-                    focusIndex = idx
-                    controlViews.getOrNull(idx)?.isFocusedButton = true
-                }
+                onFocusRequested = { moveFocus(idx) }
                 setOnClickListener { activateControl(idx) }
             }
             controlRow.addView(btn)
