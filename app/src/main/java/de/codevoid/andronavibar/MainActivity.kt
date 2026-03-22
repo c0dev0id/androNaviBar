@@ -3,12 +3,12 @@ package de.codevoid.andronavibar
 import android.app.Activity
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProviderInfo
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.RectF
@@ -16,25 +16,25 @@ import com.caverock.androidsvg.SVG
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
-import android.widget.TextView
+import android.widget.ScrollView
 import java.io.File
 import java.lang.ref.WeakReference
 
 class MainActivity : Activity() {
 
     private lateinit var prefs:           SharedPreferences
-    private lateinit var buttons:         List<LauncherButton>
+    private val buttons = mutableListOf<LauncherButton>()
+    private lateinit var buttonScroll:    ScrollView
+    private lateinit var buttonPanel:     LinearLayout
+    private lateinit var configureButton: FocusableButton
     private lateinit var reservedArea:    FrameLayout
-    private lateinit var dragHandlePanel: LinearLayout
     private lateinit var appWidgetHost:   SafeAppWidgetHost
     private val widgetViews = mutableMapOf<Int, AppWidgetHostView>()
 
@@ -86,11 +86,7 @@ class MainActivity : Activity() {
     private var pendingWidgetConfig: ButtonConfig.WidgetLauncher? = null
     private var pendingWidgetButtonIndex: Int = 0
 
-    /**
-     * The current slot index of the button whose config pane is open.
-     * Kept in sync with drag reorders so save/clear/image-pick always
-     * target the right slot even after buttons have been moved around.
-     */
+    /** Slot index of the button whose config pane is open (-1 = none). */
     private var configPaneButtonIndex = -1
 
     /** Loading spinner overlay, shown while a pane's content is being prepared. */
@@ -111,42 +107,36 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         hideSystemBars()
-        prefs          = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
-        reservedArea   = findViewById(R.id.reservedArea)
-        appWidgetHost  = SafeAppWidgetHost(this, APP_WIDGET_HOST_ID)
+        prefs         = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
+        reservedArea  = findViewById(R.id.reservedArea)
+        buttonScroll  = findViewById(R.id.buttonScroll)
+        buttonPanel   = findViewById(R.id.buttonPanel)
+        appWidgetHost = SafeAppWidgetHost(this, APP_WIDGET_HOST_ID)
         cleanupOrphanedWidgetId()
-        focusedIndex   = prefs.getInt("focused_index", 0)
+        focusedIndex  = prefs.getInt("focused_index", 0)
 
-        buttons = listOf(
-            findViewById(R.id.button0),
-            findViewById(R.id.button1),
-            findViewById(R.id.button2),
-            findViewById(R.id.button3),
-            findViewById(R.id.button4),
-            findViewById(R.id.button5)
-        )
-
-        for (i in buttons.indices) {
-            buttons[i].index = i
-            buttons[i].onFocusRequested = {
-                if (activeConfigPane == null) {
-                    if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
-                    setFocus(i)
-                }
-            }
-            buttons[i].onConfigRequested = {
-                if (activeConfigPane == null) openConfigPane(i)
-            }
-            buttons[i].onUrlActivated      = { url  -> activateToggleButton(i) { showWebPane(url) } }
-            buttons[i].onWidgetActivated   = { id   -> activateToggleButton(i) { showWidgetPane(id) } }
-            buttons[i].onAppsGridActivated     = { apps -> activateToggleButton(i, interactive = true) { showAppsGridPane(apps) } }
-            buttons[i].onMusicPlayerActivated  = { pkg  -> activateToggleButton(i, interactive = true) { showMusicPlayerPane(pkg) } }
-            buttons[i].loadConfig(prefs)
+        val count = prefs.getInt("button_count", DEFAULT_BUTTON_COUNT)
+        for (i in 0 until count) {
+            val btn = layoutInflater.inflate(
+                R.layout.launcher_button_item, buttonPanel, false
+            ) as LauncherButton
+            btn.index = i
+            wireButton(btn, i)
+            btn.loadConfig(prefs)
+            buttonPanel.addView(btn)
+            buttons.add(btn)
         }
 
-        preCreateWidgetViews()
+        configureButton = createConfigureButton()
+        buttonPanel.addView(configureButton)
 
-        setupDragHandles()
+        preCreateWidgetViews()
+        focusedIndex = focusedIndex.coerceIn(0, buttons.size)
+
+        buttonPanel.post {
+            adjustButtonHeights()
+            scrollToFocused()
+        }
         updateFocus()
     }
 
@@ -200,14 +190,25 @@ class MainActivity : Activity() {
 
                 when (focusOwner) {
                     FocusOwner.PANE -> {
-                        activeConfigPane?.handleKey(keyCode)
-                            ?: activeAppsGridPane?.handleKey(keyCode)
-                            ?: activeMusicPlayerPane?.handleKey(keyCode)
+                        if (activeConfigPane != null) {
+                            activeConfigPane?.handleKey(keyCode)
+                        } else {
+                            val handled = activeAppsGridPane?.handleKey(keyCode)
+                                ?: activeMusicPlayerPane?.handleKey(keyCode)
+                                ?: false
+                            if (!handled && keyCode == 22) {    // RIGHT at pane edge
+                                setFocusOwner(FocusOwner.BUTTONS)
+                            }
+                        }
                     }
                     FocusOwner.BUTTONS -> when (keyCode) {
-                        19 -> moveFocus(-1)                    // DPAD_UP
-                        20 -> moveFocus(+1)                    // DPAD_DOWN
-                        66 -> buttons[focusedIndex].activate() // ROUND BUTTON 1
+                        19 -> moveFocus(-1)                     // DPAD_UP
+                        20 -> moveFocus(+1)                     // DPAD_DOWN
+                        21 -> enterPane()                       // LEFT → enter pane
+                        66 -> {                                 // ROUND BUTTON 1
+                            if (focusedIndex < buttons.size)
+                                buttons[focusedIndex].activate()
+                        }
                     }
                 }
 
@@ -238,19 +239,21 @@ class MainActivity : Activity() {
     // ── Focus management ──────────────────────────────────────────────────────
 
     private fun setFocus(index: Int) {
-        focusedIndex = index
+        focusedIndex = index.coerceIn(0, buttons.size)
         prefs.edit().putInt("focused_index", focusedIndex).apply()
         updateFocus()
+        scrollToFocused()
     }
 
     private fun moveFocus(delta: Int) {
-        setFocus((focusedIndex + delta).coerceIn(0, buttons.lastIndex))
+        setFocus(focusedIndex + delta)
     }
 
     private fun updateFocus() {
         for (i in buttons.indices) {
             buttons[i].isFocusedButton = (focusOwner == FocusOwner.BUTTONS && i == focusedIndex)
         }
+        configureButton.isFocusedButton = (focusOwner == FocusOwner.BUTTONS && focusedIndex == buttons.size)
     }
 
     private fun setFocusOwner(owner: FocusOwner) {
@@ -267,15 +270,12 @@ class MainActivity : Activity() {
 
     /**
      * Show a toggle button's content pane. If the button is already active
-     * (its pane is displayed) and the pane is interactive, move focus to it.
-     *
-     * @param interactive true for panes with D-pad navigation (AppsGrid);
-     *                    false for display-only panes (WebView, Widget)
-     *                    where focus stays on the button column.
+     * (its pane is displayed), toggle it off instead.
      */
-    private fun activateToggleButton(index: Int, interactive: Boolean = false, showPane: () -> Unit) {
+    private fun activateToggleButton(index: Int, showPane: () -> Unit) {
         if (activeButtonIndex == index) {
-            if (interactive) setFocusOwner(FocusOwner.PANE)
+            dismissCurrentPane()
+            deactivateActiveButton()
             return
         }
         dismissCurrentPane()
@@ -283,7 +283,6 @@ class MainActivity : Activity() {
         activeButtonIndex = index
         buttons[index].isActiveButton = true
         showPane()
-        if (interactive) setFocusOwner(FocusOwner.PANE)
     }
 
     private fun deactivateActiveButton() {
@@ -514,7 +513,6 @@ class MainActivity : Activity() {
         }
 
         activeConfigPane = pane
-        dragHandlePanel.visibility = View.VISIBLE
         pane.load { pane.show(reservedArea) }
         setFocusOwner(FocusOwner.PANE)
     }
@@ -528,8 +526,6 @@ class MainActivity : Activity() {
         activeConfigPane = null
         configPaneButtonIndex = -1
         pane.unload()
-        dragHandlePanel.visibility = View.GONE
-        if (dragSourceIndex >= 0) cancelDrag()
     }
 
     // ── Image picker result ───────────────────────────────────────────────────
@@ -618,189 +614,78 @@ class MainActivity : Activity() {
         // Home launcher never exits on back.
     }
 
-    // ── Drag-to-reorder ───────────────────────────────────────────────────────
+    // ── Button setup ────────────────────────────────────────────────────────
 
-    private var dragSourceIndex = -1
-    private var dragTargetIndex = -1
-    private var ghostOverlay:   FrameLayout? = null
-    private var ghostView:      ImageView?   = null
+    private fun wireButton(btn: LauncherButton, i: Int) {
+        btn.onFocusRequested = {
+            if (activeConfigPane == null) {
+                if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
+                setFocus(i)
+            }
+        }
+        btn.onUrlActivated         = { url  -> activateToggleButton(i) { showWebPane(url) } }
+        btn.onWidgetActivated      = { id   -> activateToggleButton(i) { showWidgetPane(id) } }
+        btn.onAppsGridActivated    = { apps -> activateToggleButton(i) { showAppsGridPane(apps) } }
+        btn.onMusicPlayerActivated = { pkg  -> activateToggleButton(i) { showMusicPlayerPane(pkg) } }
+    }
 
-    private fun setupDragHandles() {
-        dragHandlePanel = findViewById(R.id.dragHandlePanel)
+    private fun createConfigureButton(): FocusableButton {
+        val btn = FocusableButton(this)
         val m = dpToPx(4)
-        for (i in buttons.indices) {
-            dragHandlePanel.addView(TextView(this).apply {
-                layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f).apply {
-                    setMargins(m, m, m, m)
-                }
-                text     = "⠿"
-                gravity  = Gravity.CENTER
-                textSize = 18f
-                setTextColor(getColor(R.color.text_secondary))
-                val idx = i
-                setOnTouchListener { _, event -> onDragHandleTouch(idx, event) }
-            })
+        btn.layoutParams = LinearLayout.LayoutParams(MATCH, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            setMargins(m, m, m, m)
         }
-    }
-
-    private fun onDragHandleTouch(index: Int, event: MotionEvent): Boolean {
-        return when (event.action) {
-            MotionEvent.ACTION_DOWN   -> { startDrag(index, event.rawY); true }
-            MotionEvent.ACTION_MOVE   -> { updateDrag(event.rawY);       true }
-            MotionEvent.ACTION_UP     -> { finishDrag();                  true }
-            MotionEvent.ACTION_CANCEL -> { cancelDrag();                  true }
-            else -> false
-        }
-    }
-
-    private fun startDrag(index: Int, rawY: Float) {
-        dragSourceIndex = index
-        dragTargetIndex = index
-
-        val btn = buttons[index]
-        val bmp = Bitmap.createBitmap(btn.width, btn.height, Bitmap.Config.ARGB_8888)
-        btn.draw(Canvas(bmp))
-        btn.alpha = 0f   // hide source; ghost takes its place
-
-        val overlay = FrameLayout(this).also {
-            it.isClickable = false
-            it.isFocusable = false
-            ghostOverlay = it
-            addContentView(it, ViewGroup.LayoutParams(MATCH, MATCH))
-        }
-
-        val loc = IntArray(2)
-        btn.getLocationOnScreen(loc)
-        ghostView = ImageView(this).apply {
-            setImageBitmap(bmp)
-            alpha = 0.85f
-            layoutParams = FrameLayout.LayoutParams(btn.width, btn.height).apply {
-                leftMargin = loc[0]
-                topMargin  = loc[1]
-            }
-            overlay.addView(this)
-        }
-    }
-
-    private fun updateDrag(rawY: Float) {
-        val ghost = ghostView ?: return
-        val anchor = buttons[0]
-        val btnH   = anchor.height
-        if (btnH == 0) return
-
-        val loc = IntArray(2)
-        anchor.getLocationOnScreen(loc)
-        val panelTop = loc[1]
-
-        // Slide ghost vertically with the finger
-        val params = ghost.layoutParams as FrameLayout.LayoutParams
-        params.topMargin = (rawY.toInt() - btnH / 2)
-            .coerceIn(panelTop, panelTop + buttons.size * btnH - btnH)
-        ghost.requestLayout()
-
-        // Recalculate drop target and animate buttons to show the gap
-        val newTarget = ((rawY - panelTop) / btnH).toInt().coerceIn(0, buttons.lastIndex)
-        if (newTarget != dragTargetIndex) {
-            dragTargetIndex = newTarget
-            animateDragShift()
-        }
-    }
-
-    /** Translate buttons to visually open a gap at the current drop target. */
-    private fun animateDragShift() {
-        val from = dragSourceIndex
-        val to   = dragTargetIndex
-        val btnH = buttons[0].height.toFloat()
-        for (i in buttons.indices) {
-            val shift = when {
-                i == from                                -> 0f
-                from < to && i in (from + 1)..to        -> -btnH
-                from > to && i in to     until from     ->  btnH
-                else                                    ->  0f
-            }
-            buttons[i].animate().translationY(shift).setDuration(120).start()
-        }
-    }
-
-    private fun finishDrag() {
-        buttons.forEach { it.alpha = 1f; it.animate().translationY(0f).setDuration(120).start() }
-        (ghostOverlay?.parent as? ViewGroup)?.removeView(ghostOverlay)
-        ghostOverlay = null
-        ghostView    = null
-        val from = dragSourceIndex
-        val to   = dragTargetIndex
-        dragSourceIndex = -1
-        dragTargetIndex = -1
-        if (from >= 0 && from != to) reorderButtons(from, to)
-    }
-
-    private fun cancelDrag() {
-        buttons.forEach { it.alpha = 1f; it.animate().translationY(0f).setDuration(120).start() }
-        (ghostOverlay?.parent as? ViewGroup)?.removeView(ghostOverlay)
-        ghostOverlay = null
-        ghostView    = null
-        dragSourceIndex = -1
-        dragTargetIndex = -1
-    }
-
-    private fun reorderButtons(from: Int, to: Int) {
-        val keys = listOf("_type", "_value", "_label", "_icon_type", "_icon_data", "_widget_id", "_open_browser", "_apps")
-        // Snapshot all button prefs
-        val snap = Array(buttons.size) { i ->
-            keys.associateWith { k -> prefs.getString("btn_$i$k", null) }
-        }.toMutableList()
-        snap.add(to, snap.removeAt(from))
-
-        // Write new order
-        val edit = prefs.edit()
-        for (i in snap.indices) {
-            for (k in keys) {
-                val v = snap[i][k]
-                if (v != null) edit.putString("btn_$i$k", v) else edit.remove("btn_$i$k")
+        btn.text = getString(R.string.config_button)
+        btn.textSize = 28f
+        btn.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+        btn.setTextColor(getColor(R.color.text_primary))
+        btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
+        btn.cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP)
+        // Configure button is touch-activated — bypass the two-tap model.
+        btn.setOnTouchListener(null)
+        btn.setOnClickListener {
+            if (activeConfigPane == null && focusedIndex < buttons.size) {
+                openConfigPane(focusedIndex)
             }
         }
-
-        // Keep focused_index and configPaneButtonIndex pointing at the same logical buttons
-        fun rotate(idx: Int) = when {
-            idx == from                         -> to
-            from < to && idx in (from + 1)..to  -> idx - 1
-            from > to && idx in to until from   -> idx + 1
-            else                                -> idx
-        }
-        val newFocus = rotate(focusedIndex)
-        if (configPaneButtonIndex >= 0) configPaneButtonIndex = rotate(configPaneButtonIndex)
-        if (activeButtonIndex >= 0) activeButtonIndex = rotate(activeButtonIndex)
-        edit.putInt("focused_index", newFocus)
-        edit.apply()
-
-        rotateIconFiles(from, to)
-
-        focusedIndex = newFocus
-        for (b in buttons) { b.loadConfig(prefs); b.isActiveButton = false }
-        if (activeButtonIndex >= 0) buttons[activeButtonIndex].isActiveButton = true
-        updateFocus()
+        return btn
     }
 
-    private fun rotateIconFiles(from: Int, to: Int) {
-        fun f(i: Int) = File(filesDir, "btn_${i}_icon.png")
-        val tmp = File(filesDir, "btn_drag_tmp.png")
-        if (f(from).exists()) f(from).copyTo(tmp, overwrite = true) else tmp.delete()
-        if (from < to) {
-            for (i in from until to) {
-                if (f(i + 1).exists()) f(i + 1).copyTo(f(i), overwrite = true) else f(i).delete()
-            }
+    private fun adjustButtonHeights() {
+        val totalH = buttonScroll.height
+        val margin = dpToPx(4) * 2  // top + bottom margin per button
+        val btnH = totalH / MAX_VISIBLE_BUTTONS - margin
+        for (btn in buttons) {
+            val lp = btn.layoutParams as LinearLayout.LayoutParams
+            lp.height = btnH
+            btn.layoutParams = lp
+        }
+        val clp = configureButton.layoutParams as LinearLayout.LayoutParams
+        clp.height = btnH
+        configureButton.layoutParams = clp
+    }
+
+    private fun scrollToFocused() {
+        val target: View = if (focusedIndex < buttons.size) {
+            buttons.getOrNull(focusedIndex) ?: return
         } else {
-            for (i in from downTo to + 1) {
-                if (f(i - 1).exists()) f(i - 1).copyTo(f(i), overwrite = true) else f(i).delete()
-            }
+            configureButton
         }
-        if (tmp.exists()) tmp.copyTo(f(to), overwrite = true) else f(to).delete()
-        tmp.delete()
+        buttonScroll.smoothScrollTo(0, target.top)
+    }
+
+    /** Move focus into the active content pane (if it has interactive elements). */
+    private fun enterPane() {
+        if (activeAppsGridPane != null || activeMusicPlayerPane != null) {
+            setFocusOwner(FocusOwner.PANE)
+        }
     }
 
     private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density + 0.5f).toInt()
 
     companion object {
+        private const val MAX_VISIBLE_BUTTONS             = 6
+        private const val DEFAULT_BUTTON_COUNT            = 6
         private const val IMAGE_REQUEST_CODE              = 1001
         private const val BIND_WIDGET_REQUEST_CODE        = 1002
         private const val CONFIGURE_WIDGET_REQUEST_CODE   = 1003

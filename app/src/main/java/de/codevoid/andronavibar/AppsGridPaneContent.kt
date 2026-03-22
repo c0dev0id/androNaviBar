@@ -55,9 +55,10 @@ class AppsGridPaneContent(
             20 -> { moveFocus(focusIndex + columns); true }                          // DOWN
             21 -> { if (focusIndex % columns > 0) moveFocus(focusIndex - 1); true } // LEFT
             22 -> {                                                                   // RIGHT
-                if (focusIndex % columns < columns - 1 && focusIndex < apps.lastIndex)
+                if (focusIndex % columns < columns - 1 && focusIndex < apps.lastIndex) {
                     moveFocus(focusIndex + 1)
-                true
+                    true
+                } else false                                                          // edge → parent
             }
             66 -> { launchFocused(); true }
             else -> false

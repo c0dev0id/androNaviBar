@@ -90,9 +90,6 @@ class LauncherButton @JvmOverloads constructor(
 
     // ── Callbacks wired by MainActivity ──────────────────────────────────────
 
-    /** Fired on long-press; MainActivity opens the config pane for this button. */
-    var onConfigRequested: (() -> Unit)? = null
-
     /** Fired when a URL button is activated; MainActivity shows the URL in a WebView pane. */
     var onUrlActivated: ((String) -> Unit)? = null
 
@@ -178,10 +175,6 @@ class LauncherButton @JvmOverloads constructor(
 
     init {
         setOnClickListener { activate() }
-        setOnLongClickListener {
-            onConfigRequested?.invoke()
-            true
-        }
     }
 
     // ── Config persistence ────────────────────────────────────────────────────

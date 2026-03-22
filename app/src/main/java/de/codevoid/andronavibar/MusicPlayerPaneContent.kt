@@ -82,9 +82,12 @@ class MusicPlayerPaneContent(
 
     fun handleKey(keyCode: Int): Boolean {
         return when (keyCode) {
-            21 -> { moveFocus(focusIndex - 1); true }  // LEFT
-            22 -> { moveFocus(focusIndex + 1); true }  // RIGHT
-            66 -> { activateControl(focusIndex); true } // ACTIVATE
+            21 -> { moveFocus(focusIndex - 1); true }                                 // LEFT
+            22 -> {                                                                    // RIGHT
+                if (focusIndex < controlViews.lastIndex) { moveFocus(focusIndex + 1); true }
+                else false                                                             // edge → parent
+            }
+            66 -> { activateControl(focusIndex); true }                                // ACTIVATE
             else -> false
         }
     }
