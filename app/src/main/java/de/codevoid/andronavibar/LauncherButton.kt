@@ -8,19 +8,15 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
-import android.view.MotionEvent
-import com.google.android.material.button.MaterialButton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -84,7 +80,7 @@ class LauncherButton @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = com.google.android.material.R.attr.materialButtonStyle
-) : MaterialButton(context, attrs, defStyleAttr) {
+) : FocusableButton(context, attrs, defStyleAttr) {
 
     // Set by MainActivity during setup; used as the SharedPreferences key suffix.
     var index: Int = 0
@@ -93,9 +89,6 @@ class LauncherButton @JvmOverloads constructor(
         private set
 
     // ── Callbacks wired by MainActivity ──────────────────────────────────────
-
-    /** Fired when this unfocused button receives ACTION_DOWN (focus-only tap). */
-    var onFocusRequested: (() -> Unit)? = null
 
     /** Fired on long-press; MainActivity opens the config pane for this button. */
     var onConfigRequested: (() -> Unit)? = null
@@ -113,12 +106,6 @@ class LauncherButton @JvmOverloads constructor(
     var onMusicPlayerActivated: ((String) -> Unit)? = null
 
     // ── Visual state ─────────────────────────────────────────────────────────
-
-    var isFocusedButton: Boolean = false
-        set(value) {
-            field = value
-            foreground = if (value) makeFocusRing() else null
-        }
 
     /** Persistent highlight showing this button's content pane is displayed. */
     var isActiveButton: Boolean = false
@@ -155,14 +142,14 @@ class LauncherButton @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         buttonIcon?.let { drawable ->
             val h = height.toFloat()
-            val cornerRad = dpToPx(16).toFloat()
-            // Inset by 2 × focus ring stroke (2 × 6dp = 12dp) on all sides so the
-            // icon sits visually inside the focus frame rather than behind it.
-            // The horizontal inset is halved (6dp) to compensate for Material3's
+            val cornerRad = dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
+            // Inset by 2 × focus ring stroke on all sides so the icon sits
+            // visually inside the focus frame rather than behind it.
+            // The horizontal inset is halved to compensate for Material3's
             // default insetTop/insetBottom (6dp each), which shrink the visible button
             // background away from the view's top/bottom edges — making the top/bottom
             // gap look smaller than the left gap at equal insets.
-            val vInset = dpToPx(6) * 2          // 12dp top/bottom
+            val vInset = dpToPx(FocusableButton.STROKE_WIDTH_DP) * 2
             val hInset = dpToPx(9)              // 9dp left (= 12dp − M3's ~3dp insetTop)
             val iconSize = height - vInset * 2
             // Clip to the button's full rounded rect so the icon respects corner radius.
@@ -194,12 +181,6 @@ class LauncherButton @JvmOverloads constructor(
         setOnLongClickListener {
             onConfigRequested?.invoke()
             true
-        }
-        setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN && !isFocusedButton) {
-                onFocusRequested?.invoke()
-                true
-            } else false
         }
     }
 
@@ -522,16 +503,6 @@ class LauncherButton @JvmOverloads constructor(
             backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
         }, 150L)
     }
-
-    private fun makeFocusRing(): GradientDrawable = GradientDrawable().apply {
-        shape        = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(16).toFloat()
-        setStroke(dpToPx(6), context.getColor(R.color.colorPrimary))
-        setColor(Color.TRANSPARENT)
-    }
-
-    private fun dpToPx(dp: Int): Int =
-        (dp * resources.displayMetrics.density + 0.5f).toInt()
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()

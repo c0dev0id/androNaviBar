@@ -191,8 +191,8 @@ class AppsGridPaneContent(
 
     private fun makeFocusRing(): GradientDrawable = GradientDrawable().apply {
         shape        = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(12).toFloat()
-        setStroke(dpToPx(3), context.getColor(R.color.colorPrimary))
+        cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
+        setStroke(dpToPx(FocusableButton.STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
         setColor(Color.TRANSPARENT)
     }
 
