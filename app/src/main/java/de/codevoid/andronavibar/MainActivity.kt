@@ -131,7 +131,7 @@ class MainActivity : Activity() {
         buttonPanel.addView(configureButton)
 
         preCreateWidgetViews()
-        focusedIndex = focusedIndex.coerceIn(0, buttons.size)
+        focusedIndex = focusedIndex.coerceIn(0, buttons.lastIndex.coerceAtLeast(0))
 
         buttonPanel.post {
             adjustButtonHeights()
@@ -239,7 +239,8 @@ class MainActivity : Activity() {
     // ── Focus management ──────────────────────────────────────────────────────
 
     private fun setFocus(index: Int) {
-        focusedIndex = index.coerceIn(0, buttons.size)
+        if (buttons.isEmpty()) return
+        focusedIndex = index.coerceIn(0, buttons.lastIndex)
         prefs.edit().putInt("focused_index", focusedIndex).apply()
         updateFocus()
         scrollToFocused()
@@ -253,7 +254,6 @@ class MainActivity : Activity() {
         for (i in buttons.indices) {
             buttons[i].isFocusedButton = (focusOwner == FocusOwner.BUTTONS && i == focusedIndex)
         }
-        configureButton.isFocusedButton = (focusOwner == FocusOwner.BUTTONS && focusedIndex == buttons.size)
     }
 
     private fun setFocusOwner(owner: FocusOwner) {
@@ -641,13 +641,9 @@ class MainActivity : Activity() {
         btn.setTextColor(getColor(R.color.text_primary))
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
         btn.cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP)
-        // Configure button is touch-activated — bypass the two-tap model.
+        // Touch-only, not d-pad navigable. Bypass the two-tap model.
+        // Global config pane content is Phase 3 — button is a no-op until then.
         btn.setOnTouchListener(null)
-        btn.setOnClickListener {
-            if (activeConfigPane == null && focusedIndex < buttons.size) {
-                openConfigPane(focusedIndex)
-            }
-        }
         return btn
     }
 
@@ -666,11 +662,7 @@ class MainActivity : Activity() {
     }
 
     private fun scrollToFocused() {
-        val target: View = if (focusedIndex < buttons.size) {
-            buttons.getOrNull(focusedIndex) ?: return
-        } else {
-            configureButton
-        }
+        val target = buttons.getOrNull(focusedIndex) ?: return
         buttonScroll.smoothScrollTo(0, target.top)
     }
 
