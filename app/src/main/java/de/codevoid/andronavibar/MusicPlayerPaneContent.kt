@@ -22,6 +22,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
+import de.codevoid.andronavibar.ui.SquareButton
 
 class MusicPlayerPaneContent(
     private val context: Context,

@@ -1,9 +1,10 @@
-package de.codevoid.andronavibar
+package de.codevoid.andronavibar.ui
 
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.AttributeSet
+import de.codevoid.andronavibar.R
 
 /**
  * Square variant of FocusableButton for use in content panes.

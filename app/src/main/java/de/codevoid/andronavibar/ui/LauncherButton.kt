@@ -1,4 +1,4 @@
-package de.codevoid.andronavibar
+package de.codevoid.andronavibar.ui
 
 import android.content.ComponentName
 import android.content.Context
@@ -10,69 +10,22 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
+import de.codevoid.andronavibar.AppEntry
+import de.codevoid.andronavibar.ButtonConfig
+import de.codevoid.andronavibar.PaneContent
+import de.codevoid.andronavibar.R
+import de.codevoid.andronavibar.UrlIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import java.io.File
-
-// ── Icon type for URL buttons ─────────────────────────────────────────────────
-
-sealed class UrlIcon {
-    object None : UrlIcon()
-    /** User-provided image; stored at the button's icon file. */
-    object CustomFile : UrlIcon()
-    /** Emoji rendered onto a tinted background; no file on disk. */
-    data class Emoji(val emoji: String) : UrlIcon()
-}
-
-// ── Apps grid entry ───────────────────────────────────────────────────────────
-
-data class AppEntry(val packageName: String, val label: String)
-
-// ── Button configuration ──────────────────────────────────────────────────────
-
-sealed class ButtonConfig {
-    object Empty : ButtonConfig()
-
-    data class AppLauncher(
-        val packageName: String,
-        val label: String
-    ) : ButtonConfig()
-
-    data class UrlLauncher(
-        val url: String,
-        val label: String,              // empty = fall back to url for display
-        val icon: UrlIcon = UrlIcon.None,
-        val openInBrowser: Boolean = false
-    ) : ButtonConfig()
-
-    data class WidgetLauncher(
-        val provider: ComponentName,
-        val appWidgetId: Int,           // -1 until bound
-        val label: String,
-        val icon: UrlIcon = UrlIcon.None
-    ) : ButtonConfig()
-
-    data class AppsGrid(
-        val apps: List<AppEntry>,
-        val label: String,
-        val icon: UrlIcon = UrlIcon.None
-    ) : ButtonConfig()
-
-    data class MusicPlayer(
-        val playerPackage: String,      // fallback app to launch when nothing is playing
-        val label: String,
-        val icon: UrlIcon = UrlIcon.None
-    ) : ButtonConfig()
-}
 
 // ── LauncherButton ────────────────────────────────────────────────────────────
 
@@ -119,7 +72,7 @@ class LauncherButton @JvmOverloads constructor(
      * Icon drawn as a full-height square on the left edge of the button.
      * Setting this automatically adjusts paddingStart and triggers a redraw.
      */
-    private var buttonIcon: Drawable? = null
+    var buttonIcon: Drawable? = null
         set(value) {
             field = value
             updateIconPadding()

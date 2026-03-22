@@ -8,6 +8,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import com.google.android.material.button.MaterialButton
+import de.codevoid.andronavibar.ui.SquareButton
 
 class AppsGridPaneContent(
     private val context: Context,

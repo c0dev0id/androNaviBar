@@ -27,6 +27,8 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import de.codevoid.andronavibar.ui.FocusableButton
+import de.codevoid.andronavibar.ui.LauncherButton
 import java.io.File
 import java.lang.ref.WeakReference
 

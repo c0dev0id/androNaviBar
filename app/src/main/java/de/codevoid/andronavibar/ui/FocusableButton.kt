@@ -1,4 +1,4 @@
-package de.codevoid.andronavibar
+package de.codevoid.andronavibar.ui
 
 import android.content.Context
 import android.graphics.Color
@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.MotionEvent
 import com.google.android.material.button.MaterialButton
+import de.codevoid.andronavibar.R
 
 /**
  * Base button with shared focus ring and two-tap touch model.
