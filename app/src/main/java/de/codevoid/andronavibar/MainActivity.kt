@@ -79,8 +79,11 @@ class MainActivity : Activity() {
     /** Non-null while a music player pane is displayed in reservedArea. */
     private var activeMusicPlayerPane: MusicPlayerPaneContent? = null
 
-    /** Non-null while a config pane is displayed in reservedArea. */
+    /** Non-null while a per-button config pane is displayed in reservedArea. */
     private var activeConfigPane: ConfigPaneContent? = null
+
+    /** Non-null while the global config pane is displayed in reservedArea. */
+    private var activeGlobalConfigPane: GlobalConfigPaneContent? = null
 
     /** Holds a partially-bound widget config while waiting for the system bind dialog result. */
     private var pendingWidgetConfig: ButtonConfig.WidgetLauncher? = null
@@ -286,17 +289,21 @@ class MainActivity : Activity() {
     }
 
     private fun deactivateActiveButton() {
-        if (activeButtonIndex >= 0) {
-            buttons[activeButtonIndex].isActiveButton = false
-            activeButtonIndex = -1
+        when {
+            activeButtonIndex in buttons.indices ->
+                buttons[activeButtonIndex].isActiveButton = false
+            activeButtonIndex == CONFIGURE_BUTTON_INDEX ->
+                configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
         }
+        activeButtonIndex = -1
     }
 
     private fun dismissCurrentPane() {
-        activeWebPane?.unload();         activeWebPane = null
-        activeWidgetPane?.unload();      activeWidgetPane = null
-        activeAppsGridPane?.unload();    activeAppsGridPane = null
-        activeMusicPlayerPane?.unload(); activeMusicPlayerPane = null
+        activeWebPane?.unload();            activeWebPane = null
+        activeWidgetPane?.unload();         activeWidgetPane = null
+        activeAppsGridPane?.unload();       activeAppsGridPane = null
+        activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null
+        activeGlobalConfigPane?.unload();   activeGlobalConfigPane = null
         hideLoading()
     }
 
@@ -594,6 +601,10 @@ class MainActivity : Activity() {
                     }
                 }
                 activeConfigPane?.onImageReady()
+                activeGlobalConfigPane?.let {
+                    buttons.getOrNull(pendingIconButtonIndex)?.loadConfig(prefs)
+                    it.rebuild()
+                }
             } catch (_: Exception) { /* ignore failed pick */ }
         }
     }
@@ -642,8 +653,19 @@ class MainActivity : Activity() {
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
         btn.cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP)
         // Touch-only, not d-pad navigable. Bypass the two-tap model.
-        // Global config pane content is Phase 3 — button is a no-op until then.
         btn.setOnTouchListener(null)
+        btn.setOnClickListener {
+            if (activeButtonIndex == CONFIGURE_BUTTON_INDEX) {
+                dismissCurrentPane()
+                deactivateActiveButton()
+            } else {
+                dismissCurrentPane()
+                deactivateActiveButton()
+                activeButtonIndex = CONFIGURE_BUTTON_INDEX
+                configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
+                showGlobalConfigPane()
+            }
+        }
         return btn
     }
 
@@ -673,9 +695,59 @@ class MainActivity : Activity() {
         }
     }
 
+    // ── Global config pane ──────────────────────────────────────────────────
+
+    private fun showGlobalConfigPane() {
+        val pane = GlobalConfigPaneContent(this, prefs, object : GlobalConfigPaneContent.Callbacks {
+            override fun onReloadButton(index: Int) {
+                buttons.getOrNull(index)?.loadConfig(prefs)
+            }
+            override fun onReloadAll() {
+                for (btn in buttons) btn.loadConfig(prefs)
+                updateFocus()
+            }
+            override fun onAddButton() {
+                val i = buttons.size
+                prefs.edit().putInt("button_count", i + 1).apply()
+                val btn = layoutInflater.inflate(
+                    R.layout.launcher_button_item, buttonPanel, false
+                ) as LauncherButton
+                btn.index = i
+                wireButton(btn, i)
+                btn.loadConfig(prefs)
+                // Insert before the configure button
+                buttonPanel.addView(btn, buttonPanel.childCount - 1)
+                buttons.add(btn)
+                adjustButtonHeights()
+            }
+            override fun onRemoveLastButton() {
+                if (buttons.size <= 1) return
+                val last = buttons.removeAt(buttons.lastIndex)
+                last.clearConfig(prefs)
+                buttonPanel.removeView(last)
+                prefs.edit().putInt("button_count", buttons.size).apply()
+                if (focusedIndex >= buttons.size) {
+                    focusedIndex = buttons.lastIndex
+                    prefs.edit().putInt("focused_index", focusedIndex).apply()
+                }
+                adjustButtonHeights()
+                updateFocus()
+            }
+            override fun onPickImage(buttonIndex: Int) {
+                pendingIconButtonIndex = buttonIndex
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, IMAGE_REQUEST_CODE)
+            }
+        })
+        activeGlobalConfigPane = pane
+        pane.load { pane.show(reservedArea) }
+    }
+
     private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density + 0.5f).toInt()
 
     companion object {
+        private const val CONFIGURE_BUTTON_INDEX          = -2
         private const val MAX_VISIBLE_BUTTONS             = 6
         private const val DEFAULT_BUTTON_COUNT            = 6
         private const val IMAGE_REQUEST_CODE              = 1001
