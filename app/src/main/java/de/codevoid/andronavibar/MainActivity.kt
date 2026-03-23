@@ -194,8 +194,7 @@ class MainActivity : Activity() {
 
                 when (focusOwner) {
                     FocusOwner.PANE -> {
-                        val handled = activeWidgetPane?.handleKey(keyCode)
-                            ?: activeAppsGridPane?.handleKey(keyCode)
+                        val handled = activeAppsGridPane?.handleKey(keyCode)
                             ?: activeMusicPlayerPane?.handleKey(keyCode)
                             ?: false
                         if (!handled && keyCode == 22) {    // RIGHT at pane edge
@@ -271,11 +270,9 @@ class MainActivity : Activity() {
         focusOwner = owner
         updateFocus()
         if (owner == FocusOwner.PANE) {
-            activeWidgetPane?.setInitialFocus()
             activeMusicPlayerPane?.setInitialFocus()
             activeAppsGridPane?.setInitialFocus()
         } else {
-            activeWidgetPane?.clearFocus()
             activeMusicPlayerPane?.clearFocus()
             activeAppsGridPane?.clearFocus()
         }
@@ -659,8 +656,7 @@ class MainActivity : Activity() {
 
     /** Move focus into the active content pane (if it has interactive elements). */
     private fun enterPane() {
-        if (activeWidgetPane?.hasFocusableContent() == true ||
-            activeAppsGridPane != null || activeMusicPlayerPane != null) {
+        if (activeAppsGridPane != null || activeMusicPlayerPane != null) {
             setFocusOwner(FocusOwner.PANE)
         }
     }
