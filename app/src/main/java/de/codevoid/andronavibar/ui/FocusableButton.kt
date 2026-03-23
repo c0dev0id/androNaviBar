@@ -31,8 +31,17 @@ open class FocusableButton @JvmOverloads constructor(
     var isFocusedButton: Boolean = false
         set(value) {
             field = value
-            foreground = if (value) makeFocusRing() else null
+            foreground = if (value) focusRing else null
         }
+
+    private val focusRing: GradientDrawable by lazy {
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = resources.dpToPx(CORNER_RADIUS_DP).toFloat()
+            setStroke(resources.dpToPx(STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
+            setColor(Color.TRANSPARENT)
+        }
+    }
 
     init {
         // Two-tap touch model: first tap on an unfocused button requests focus
@@ -44,13 +53,6 @@ open class FocusableButton @JvmOverloads constructor(
                 true
             } else false
         }
-    }
-
-    private fun makeFocusRing(): GradientDrawable = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE
-        cornerRadius = resources.dpToPx(CORNER_RADIUS_DP).toFloat()
-        setStroke(resources.dpToPx(STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
-        setColor(Color.TRANSPARENT)
     }
 
     companion object {
