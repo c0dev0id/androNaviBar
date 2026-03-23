@@ -318,6 +318,7 @@ class LauncherButton @JvmOverloads constructor(
             .remove("btn_${index}_value")
             .remove("btn_${index}_label")
             .remove("btn_${index}_widget_id")
+            .remove("btn_${index}_open_browser")
             .remove("btn_${index}_apps")
             .removeIconKeys()
             .apply()
