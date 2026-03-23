@@ -11,9 +11,7 @@ import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.RectF
-import android.graphics.drawable.GradientDrawable
 import com.caverock.androidsvg.SVG
 import android.os.Bundle
 import android.os.SystemClock
@@ -26,7 +24,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
-import android.widget.TextView
 import android.util.Log
 import de.codevoid.andronavibar.ui.FocusableButton
 import de.codevoid.andronavibar.ui.LauncherButton
@@ -95,8 +92,6 @@ class MainActivity : Activity() {
     /** Loading spinner overlay, shown while a pane's content is being prepared. */
     private var loadingSpinner: ProgressBar? = null
 
-    /** Gear icon overlay, shown when a content pane is active. Touch-only. */
-    private var gearButton: View? = null
 
     private enum class FocusOwner { BUTTONS, PANE }
 
@@ -311,7 +306,6 @@ class MainActivity : Activity() {
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null
         activeGlobalConfigPane?.unload();   activeGlobalConfigPane = null
         hideLoading()
-        hideGearIcon()
     }
 
     // ── Loading spinner ────────────────────────────────────────────────────────
@@ -334,53 +328,11 @@ class MainActivity : Activity() {
         loadingSpinner = null
     }
 
-    // ── Gear icon overlay ──────────────────────────────────────────────────
-
-    private fun showGearIcon() {
-        if (gearButton != null) return
-        val size = resources.dpToPx(48)
-        val btn = TextView(this).apply {
-            text = "\u2699"
-            textSize = 24f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            layoutParams = FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.END).apply {
-                topMargin = resources.dpToPx(12)
-                marginEnd = resources.dpToPx(12)
-            }
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = resources.dpToPx(12).toFloat()
-                setColor(Color.argb(180, 0x44, 0x44, 0x44))
-            }
-            elevation = resources.dpToPx(4).toFloat()
-            isClickable = true
-            isFocusable = false
-            setOnClickListener {
-                // Open the global config pane as a shortcut from within an active pane.
-                if (activeButtonIndex == CONFIGURE_BUTTON_INDEX) return@setOnClickListener
-                dismissCurrentPane()
-                deactivateActiveButton()
-                activeButtonIndex = CONFIGURE_BUTTON_INDEX
-                configureButton.backgroundTintList =
-                    ColorStateList.valueOf(getColor(R.color.colorPrimary))
-                showGlobalConfigPane()
-            }
-        }
-        gearButton = btn
-        reservedArea.addView(btn)
-    }
-
-    private fun hideGearIcon() {
-        gearButton?.let { reservedArea.removeView(it) }
-        gearButton = null
-    }
-
     // ── Content panes ────────────────────────────────────────────────────────
 
     private fun showWebPane(url: String) {
         val pane = WebPaneContent(this, url)
-        pane.onContentReady = { hideLoading(); showGearIcon() }
+        pane.onContentReady = { hideLoading() }
         activeWebPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
@@ -390,7 +342,7 @@ class MainActivity : Activity() {
     private fun showWidgetPane(appWidgetId: Int) {
         val hv = widgetViews[appWidgetId] ?: return
         val pane = WidgetPaneContent(this, hv, appWidgetId)
-        pane.onContentReady = { hideLoading(); showGearIcon() }
+        pane.onContentReady = { hideLoading() }
         activeWidgetPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
         // After the first layout pass, check whether the widget hit a
@@ -444,14 +396,14 @@ class MainActivity : Activity() {
 
     private fun showAppsGridPane(apps: List<AppEntry>) {
         val pane = AppsGridPaneContent(this, apps)
-        pane.onContentReady = { hideLoading(); showGearIcon() }
+        pane.onContentReady = { hideLoading() }
         activeAppsGridPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
 
     private fun showMusicPlayerPane(playerPackage: String) {
         val pane = MusicPlayerPaneContent(this, playerPackage)
-        pane.onContentReady = { hideLoading(); showGearIcon() }
+        pane.onContentReady = { hideLoading() }
         activeMusicPlayerPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
