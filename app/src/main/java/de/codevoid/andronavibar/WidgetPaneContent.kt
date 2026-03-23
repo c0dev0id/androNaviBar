@@ -85,12 +85,12 @@ class WidgetPaneContent(
      * whether pressing LEFT should transfer focus into the widget.
      */
     fun hasFocusableContent(): Boolean {
-        makeFocusable(hostView)
+        ensureFocusableChildren()
         return findFirstFocusable(hostView) != null
     }
 
     fun setInitialFocus() {
-        makeFocusable(hostView)
+        ensureFocusableChildren()
         hostView.requestFocus()
     }
 
@@ -123,6 +123,10 @@ class WidgetPaneContent(
     }
 
     /** Promote clickable-but-not-focusable widget children for d-pad navigation. */
+    private fun ensureFocusableChildren() {
+        makeFocusable(hostView)
+    }
+
     private fun makeFocusable(view: View) {
         if (view.isClickable && !view.isFocusable) view.isFocusable = true
         if (view is ViewGroup) {
