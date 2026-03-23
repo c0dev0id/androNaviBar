@@ -27,6 +27,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.util.Log
 import de.codevoid.andronavibar.ui.FocusableButton
 import de.codevoid.andronavibar.ui.LauncherButton
 import java.io.File
@@ -395,11 +396,12 @@ class MainActivity : Activity() {
      */
     private fun rebindWidget(oldAppWidgetId: Int) {
         val mgr = AppWidgetManager.getInstance(this)
-        val info = mgr.getAppWidgetInfo(oldAppWidgetId) ?: return
+        val info = mgr.getAppWidgetInfo(oldAppWidgetId)
+        if (info == null) { Log.w("aR2Launcher", "rebind: no info for $oldAppWidgetId"); return }
         val buttonIndex = buttons.indexOfFirst {
             (it.config as? ButtonConfig.WidgetLauncher)?.appWidgetId == oldAppWidgetId
         }
-        if (buttonIndex == -1) return
+        if (buttonIndex == -1) { Log.w("aR2Launcher", "rebind: no button for $oldAppWidgetId"); return }
         val oldConfig = buttons[buttonIndex].config as? ButtonConfig.WidgetLauncher ?: return
 
         appWidgetHost.deleteAppWidgetId(oldAppWidgetId)
@@ -407,10 +409,12 @@ class MainActivity : Activity() {
 
         val newId = appWidgetHost.allocateAppWidgetId()
         if (!mgr.bindAppWidgetIdIfAllowed(newId, info.provider)) {
+            Log.w("aR2Launcher", "rebind: bindAppWidgetIdIfAllowed denied for ${info.provider}")
             appWidgetHost.deleteAppWidgetId(newId)
             return
         }
 
+        Log.d("aR2Launcher", "rebind: $oldAppWidgetId → $newId for ${info.provider}")
         val newConfig = oldConfig.copy(appWidgetId = newId)
         buttons[buttonIndex].saveConfig(prefs, newConfig)
         widgetViews[newId] = appWidgetHost.createView(this, newId, info)
