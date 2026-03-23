@@ -373,16 +373,50 @@ class MainActivity : Activity() {
     }
 
     private fun showWidgetPane(appWidgetId: Int) {
-        // Re-register with the system to force re-delivery of RemoteViews
-        // through the push path, which re-grants content:// URI permissions.
-        // On API 34 these are lost after an app update, causing the provider's
-        // FileProvider images to fail with SecurityException on every measure.
-        appWidgetHost.startListening()
         val hv = widgetViews[appWidgetId] ?: return
+        // On API 34, content:// URI permissions from the provider's FileProvider
+        // can be lost after an app update.  When detected, rebind the widget —
+        // this triggers onUpdate() in the provider, which pushes fresh
+        // RemoteViews through the system service and re-grants permissions.
+        (hv as? SafeAppWidgetHostView)?.onSecurityError = {
+            hv.post { rebindWidget(appWidgetId) }
+        }
         val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading(); showGearIcon() }
         activeWidgetPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
+    }
+
+    /**
+     * Delete a stale widget binding and create a fresh one to the same
+     * provider.  The new binding triggers onUpdate() in the provider,
+     * which pushes RemoteViews through the system service — re-granting
+     * content:// URI permissions that were lost after an app update.
+     */
+    private fun rebindWidget(oldAppWidgetId: Int) {
+        val mgr = AppWidgetManager.getInstance(this)
+        val info = mgr.getAppWidgetInfo(oldAppWidgetId) ?: return
+        val buttonIndex = buttons.indexOfFirst {
+            (it.config as? ButtonConfig.WidgetLauncher)?.appWidgetId == oldAppWidgetId
+        }
+        if (buttonIndex == -1) return
+        val oldConfig = buttons[buttonIndex].config as? ButtonConfig.WidgetLauncher ?: return
+
+        appWidgetHost.deleteAppWidgetId(oldAppWidgetId)
+        widgetViews.remove(oldAppWidgetId)
+
+        val newId = appWidgetHost.allocateAppWidgetId()
+        if (!mgr.bindAppWidgetIdIfAllowed(newId, info.provider)) {
+            appWidgetHost.deleteAppWidgetId(newId)
+            return
+        }
+
+        val newConfig = oldConfig.copy(appWidgetId = newId)
+        buttons[buttonIndex].saveConfig(prefs, newConfig)
+        widgetViews[newId] = appWidgetHost.createView(this, newId, info)
+
+        dismissCurrentPane()
+        showWidgetPane(newId)
     }
 
     private fun showAppsGridPane(apps: List<AppEntry>) {
