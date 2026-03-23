@@ -30,7 +30,6 @@ import android.widget.TextView
 import android.util.Log
 import de.codevoid.andronavibar.ui.FocusableButton
 import de.codevoid.andronavibar.ui.LauncherButton
-import java.io.File
 import java.lang.ref.WeakReference
 
 class MainActivity : Activity() {
@@ -346,22 +345,22 @@ class MainActivity : Activity() {
 
     private fun showGearIcon() {
         if (gearButton != null) return
-        val size = dpToPx(48)
+        val size = resources.dpToPx(48)
         val btn = TextView(this).apply {
             text = "\u2699"
             textSize = 24f
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.END).apply {
-                topMargin = dpToPx(12)
-                marginEnd = dpToPx(12)
+                topMargin = resources.dpToPx(12)
+                marginEnd = resources.dpToPx(12)
             }
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpToPx(12).toFloat()
+                cornerRadius = resources.dpToPx(12).toFloat()
                 setColor(Color.argb(180, 0x44, 0x44, 0x44))
             }
-            elevation = dpToPx(4).toFloat()
+            elevation = resources.dpToPx(4).toFloat()
             isClickable = true
             isFocusable = false
             setOnClickListener {
@@ -606,7 +605,7 @@ class MainActivity : Activity() {
 
         if (requestCode == IMAGE_REQUEST_CODE && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
-            val dest = File(filesDir, "btn_${pendingIconButtonIndex}_icon.png")
+            val dest = buttonIconFile(filesDir, pendingIconButtonIndex)
             try {
                 val isSvg = contentResolver.getType(uri) == "image/svg+xml"
                 if (isSvg) {
@@ -657,7 +656,7 @@ class MainActivity : Activity() {
 
     private fun createConfigureButton(): FocusableButton {
         val btn = FocusableButton(this)
-        val m = dpToPx(4)
+        val m = resources.dpToPx(4)
         btn.layoutParams = LinearLayout.LayoutParams(MATCH, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             setMargins(m, m, m, m)
         }
@@ -666,7 +665,7 @@ class MainActivity : Activity() {
         btn.gravity = Gravity.CENTER_VERTICAL or Gravity.START
         btn.setTextColor(getColor(R.color.text_primary))
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
-        btn.cornerRadius = dpToPx(FocusableButton.CORNER_RADIUS_DP)
+        btn.cornerRadius = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP)
         // Touch-only, not d-pad navigable. Bypass the two-tap model.
         btn.setOnTouchListener(null)
         btn.setOnClickListener {
@@ -686,7 +685,7 @@ class MainActivity : Activity() {
 
     private fun adjustButtonHeights() {
         val totalH = buttonScroll.height
-        val margin = dpToPx(4) * 2  // top + bottom margin per button
+        val margin = resources.dpToPx(4) * 2  // top + bottom margin per button
         val visibleCount = buttons.count { it.visibility != View.GONE } + 1 // +1 for configure button
         val slots = visibleCount.coerceIn(1, MAX_VISIBLE_BUTTONS)
         val btnH = totalH / slots - margin
@@ -813,8 +812,6 @@ class MainActivity : Activity() {
         pane.load { pane.show(reservedArea) }
     }
 
-    private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density + 0.5f).toInt()
-
     companion object {
         private const val TAG = "aR2Launcher"
         private const val CONFIGURE_BUTTON_INDEX          = -2
@@ -824,6 +821,5 @@ class MainActivity : Activity() {
         private const val BIND_WIDGET_REQUEST_CODE        = 1002
         private const val CONFIGURE_WIDGET_REQUEST_CODE   = 1003
         private const val APP_WIDGET_HOST_ID              = 1536
-        private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     }
 }

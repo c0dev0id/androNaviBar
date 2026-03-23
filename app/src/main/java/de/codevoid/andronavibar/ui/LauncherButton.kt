@@ -20,6 +20,8 @@ import de.codevoid.andronavibar.AppEntry
 import de.codevoid.andronavibar.ButtonConfig
 import de.codevoid.andronavibar.R
 import de.codevoid.andronavibar.UrlIcon
+import de.codevoid.andronavibar.buttonIconFile
+import de.codevoid.andronavibar.dpToPx
 import java.io.File
 
 // ── LauncherButton ────────────────────────────────────────────────────────────
@@ -87,15 +89,15 @@ class LauncherButton @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         buttonIcon?.let { drawable ->
             val h = height.toFloat()
-            val cornerRad = dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
+            val cornerRad = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
             // Inset by 2 × focus ring stroke on all sides so the icon sits
             // visually inside the focus frame rather than behind it.
             // The horizontal inset is halved to compensate for Material3's
             // default insetTop/insetBottom (6dp each), which shrink the visible button
             // background away from the view's top/bottom edges — making the top/bottom
             // gap look smaller than the left gap at equal insets.
-            val vInset = dpToPx(FocusableButton.STROKE_WIDTH_DP) * 2
-            val hInset = dpToPx(9)              // 9dp left (= 12dp − M3's ~3dp insetTop)
+            val vInset = resources.dpToPx(FocusableButton.STROKE_WIDTH_DP) * 2
+            val hInset = resources.dpToPx(9)              // 9dp left (= 12dp − M3's ~3dp insetTop)
             val iconSize = height - vInset * 2
             // Clip to the button's full rounded rect so the icon respects corner radius.
             val path = Path()
@@ -226,7 +228,7 @@ class LauncherButton @JvmOverloads constructor(
 
                 // Delete stale icon file when not using a file-based icon.
                 if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    iconFile().delete()
+                    buttonIconFile(context.filesDir, index).delete()
                 }
             }
 
@@ -247,7 +249,7 @@ class LauncherButton @JvmOverloads constructor(
                 }
                 edit.apply()
                 if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    iconFile().delete()
+                    buttonIconFile(context.filesDir, index).delete()
                 }
             }
 
@@ -268,7 +270,7 @@ class LauncherButton @JvmOverloads constructor(
                 }
                 edit.apply()
                 if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    iconFile().delete()
+                    buttonIconFile(context.filesDir, index).delete()
                 }
             }
 
@@ -288,7 +290,7 @@ class LauncherButton @JvmOverloads constructor(
                 }
                 edit.apply()
                 if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    iconFile().delete()
+                    buttonIconFile(context.filesDir, index).delete()
                 }
             }
 
@@ -299,7 +301,7 @@ class LauncherButton @JvmOverloads constructor(
 
     fun clearConfig(prefs: SharedPreferences) {
         config = ButtonConfig.Empty
-        iconFile().delete()
+        buttonIconFile(context.filesDir, index).delete()
         prefs.edit()
             .remove("btn_${index}_type")
             .remove("btn_${index}_value")
@@ -397,10 +399,8 @@ class LauncherButton @JvmOverloads constructor(
 
     // ── Icon helpers ──────────────────────────────────────────────────────────
 
-    private fun iconFile() = File(context.filesDir, "btn_${index}_icon.png")
-
     private fun loadIconFile(): Drawable? {
-        val file = iconFile()
+        val file = buttonIconFile(context.filesDir, index)
         if (!file.exists()) return null
         val bmp = BitmapFactory.decodeFile(file.path) ?: return null
         return BitmapDrawable(resources, bmp)

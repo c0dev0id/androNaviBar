@@ -65,7 +65,7 @@ class AppsGridPaneContent(
     // ── Grid construction ───────────────────────────────────────────────────────
 
     private fun buildGrid(root: FrameLayout) {
-        val marginPx = dpToPx(MARGIN_DP)
+        val marginPx = context.resources.dpToPx(MARGIN_DP)
         val tileW = root.width / columns - marginPx * 2
         val tileH = root.height / VISIBLE_ROWS - marginPx * 2
 
@@ -181,11 +181,7 @@ class AppsGridPaneContent(
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    private fun dpToPx(dp: Int) = (dp * context.resources.displayMetrics.density + 0.5f).toInt()
-
     companion object {
-        private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-        private const val WRAP  = ViewGroup.LayoutParams.WRAP_CONTENT
         private const val VISIBLE_ROWS = 6
         private const val MARGIN_DP = 4
     }

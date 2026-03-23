@@ -105,8 +105,8 @@ class MusicPlayerPaneContent(
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(MATCH, 0, 2f)
             gravity = Gravity.CENTER_HORIZONTAL
-            val p = dpToPx(24)
-            setPadding(p, p, p, dpToPx(8))
+            val p = context.resources.dpToPx(24)
+            setPadding(p, p, p, context.resources.dpToPx(8))
         }
 
         artView = ImageView(context).apply {
@@ -132,7 +132,7 @@ class MusicPlayerPaneContent(
             gravity = Gravity.CENTER
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = dpToPx(12)
+                topMargin = context.resources.dpToPx(12)
             }
             setTextColor(context.getColor(R.color.text_primary))
         }
@@ -143,7 +143,7 @@ class MusicPlayerPaneContent(
             gravity = Gravity.CENTER
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = dpToPx(4)
+                topMargin = context.resources.dpToPx(4)
             }
             setTextColor(context.getColor(R.color.text_primary))
         }
@@ -154,7 +154,7 @@ class MusicPlayerPaneContent(
             gravity = Gravity.CENTER
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = dpToPx(2)
+                topMargin = context.resources.dpToPx(2)
             }
             setTextColor(context.getColor(R.color.text_secondary))
         }
@@ -175,9 +175,9 @@ class MusicPlayerPaneContent(
             gravity = Gravity.CENTER
         }
 
-        val btnSize = dpToPx(108)
-        val iconSz  = dpToPx(54)
-        val spacing = dpToPx(30)
+        val btnSize = context.resources.dpToPx(108)
+        val iconSz  = context.resources.dpToPx(54)
+        val spacing = context.resources.dpToPx(30)
         val iconColor = context.getColor(R.color.text_primary)
 
         val icons = listOf(
@@ -380,14 +380,14 @@ class MusicPlayerPaneContent(
     }
 
     private fun updatePlayPauseIcon(isPlaying: Boolean) {
-        val iconSz = dpToPx(54)
+        val iconSz = context.resources.dpToPx(54)
         val color = context.getColor(R.color.text_primary)
         val bmp = if (isPlaying) drawPause(iconSz, color) else drawPlay(iconSz, color)
         controlViews.getOrNull(1)?.icon = BitmapDrawable(context.resources, bmp)
     }
 
     private fun updateShuffleVisual() {
-        val iconSz = dpToPx(54)
+        val iconSz = context.resources.dpToPx(54)
         val color = if (isShuffleOn)
             context.getColor(R.color.colorPrimary) else context.getColor(R.color.text_primary)
         controlViews.getOrNull(3)?.icon = BitmapDrawable(context.resources, drawShuffle(iconSz, color))
@@ -491,11 +491,7 @@ class MusicPlayerPaneContent(
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private fun dpToPx(dp: Int) = (dp * context.resources.displayMetrics.density + 0.5f).toInt()
-
     companion object {
-        private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-        private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
         // AndroidX MediaSessionCompat action/extra keys — used via sendCustomAction
         // because the framework MediaController has no shuffle mode API.
         private const val COMPAT_ACTION_SET_SHUFFLE =

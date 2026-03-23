@@ -158,7 +158,7 @@ class GlobalConfigPaneContent(
         val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
-            val p = dpToPx(16)
+            val p = context.resources.dpToPx(16)
             setPadding(p, p, p, p)
         }
 
@@ -192,7 +192,7 @@ class GlobalConfigPaneContent(
         // Save / Cancel
         val btnRow = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(16) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(16) }
             gravity = Gravity.START
         }
 
@@ -202,7 +202,7 @@ class GlobalConfigPaneContent(
         })
 
         btnRow.addView(View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dpToPx(12), 0)
+            layoutParams = LinearLayout.LayoutParams(context.resources.dpToPx(12), 0)
         })
 
         btnRow.addView(makeActionButton("Cancel") {
@@ -254,7 +254,7 @@ class GlobalConfigPaneContent(
         val list = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
-            val p = dpToPx(12)
+            val p = context.resources.dpToPx(12)
             setPadding(p, p, p, p)
         }
         buttonListContainer = list
@@ -309,14 +309,14 @@ class GlobalConfigPaneContent(
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                bottomMargin = dpToPx(4)
+                bottomMargin = context.resources.dpToPx(4)
             }
-            val p = dpToPx(8)
+            val p = context.resources.dpToPx(8)
             setPadding(p, p, p, p)
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpToPx(8).toFloat()
+                cornerRadius = context.resources.dpToPx(8).toFloat()
                 setColor(context.getColor(
                     if (index == selectedButtonIndex) R.color.colorPrimary else R.color.surface_card
                 ))
@@ -342,7 +342,7 @@ class GlobalConfigPaneContent(
             textSize = 14f
             setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
-                marginStart = dpToPx(8)
+                marginStart = context.resources.dpToPx(8)
             }
             isSingleLine = true
         })
@@ -353,7 +353,7 @@ class GlobalConfigPaneContent(
             textSize = 20f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                marginStart = dpToPx(8)
+                marginStart = context.resources.dpToPx(8)
             }
         }
         handle.setOnLongClickListener {
@@ -376,7 +376,7 @@ class GlobalConfigPaneContent(
         val iconType = prefs.getString("btn_${index}_icon_type", null)
         val iconData = prefs.getString("btn_${index}_icon_data", null)
         val type = prefs.getString("btn_${index}_type", null)
-        val size = dpToPx(28)
+        val size = context.resources.dpToPx(28)
 
         return when {
             iconType == "emoji" && !iconData.isNullOrEmpty() -> TextView(context).apply {
@@ -386,7 +386,7 @@ class GlobalConfigPaneContent(
                 layoutParams = LinearLayout.LayoutParams(size, size)
             }
             iconType == "custom" -> {
-                val file = File(context.filesDir, "btn_${index}_icon.png")
+                val file = buttonIconFile(context.filesDir, index)
                 if (file.exists()) {
                     ImageView(context).apply {
                         setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
@@ -415,7 +415,7 @@ class GlobalConfigPaneContent(
     private fun buildTypeSelector(index: Int, currentType: String?): LinearLayout {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
@@ -444,7 +444,7 @@ class GlobalConfigPaneContent(
     private fun buildLabelField(index: Int, currentLabel: String): LinearLayout {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
@@ -497,7 +497,7 @@ class GlobalConfigPaneContent(
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
@@ -544,7 +544,7 @@ class GlobalConfigPaneContent(
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
         }
 
         // URL field
@@ -591,7 +591,7 @@ class GlobalConfigPaneContent(
             isChecked = currentOpenBrowser
             textSize = 14f
             setTextColor(context.getColor(R.color.text_primary))
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(4) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(4) }
         }
         checkbox.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) prefs.edit().putString("btn_${index}_open_browser", "true").apply()
@@ -611,7 +611,7 @@ class GlobalConfigPaneContent(
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
         }
 
         if (widgetProviders.isEmpty()) {
@@ -670,7 +670,7 @@ class GlobalConfigPaneContent(
                 textSize = 12f
                 setTextColor(context.getColor(R.color.text_secondary))
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                    topMargin = dpToPx(4)
+                    topMargin = context.resources.dpToPx(4)
                 }
             })
         } else if (currentProvider != null) {
@@ -678,7 +678,7 @@ class GlobalConfigPaneContent(
                 callbacks.onWidgetBind(index, currentProvider)
             }.apply {
                 layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                    topMargin = dpToPx(4)
+                    topMargin = context.resources.dpToPx(4)
                 }
             })
         }
@@ -692,7 +692,7 @@ class GlobalConfigPaneContent(
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
@@ -744,7 +744,7 @@ class GlobalConfigPaneContent(
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
@@ -791,7 +791,7 @@ class GlobalConfigPaneContent(
     ): LinearLayout {
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
         }
 
         // Option buttons row
@@ -843,7 +843,7 @@ class GlobalConfigPaneContent(
             setHintTextColor(context.getColor(R.color.text_secondary))
             setSingleLine(true)
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = dpToPx(4)
+                topMargin = context.resources.dpToPx(4)
             }
             setBackgroundColor(Color.TRANSPARENT)
 
@@ -859,12 +859,12 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildImagePicker(index: Int): MaterialButton {
-        val hasFile = File(context.filesDir, "btn_${index}_icon.png").exists()
+        val hasFile = buttonIconFile(context.filesDir, index).exists()
         return makeActionButton(if (hasFile) "Change image\u2026" else "Pick image\u2026") {
             callbacks.onPickImage(index)
         }.apply {
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                topMargin = dpToPx(4)
+                topMargin = context.resources.dpToPx(4)
             }
         }
     }
@@ -874,7 +874,7 @@ class GlobalConfigPaneContent(
     private fun buildFooter(): LinearLayout {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(16) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(16) }
             gravity = Gravity.CENTER
         }
 
@@ -885,7 +885,7 @@ class GlobalConfigPaneContent(
         })
 
         row.addView(View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dpToPx(16), 0)
+            layoutParams = LinearLayout.LayoutParams(context.resources.dpToPx(16), 0)
         })
 
         row.addView(makeActionButton("\u2212 Remove Last") { // −
@@ -947,7 +947,7 @@ class GlobalConfigPaneContent(
         }
 
         edit.apply()
-        File(context.filesDir, "btn_${index}_icon.png").delete()
+        buttonIconFile(context.filesDir, index).delete()
     }
 
     private fun applyIconOption(index: Int, option: String) {
@@ -968,7 +968,7 @@ class GlobalConfigPaneContent(
             }
         }
         edit.apply()
-        if (option == "none") File(context.filesDir, "btn_${index}_icon.png").delete()
+        if (option == "none") buttonIconFile(context.filesDir, index).delete()
     }
 
     // ── Button reorder ──────────────────────────────────────────────────────
@@ -981,7 +981,7 @@ class GlobalConfigPaneContent(
         // Save the moved button's data
         val movedVals = keys.associateWith { k -> prefs.getString("btn_$from$k", null) }
         val movedActive = prefs.getBoolean("btn_${from}_active", true)
-        val movedIcon = File(context.filesDir, "btn_${from}_icon.png")
+        val movedIcon = buttonIconFile(context.filesDir, from)
         val tmpIcon = File(context.filesDir, "btn_move_tmp.png")
         if (movedIcon.exists()) movedIcon.copyTo(tmpIcon, overwrite = true) else tmpIcon.delete()
 
@@ -998,8 +998,8 @@ class GlobalConfigPaneContent(
             edit.putBoolean("btn_${i}_active", prefs.getBoolean("btn_${next}_active", true))
             edit.apply()
             // Shift icon file
-            val src = File(context.filesDir, "btn_${next}_icon.png")
-            val dst = File(context.filesDir, "btn_${i}_icon.png")
+            val src = buttonIconFile(context.filesDir, next)
+            val dst = buttonIconFile(context.filesDir, i)
             if (src.exists()) src.copyTo(dst, overwrite = true) else dst.delete()
             i = next
         }
@@ -1012,7 +1012,7 @@ class GlobalConfigPaneContent(
         }
         edit.putBoolean("btn_${to}_active", movedActive)
         edit.apply()
-        val dstIcon = File(context.filesDir, "btn_${to}_icon.png")
+        val dstIcon = buttonIconFile(context.filesDir, to)
         if (tmpIcon.exists()) tmpIcon.copyTo(dstIcon, overwrite = true) else dstIcon.delete()
         tmpIcon.delete()
     }
@@ -1044,7 +1044,7 @@ class GlobalConfigPaneContent(
                 return (super.getDropDownView(position, convertView, parent) as TextView).apply {
                     setTextColor(context.getColor(R.color.text_primary))
                     textSize = 14f
-                    val p = dpToPx(12)
+                    val p = context.resources.dpToPx(12)
                     setPadding(p, p, p, p)
                 }
             }
@@ -1086,16 +1086,16 @@ class GlobalConfigPaneContent(
             minimumHeight = 0
             insetTop = 0
             insetBottom = 0
-            val hp = dpToPx(8)
-            val vp = dpToPx(4)
+            val hp = context.resources.dpToPx(8)
+            val vp = context.resources.dpToPx(4)
             setPadding(hp, vp, hp, vp)
-            cornerRadius = dpToPx(8)
+            cornerRadius = context.resources.dpToPx(8)
             backgroundTintList = ColorStateList.valueOf(
                 context.getColor(if (active) R.color.colorPrimary else R.color.button_inactive)
             )
             setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                marginStart = dpToPx(4)
+                marginStart = context.resources.dpToPx(4)
             }
             setOnClickListener { onClick() }
         }
@@ -1107,7 +1107,7 @@ class GlobalConfigPaneContent(
         ).apply {
             text = label
             textSize = 14f
-            cornerRadius = dpToPx(12)
+            cornerRadius = context.resources.dpToPx(12)
             backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
             setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
@@ -1115,11 +1115,7 @@ class GlobalConfigPaneContent(
         }
     }
 
-    private fun dpToPx(dp: Int) = (dp * context.resources.displayMetrics.density + 0.5f).toInt()
-
     companion object {
-        private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-        private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
         private val BUTTON_PREF_SUFFIXES = listOf(
             "_type", "_value", "_label", "_icon_type", "_icon_data",
             "_widget_id", "_open_browser", "_apps"

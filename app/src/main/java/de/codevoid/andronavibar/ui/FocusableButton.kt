@@ -7,6 +7,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import com.google.android.material.button.MaterialButton
 import de.codevoid.andronavibar.R
+import de.codevoid.andronavibar.dpToPx
 
 /**
  * Base button with shared focus ring and two-tap touch model.
@@ -47,13 +48,10 @@ open class FocusableButton @JvmOverloads constructor(
 
     private fun makeFocusRing(): GradientDrawable = GradientDrawable().apply {
         shape = GradientDrawable.RECTANGLE
-        cornerRadius = dpToPx(CORNER_RADIUS_DP).toFloat()
-        setStroke(dpToPx(STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
+        cornerRadius = resources.dpToPx(CORNER_RADIUS_DP).toFloat()
+        setStroke(resources.dpToPx(STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
         setColor(Color.TRANSPARENT)
     }
-
-    protected fun dpToPx(dp: Int): Int =
-        (dp * resources.displayMetrics.density + 0.5f).toInt()
 
     companion object {
         /** Focus ring stroke width in dp — thick for automotive visibility. */
