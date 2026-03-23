@@ -148,6 +148,7 @@ class GlobalConfigPaneContent(
         // Switching buttons: discard unsaved changes on the previous one
         if (selectedButtonIndex >= 0) {
             val prev = selectedButtonIndex
+            selectedButtonIndex = -1
             restoreSnapshot(prev, editSnapshot)
             callbacks.onReloadButton(prev)
             iconCache.remove(prev)
@@ -453,22 +454,33 @@ class GlobalConfigPaneContent(
             gravity = Gravity.CENTER_VERTICAL
         }
 
+        row.addView(TextView(context).apply {
+            text = "Type: "
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        })
+
         val types = listOf(
             null     to "Empty",
             "app"    to "App",
             "url"    to "URL",
             "widget" to "Widget",
-            "apps"   to "Apps",
-            "music"  to "Music"
+            "apps"   to "Apps Grid",
+            "music"  to "Music Player"
         )
 
-        for ((key, name) in types) {
-            row.addView(makeSmallButton(name, active = key == currentType) {
-                changeButtonType(index, key)
+        val labels = types.map { it.second }
+        val selectedIdx = types.indexOfFirst { it.first == currentType }.coerceAtLeast(0)
+
+        row.addView(makeDarkSpinner(labels, selectedIdx) { position ->
+            val newType = types[position].first
+            if (newType != currentType) {
+                changeButtonType(index, newType)
                 callbacks.onReloadButton(index)
                 rebuild()
-            })
-        }
+            }
+        })
 
         return row
     }
@@ -828,7 +840,6 @@ class GlobalConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
         }
 
-        // Option buttons row
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
@@ -843,19 +854,22 @@ class GlobalConfigPaneContent(
         })
 
         val options = listOf("none" to "None", "emoji" to "Emoji", "custom" to "Image")
-        for ((key, name) in options) {
-            val active = when (key) {
-                "none"   -> currentIconType == null
-                "emoji"  -> currentIconType == "emoji"
-                "custom" -> currentIconType == "custom"
-                else     -> false
-            }
-            row.addView(makeSmallButton(name, active) {
+        val labels = options.map { it.second }
+        val selectedIdx = when (currentIconType) {
+            "emoji"  -> 1
+            "custom" -> 2
+            else     -> 0
+        }
+
+        row.addView(makeDarkSpinner(labels, selectedIdx) { position ->
+            val key = options[position].first
+            val currentKey = currentIconType ?: "none"
+            if (key != currentKey) {
                 applyIconOption(index, key)
                 callbacks.onReloadButton(index)
                 rebuild()
-            })
-        }
+            }
+        })
 
         wrapper.addView(row)
 
@@ -1125,35 +1139,6 @@ class GlobalConfigPaneContent(
         }
 
         return spinner
-    }
-
-    private fun makeSmallButton(
-        label: String,
-        active: Boolean = false,
-        onClick: () -> Unit
-    ): MaterialButton {
-        return MaterialButton(
-            context, null, com.google.android.material.R.attr.materialButtonStyle
-        ).apply {
-            text = label
-            textSize = 12f
-            minimumWidth = 0
-            minimumHeight = 0
-            insetTop = 0
-            insetBottom = 0
-            val hp = context.resources.dpToPx(8)
-            val vp = context.resources.dpToPx(4)
-            setPadding(hp, vp, hp, vp)
-            cornerRadius = context.resources.dpToPx(8)
-            backgroundTintList = ColorStateList.valueOf(
-                context.getColor(if (active) R.color.colorPrimary else R.color.button_inactive)
-            )
-            setTextColor(context.getColor(R.color.text_primary))
-            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                marginStart = context.resources.dpToPx(4)
-            }
-            setOnClickListener { onClick() }
-        }
     }
 
     private fun makeActionButton(label: String, onClick: () -> Unit): MaterialButton {
