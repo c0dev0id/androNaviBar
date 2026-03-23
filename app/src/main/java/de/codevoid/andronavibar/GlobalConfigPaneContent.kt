@@ -152,7 +152,6 @@ class GlobalConfigPaneContent(
             val prev = selectedButtonIndex
             selectedButtonIndex = -1
             restoreSnapshot(prev, editSnapshot)
-            callbacks.onReloadButton(prev)
             iconCache.remove(prev)
             replaceEntry(prev)
         }
@@ -243,7 +242,6 @@ class GlobalConfigPaneContent(
 
         btnRow.addView(makeActionButton("Cancel") {
             restoreSnapshot(index, editSnapshot)
-            callbacks.onReloadButton(index)
             clearDetailEditor()
         })
 
@@ -527,7 +525,6 @@ class GlobalConfigPaneContent(
             val newType = types[position].first
             if (newType != currentType) {
                 changeButtonType(index, newType)
-                callbacks.onReloadButton(index)
                 rebuild()
             }
         })
@@ -625,7 +622,6 @@ class GlobalConfigPaneContent(
                 .putString("btn_${index}_value", app.activityInfo.packageName)
                 .putString("btn_${index}_label", appLabel)
                 .apply()
-            callbacks.onReloadButton(index)
             rebuild()
         }
         row.addView(spinner)
@@ -690,7 +686,6 @@ class GlobalConfigPaneContent(
         checkbox.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) prefs.edit().putString("btn_${index}_open_browser", "true").apply()
             else prefs.edit().remove("btn_${index}_open_browser").apply()
-            callbacks.onReloadButton(index)
         }
 
         wrapper.addView(checkbox)
@@ -826,7 +821,6 @@ class GlobalConfigPaneContent(
                 prefs.edit()
                     .putString("btn_${index}_apps", selectedPkgs.joinToString("|"))
                     .apply()
-                callbacks.onReloadButton(index)
                 rebuild()
             }
             .setNegativeButton("Cancel", null)
@@ -869,7 +863,6 @@ class GlobalConfigPaneContent(
             prefs.edit()
                 .putString("btn_${index}_value", app.activityInfo.packageName)
                 .apply()
-            callbacks.onReloadButton(index)
         }
         row.addView(spinner)
 
@@ -914,7 +907,6 @@ class GlobalConfigPaneContent(
             val currentKey = currentIconType ?: "none"
             if (key != currentKey) {
                 applyIconOption(index, key)
-                callbacks.onReloadButton(index)
                 rebuild()
             }
         })
