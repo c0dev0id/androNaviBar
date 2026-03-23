@@ -24,6 +24,7 @@ object UpdateChecker {
 
         CoroutineScope(Dispatchers.Main).launch {
             val result = withContext(Dispatchers.IO) { fetchRelease() }
+            if (activity.isFinishing) return@launch
 
             if (result == null) {
                 Toast.makeText(activity, "Failed to check for updates", Toast.LENGTH_SHORT).show()
@@ -48,21 +49,24 @@ object UpdateChecker {
 
     private fun fetchRelease(): Triple<String, String, String>? = try {
         val conn = URL(RELEASE_URL).openConnection() as HttpURLConnection
-        conn.setRequestProperty("Accept", "application/vnd.github+json")
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 10_000
-        val json = JSONObject(conn.inputStream.bufferedReader().readText())
-        conn.disconnect()
+        try {
+            conn.setRequestProperty("Accept", "application/vnd.github+json")
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 10_000
+            val json = JSONObject(conn.inputStream.bufferedReader().readText())
 
-        val assets = json.getJSONArray("assets")
-        if (assets.length() == 0) null
-        else {
-            val asset = assets.getJSONObject(0)
-            val apkName = asset.getString("name")
-            val apkUrl = asset.getString("browser_download_url")
-            // Extract SHA from asset name: aR2Launcher-dev-XXXXXXX.apk
-            val sha = apkName.removeSuffix(".apk").substringAfterLast("-")
-            Triple(sha, apkUrl, apkName)
+            val assets = json.getJSONArray("assets")
+            if (assets.length() == 0) null
+            else {
+                val asset = assets.getJSONObject(0)
+                val apkName = asset.getString("name")
+                val apkUrl = asset.getString("browser_download_url")
+                // Extract SHA from asset name: aR2Launcher-dev-XXXXXXX.apk
+                val sha = apkName.removeSuffix(".apk").substringAfterLast("-")
+                Triple(sha, apkUrl, apkName)
+            }
+        } finally {
+            conn.disconnect()
         }
     } catch (_: Exception) { null }
 
@@ -71,6 +75,7 @@ object UpdateChecker {
 
         CoroutineScope(Dispatchers.Main).launch {
             val file = withContext(Dispatchers.IO) { downloadApk(activity, url, name) }
+            if (activity.isFinishing) return@launch
 
             if (file == null) {
                 Toast.makeText(activity, "Download failed", Toast.LENGTH_SHORT).show()
@@ -91,12 +96,15 @@ object UpdateChecker {
 
     private fun downloadApk(activity: Activity, url: String, name: String): File? = try {
         val conn = URL(url).openConnection() as HttpURLConnection
-        conn.instanceFollowRedirects = true
-        conn.connectTimeout = 30_000
-        conn.readTimeout = 30_000
-        val file = File(activity.cacheDir, name)
-        conn.inputStream.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
-        conn.disconnect()
-        file
+        try {
+            conn.instanceFollowRedirects = true
+            conn.connectTimeout = 30_000
+            conn.readTimeout = 30_000
+            val file = File(activity.cacheDir, name)
+            conn.inputStream.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+            file
+        } finally {
+            conn.disconnect()
+        }
     } catch (_: Exception) { null }
 }

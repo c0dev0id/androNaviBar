@@ -92,7 +92,6 @@ class MainActivity : Activity() {
     /** Loading spinner overlay, shown while a pane's content is being prepared. */
     private var loadingSpinner: ProgressBar? = null
 
-
     private enum class FocusOwner { BUTTONS, PANE }
 
     /** Which region currently owns D-pad input. */
