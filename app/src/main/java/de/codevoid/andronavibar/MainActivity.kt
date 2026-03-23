@@ -284,16 +284,9 @@ class MainActivity : Activity() {
         }
     }
 
-    /**
-     * Show a toggle button's content pane. If the button is already active
-     * (its pane is displayed), toggle it off instead.
-     */
+    /** Show a toggle button's content pane (no-op if already active). */
     private fun activateToggleButton(index: Int, showPane: () -> Unit) {
-        if (activeButtonIndex == index) {
-            dismissCurrentPane()
-            deactivateActiveButton()
-            return
-        }
+        if (activeButtonIndex == index) return
         dismissCurrentPane()
         deactivateActiveButton()
         activeButtonIndex = index
