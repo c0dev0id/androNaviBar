@@ -14,6 +14,7 @@ import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.InputType
@@ -27,6 +28,7 @@ import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.widget.EditText
 import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -66,6 +68,8 @@ class GlobalConfigPaneContent(
     private var selectedButtonIndex: Int = -1
     private var editSnapshot: Map<String, String?> = emptyMap()
 
+    private val iconCache = mutableMapOf<Int, Drawable?>()
+
     private var cachedApps: List<ResolveInfo>? = null
     private var cachedWidgets: List<AppWidgetProviderInfo>? = null
 
@@ -102,12 +106,14 @@ class GlobalConfigPaneContent(
         buttonListContainer = null
         detailContainer = null
         selectedButtonIndex = -1
+        iconCache.clear()
         cachedApps = null
         cachedWidgets = null
     }
 
     /** Rebuild both the right-side list and the detail editor (if open). */
     fun rebuild() {
+        iconCache.remove(selectedButtonIndex)
         rebuildButtonList()
         if (selectedButtonIndex >= 0) refreshDetailEditor()
     }
@@ -278,6 +284,7 @@ class GlobalConfigPaneContent(
                     if (from != to && to >= 0) {
                         if (selectedButtonIndex >= 0) clearDetailEditor()
                         moveButtonPrefs(from, to)
+                        iconCache.clear()
                         callbacks.onReloadAll()
                         rebuildButtonList()
                     }
@@ -384,39 +391,40 @@ class GlobalConfigPaneContent(
     private fun buildIconPreview(index: Int): View? {
         val iconType = prefs.getString("btn_${index}_icon_type", null)
         val iconData = prefs.getString("btn_${index}_icon_data", null)
-        val type = prefs.getString("btn_${index}_type", null)
         val size = context.resources.dpToPx(28)
 
-        return when {
-            iconType == "emoji" && !iconData.isNullOrEmpty() -> TextView(context).apply {
+        // Emoji: lightweight TextView, no caching needed
+        if (iconType == "emoji" && !iconData.isNullOrEmpty()) {
+            return TextView(context).apply {
                 text = iconData
                 textSize = 18f
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(size, size)
             }
-            iconType == "custom" -> {
-                val file = buttonIconFile(context.filesDir, index)
-                if (file.exists()) {
-                    ImageView(context).apply {
-                        setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
-                        scaleType = ImageView.ScaleType.CENTER_CROP
-                        layoutParams = LinearLayout.LayoutParams(size, size)
-                    }
-                } else null
-            }
-            type == "app" -> {
-                val pkg = prefs.getString("btn_${index}_value", null)
-                if (pkg != null) {
-                    try {
-                        ImageView(context).apply {
-                            setImageDrawable(context.packageManager.getApplicationIcon(pkg))
-                            layoutParams = LinearLayout.LayoutParams(size, size)
-                        }
-                    } catch (_: Exception) { null }
-                } else null
-            }
-            else -> null
         }
+
+        // Drawable icons: cache to avoid repeated IPC / bitmap decode
+        val drawable = iconCache.getOrPut(index) { loadIconDrawable(index) }
+            ?: return null
+        return ImageView(context).apply {
+            setImageDrawable(drawable)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            layoutParams = LinearLayout.LayoutParams(size, size)
+        }
+    }
+
+    private fun loadIconDrawable(index: Int): Drawable? {
+        val iconType = prefs.getString("btn_${index}_icon_type", null)
+        if (iconType == "custom") {
+            val file = buttonIconFile(context.filesDir, index)
+            return if (file.exists()) BitmapDrawable(context.resources, BitmapFactory.decodeFile(file.absolutePath)) else null
+        }
+        val type = prefs.getString("btn_${index}_type", null)
+        if (type == "app") {
+            val pkg = prefs.getString("btn_${index}_value", null) ?: return null
+            return try { context.packageManager.getApplicationIcon(pkg) } catch (_: Exception) { null }
+        }
+        return null
     }
 
     // ── Type selector ───────────────────────────────────────────────────────
