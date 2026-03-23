@@ -111,19 +111,31 @@ class GlobalConfigPaneContent(
         cachedWidgets = null
     }
 
-    /** Rebuild both the right-side list and the detail editor (if open). */
+    /** Update the currently-edited entry and refresh the detail editor. */
     fun rebuild() {
-        iconCache.remove(selectedButtonIndex)
-        rebuildButtonList()
-        if (selectedButtonIndex >= 0) refreshDetailEditor()
+        val idx = selectedButtonIndex
+        if (idx >= 0) {
+            iconCache.remove(idx)
+            replaceEntry(idx)
+            refreshDetailEditor()
+        }
     }
 
     private fun rebuildButtonList() {
         val container = buttonListContainer ?: return
         container.removeAllViews()
+        iconCache.clear()
         val count = prefs.getInt("button_count", 6)
         for (i in 0 until count) container.addView(buildButtonListEntry(i))
         container.addView(buildFooter())
+    }
+
+    /** Replace a single entry in the button list without touching other entries. */
+    private fun replaceEntry(index: Int) {
+        val container = buttonListContainer ?: return
+        if (index < 0 || index >= container.childCount) return
+        container.removeViewAt(index)
+        container.addView(buildButtonListEntry(index), index)
     }
 
     // ── Detail editor (left side) ──────────────────────────────────────────
@@ -135,9 +147,11 @@ class GlobalConfigPaneContent(
         }
         // Switching buttons: discard unsaved changes on the previous one
         if (selectedButtonIndex >= 0) {
-            restoreSnapshot(selectedButtonIndex, editSnapshot)
-            callbacks.onReloadButton(selectedButtonIndex)
-            setEntryHighlight(selectedButtonIndex, false)
+            val prev = selectedButtonIndex
+            restoreSnapshot(prev, editSnapshot)
+            callbacks.onReloadButton(prev)
+            iconCache.remove(prev)
+            replaceEntry(prev)
         }
         selectedButtonIndex = index
         editSnapshot = snapshotButton(index)
@@ -150,7 +164,10 @@ class GlobalConfigPaneContent(
         detailContainer?.removeAllViews()
         selectedButtonIndex = -1
         editSnapshot = emptyMap()
-        if (prev >= 0) setEntryHighlight(prev, false)
+        if (prev >= 0) {
+            iconCache.remove(prev)
+            replaceEntry(prev)
+        }
     }
 
     private fun setEntryHighlight(index: Int, selected: Boolean) {
@@ -898,7 +915,10 @@ class GlobalConfigPaneContent(
         row.addView(makeActionButton("+ Add Button") {
             if (selectedButtonIndex >= 0) clearDetailEditor()
             callbacks.onAddButton()
-            rebuildButtonList()
+            val newIndex = prefs.getInt("button_count", 6) - 1
+            val container = buttonListContainer ?: return@makeActionButton
+            // Insert before the footer
+            container.addView(buildButtonListEntry(newIndex), container.childCount - 1)
         })
 
         row.addView(View(context).apply {
@@ -907,8 +927,13 @@ class GlobalConfigPaneContent(
 
         row.addView(makeActionButton("\u2212 Remove Last") { // −
             if (selectedButtonIndex >= 0) clearDetailEditor()
+            val container = buttonListContainer ?: return@makeActionButton
+            val count = prefs.getInt("button_count", 6)
+            if (count <= 1) return@makeActionButton
             callbacks.onRemoveLastButton()
-            rebuildButtonList()
+            // Remove last entry (before footer)
+            iconCache.remove(count - 1)
+            container.removeViewAt(container.childCount - 2)
         })
 
         return row
