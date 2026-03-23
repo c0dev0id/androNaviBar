@@ -613,16 +613,12 @@ class MainActivity : Activity() {
         // Touch-only, not d-pad navigable. Bypass the two-tap model.
         btn.setOnTouchListener(null)
         btn.setOnClickListener {
-            if (activeButtonIndex == CONFIGURE_BUTTON_INDEX) {
-                dismissCurrentPane()
-                deactivateActiveButton()
-            } else {
-                dismissCurrentPane()
-                deactivateActiveButton()
-                activeButtonIndex = CONFIGURE_BUTTON_INDEX
-                configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
-                showGlobalConfigPane()
-            }
+            if (activeButtonIndex == CONFIGURE_BUTTON_INDEX) return@setOnClickListener
+            dismissCurrentPane()
+            deactivateActiveButton()
+            activeButtonIndex = CONFIGURE_BUTTON_INDEX
+            configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
+            showGlobalConfigPane()
         }
         return btn
     }
