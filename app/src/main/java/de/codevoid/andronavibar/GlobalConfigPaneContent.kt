@@ -274,7 +274,7 @@ class GlobalConfigPaneContent(
 
         // Left side: detail editor (starts empty)
         val detail = FrameLayout(context).apply {
-            layoutParams = LinearLayout.LayoutParams(0, MATCH, 2f)
+            layoutParams = LinearLayout.LayoutParams(0, MATCH, 1f)
         }
         detailContainer = detail
         root.addView(detail)
@@ -287,7 +287,7 @@ class GlobalConfigPaneContent(
         val list = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
-            val p = context.resources.dpToPx(12)
+            val p = context.resources.dpToPx(16)
             setPadding(p, p, p, p)
         }
         buttonListContainer = list
@@ -343,14 +343,14 @@ class GlobalConfigPaneContent(
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                bottomMargin = context.resources.dpToPx(4)
+                bottomMargin = context.resources.dpToPx(6)
             }
-            val p = context.resources.dpToPx(8)
+            val p = context.resources.dpToPx(12)
             setPadding(p, p, p, p)
             gravity = Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = context.resources.dpToPx(8).toFloat()
+                cornerRadius = context.resources.dpToPx(12).toFloat()
                 setColor(context.getColor(
                     if (index == selectedButtonIndex) R.color.colorPrimary else R.color.surface_card
                 ))
@@ -373,10 +373,10 @@ class GlobalConfigPaneContent(
         // Label
         row.addView(TextView(context).apply {
             text = displayName
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
-                marginStart = context.resources.dpToPx(8)
+                marginStart = context.resources.dpToPx(12)
             }
             isSingleLine = true
         })
@@ -384,10 +384,10 @@ class GlobalConfigPaneContent(
         // Drag handle — long press starts drag
         val handle = TextView(context).apply {
             text = "\u2261" // ≡
-            textSize = 20f
+            textSize = 26f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                marginStart = context.resources.dpToPx(8)
+                marginStart = context.resources.dpToPx(12)
             }
         }
         handle.setOnLongClickListener {
@@ -409,13 +409,13 @@ class GlobalConfigPaneContent(
     private fun buildIconPreview(index: Int): View? {
         val iconType = prefs.getString("btn_${index}_icon_type", null)
         val iconData = prefs.getString("btn_${index}_icon_data", null)
-        val size = context.resources.dpToPx(28)
+        val size = context.resources.dpToPx(40)
 
         // Emoji: lightweight TextView, no caching needed
         if (iconType == "emoji" && !iconData.isNullOrEmpty()) {
             return TextView(context).apply {
                 text = iconData
-                textSize = 18f
+                textSize = 24f
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(size, size)
             }
