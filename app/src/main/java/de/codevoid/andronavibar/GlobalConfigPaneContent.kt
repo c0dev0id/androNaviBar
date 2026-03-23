@@ -3,6 +3,8 @@ package de.codevoid.andronavibar
 import android.app.AlertDialog
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
+import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -16,6 +18,7 @@ import android.graphics.drawable.GradientDrawable
 import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
+import android.view.DragEvent
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -256,6 +259,25 @@ class GlobalConfigPaneContent(
         }
         buttonListContainer = list
 
+        list.setOnDragListener { _, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> true
+                DragEvent.ACTION_DRAG_OVER -> true
+                DragEvent.ACTION_DROP -> {
+                    val from = event.clipData?.getItemAt(0)?.text?.toString()?.toIntOrNull() ?: return@setOnDragListener false
+                    val to = dropTargetIndex(list, event.y)
+                    if (from != to && to >= 0) {
+                        if (selectedButtonIndex >= 0) clearDetailEditor()
+                        moveButtonPrefs(from, to)
+                        callbacks.onReloadAll()
+                        rebuildButtonList()
+                    }
+                    true
+                }
+                else -> true
+            }
+        }
+
         val count = prefs.getInt("button_count", 6)
         for (i in 0 until count) list.addView(buildButtonListEntry(i))
         list.addView(buildFooter())
@@ -263,6 +285,17 @@ class GlobalConfigPaneContent(
         scroll.addView(list)
         root.addView(scroll)
         return root
+    }
+
+    /** Determine which button slot the drop Y coordinate corresponds to. */
+    private fun dropTargetIndex(list: LinearLayout, y: Float): Int {
+        val count = prefs.getInt("button_count", 6)
+        for (i in 0 until count) {
+            val child = list.getChildAt(i) ?: continue
+            val mid = child.top + child.height / 2f
+            if (y < mid) return i
+        }
+        return count - 1
     }
 
     // ── Right-side button list entries ───────────────────────────────────────
@@ -314,15 +347,24 @@ class GlobalConfigPaneContent(
             isSingleLine = true
         })
 
-        // Drag handle (visual placeholder; drag in Step 5)
-        row.addView(TextView(context).apply {
+        // Drag handle — long press starts drag
+        val handle = TextView(context).apply {
             text = "\u2261" // ≡
             textSize = 20f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
                 marginStart = dpToPx(8)
             }
-        })
+        }
+        handle.setOnLongClickListener {
+            val clip = ClipData(
+                ClipDescription("button", arrayOf(ClipDescription.MIMETYPE_TEXT_PLAIN)),
+                ClipData.Item(index.toString())
+            )
+            row.startDragAndDrop(clip, View.DragShadowBuilder(row), null, 0)
+            true
+        }
+        row.addView(handle)
 
         // Tap opens detail editor on the left side
         row.setOnClickListener { showDetailEditor(index) }
@@ -931,28 +973,48 @@ class GlobalConfigPaneContent(
 
     // ── Button reorder ──────────────────────────────────────────────────────
 
-    private fun swapButtonPrefs(a: Int, b: Int) {
+    /** Move button at [from] to [to], shifting intermediate entries. */
+    private fun moveButtonPrefs(from: Int, to: Int) {
+        if (from == to) return
         val keys = BUTTON_PREF_SUFFIXES
-        val aVals = keys.associateWith { k -> prefs.getString("btn_$a$k", null) }
-        val bVals = keys.associateWith { k -> prefs.getString("btn_$b$k", null) }
 
+        // Save the moved button's data
+        val movedVals = keys.associateWith { k -> prefs.getString("btn_$from$k", null) }
+        val movedActive = prefs.getBoolean("btn_${from}_active", true)
+        val movedIcon = File(context.filesDir, "btn_${from}_icon.png")
+        val tmpIcon = File(context.filesDir, "btn_move_tmp.png")
+        if (movedIcon.exists()) movedIcon.copyTo(tmpIcon, overwrite = true) else tmpIcon.delete()
+
+        // Shift entries between from and to
+        val dir = if (from < to) 1 else -1
+        var i = from
+        while (i != to) {
+            val next = i + dir
+            val edit = prefs.edit()
+            for (k in keys) {
+                val v = prefs.getString("btn_$next$k", null)
+                if (v != null) edit.putString("btn_$i$k", v) else edit.remove("btn_$i$k")
+            }
+            edit.putBoolean("btn_${i}_active", prefs.getBoolean("btn_${next}_active", true))
+            edit.apply()
+            // Shift icon file
+            val src = File(context.filesDir, "btn_${next}_icon.png")
+            val dst = File(context.filesDir, "btn_${i}_icon.png")
+            if (src.exists()) src.copyTo(dst, overwrite = true) else dst.delete()
+            i = next
+        }
+
+        // Place moved button at destination
         val edit = prefs.edit()
         for (k in keys) {
-            val toA = bVals[k]
-            val toB = aVals[k]
-            if (toA != null) edit.putString("btn_$a$k", toA) else edit.remove("btn_$a$k")
-            if (toB != null) edit.putString("btn_$b$k", toB) else edit.remove("btn_$b$k")
+            val v = movedVals[k]
+            if (v != null) edit.putString("btn_$to$k", v) else edit.remove("btn_$to$k")
         }
+        edit.putBoolean("btn_${to}_active", movedActive)
         edit.apply()
-
-        // Swap icon files
-        val fa = File(context.filesDir, "btn_${a}_icon.png")
-        val fb = File(context.filesDir, "btn_${b}_icon.png")
-        val tmp = File(context.filesDir, "btn_swap_tmp.png")
-        if (fa.exists()) fa.copyTo(tmp, overwrite = true) else tmp.delete()
-        if (fb.exists()) fb.copyTo(fa, overwrite = true) else fa.delete()
-        if (tmp.exists()) tmp.copyTo(fb, overwrite = true) else fb.delete()
-        tmp.delete()
+        val dstIcon = File(context.filesDir, "btn_${to}_icon.png")
+        if (tmpIcon.exists()) tmpIcon.copyTo(dstIcon, overwrite = true) else dstIcon.delete()
+        tmpIcon.delete()
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
