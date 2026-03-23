@@ -375,17 +375,19 @@ class MainActivity : Activity() {
 
     private fun showWidgetPane(appWidgetId: Int) {
         val hv = widgetViews[appWidgetId] ?: return
-        // On API 34, content:// URI permissions from the provider's FileProvider
-        // can be lost after an app update.  When detected, rebind the widget —
-        // this triggers onUpdate() in the provider, which pushes fresh
-        // RemoteViews through the system service and re-grants permissions.
-        (hv as? SafeAppWidgetHostView)?.onSecurityError = {
-            hv.post { rebindWidget(appWidgetId) }
-        }
         val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading(); showGearIcon() }
         activeWidgetPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
+        // After the first layout pass, check whether the widget hit a
+        // SecurityException (stale FileProvider URI permissions on API 34).
+        // If so, rebind to get fresh URI grants from the provider.
+        hv.post {
+            if ((hv as? SafeAppWidgetHostView)?.hasSecurityError == true) {
+                Log.d("aR2Launcher", "SecurityException detected for widget $appWidgetId, rebinding")
+                rebindWidget(appWidgetId)
+            }
+        }
     }
 
     /**

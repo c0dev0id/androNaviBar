@@ -26,9 +26,9 @@ class SafeAppWidgetHost(context: Context, hostId: Int) : AppWidgetHost(context, 
 
 internal class SafeAppWidgetHostView(context: Context) : AppWidgetHostView(context) {
 
-    /** Fired once when onMeasure hits a SecurityException (stale URI permissions). */
-    var onSecurityError: (() -> Unit)? = null
-    private var securityErrorFired = false
+    /** True after onMeasure catches a SecurityException (stale URI permissions). */
+    var hasSecurityError = false
+        private set
 
     override fun updateAppWidget(remoteViews: RemoteViews?) {
         try {
@@ -47,10 +47,7 @@ internal class SafeAppWidgetHostView(context: Context) : AppWidgetHostView(conte
                 MeasureSpec.getSize(heightMeasureSpec)
             )
             Log.w(TAG, "Widget measure failed: ${e.message}")
-            if (!securityErrorFired) {
-                securityErrorFired = true
-                onSecurityError?.invoke()
-            }
+            hasSecurityError = true
         } catch (e: Exception) {
             setMeasuredDimension(
                 MeasureSpec.getSize(widthMeasureSpec),
