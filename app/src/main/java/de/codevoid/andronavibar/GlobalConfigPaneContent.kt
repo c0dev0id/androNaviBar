@@ -985,18 +985,17 @@ class GlobalConfigPaneContent(
         val tmpIcon = File(context.filesDir, "btn_move_tmp.png")
         if (movedIcon.exists()) movedIcon.copyTo(tmpIcon, overwrite = true) else tmpIcon.delete()
 
-        // Shift entries between from and to
+        // Shift entries between from and to (single batch write)
         val dir = if (from < to) 1 else -1
+        val edit = prefs.edit()
         var i = from
         while (i != to) {
             val next = i + dir
-            val edit = prefs.edit()
             for (k in keys) {
                 val v = prefs.getString("btn_$next$k", null)
                 if (v != null) edit.putString("btn_$i$k", v) else edit.remove("btn_$i$k")
             }
             edit.putBoolean("btn_${i}_active", prefs.getBoolean("btn_${next}_active", true))
-            edit.apply()
             // Shift icon file
             val src = buttonIconFile(context.filesDir, next)
             val dst = buttonIconFile(context.filesDir, i)
@@ -1005,7 +1004,6 @@ class GlobalConfigPaneContent(
         }
 
         // Place moved button at destination
-        val edit = prefs.edit()
         for (k in keys) {
             val v = movedVals[k]
             if (v != null) edit.putString("btn_$to$k", v) else edit.remove("btn_$to$k")
