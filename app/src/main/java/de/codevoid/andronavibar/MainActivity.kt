@@ -373,27 +373,12 @@ class MainActivity : Activity() {
     }
 
     private fun showWidgetPane(appWidgetId: Int) {
-        val mgr = AppWidgetManager.getInstance(this)
-        val info = mgr.getAppWidgetInfo(appWidgetId)
-        // Create a fresh host view for clean internal state.
-        val hv = if (info != null) {
-            appWidgetHost.createView(this, appWidgetId, info).also {
-                widgetViews[appWidgetId] = it
-            }
-        } else {
-            widgetViews[appWidgetId] ?: return
-        }
-        // Ask the provider to re-push its RemoteViews.  On API 34, content://
-        // URI permissions from the provider's FileProvider are lost after an app
-        // update.  Only the push path (provider → AppWidgetManager.updateAppWidget
-        // → system service) re-grants them; neither createView() nor
-        // startListening() does.
-        if (info != null) {
-            sendBroadcast(Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
-                component = info.provider
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
-            })
-        }
+        // Re-register with the system to force re-delivery of RemoteViews
+        // through the push path, which re-grants content:// URI permissions.
+        // On API 34 these are lost after an app update, causing the provider's
+        // FileProvider images to fail with SecurityException on every measure.
+        appWidgetHost.startListening()
+        val hv = widgetViews[appWidgetId] ?: return
         val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading(); showGearIcon() }
         activeWidgetPane = pane
