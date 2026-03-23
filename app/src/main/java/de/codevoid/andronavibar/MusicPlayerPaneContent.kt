@@ -53,7 +53,6 @@ class MusicPlayerPaneContent(
     // Pre-rendered transport icons — allocated once in buildLayout(), swapped by reference.
     private lateinit var playIcon: BitmapDrawable
     private lateinit var pauseIcon: BitmapDrawable
-    private lateinit var shuffleOnIcon: BitmapDrawable
     private lateinit var shuffleOffIcon: BitmapDrawable
 
     var onContentReady: (() -> Unit)? = null
@@ -187,13 +186,11 @@ class MusicPlayerPaneContent(
         val iconSz  = context.resources.dpToPx(54)
         val spacing = context.resources.dpToPx(30)
         val iconColor = context.getColor(R.color.text_primary)
-        val accentColor = context.getColor(R.color.colorPrimary)
 
         // Pre-render all icon variants once
         playIcon = BitmapDrawable(context.resources, drawPlay(iconSz, iconColor))
         pauseIcon = BitmapDrawable(context.resources, drawPause(iconSz, iconColor))
         shuffleOffIcon = BitmapDrawable(context.resources, drawShuffle(iconSz, iconColor))
-        shuffleOnIcon = BitmapDrawable(context.resources, drawShuffle(iconSz, accentColor))
 
         val icons = listOf(
             BitmapDrawable(context.resources, drawPrev(iconSz, iconColor)),
@@ -411,7 +408,7 @@ class MusicPlayerPaneContent(
 
     private fun syncShuffleVisual() {
         val btn = controlViews.getOrNull(3) ?: return
-        btn.icon = if (isShuffleOn) shuffleOnIcon else shuffleOffIcon
+        btn.icon = shuffleOffIcon
         btn.backgroundTintList = ColorStateList.valueOf(
             if (isShuffleOn) context.getColor(R.color.colorPrimary) else Color.TRANSPARENT
         )
