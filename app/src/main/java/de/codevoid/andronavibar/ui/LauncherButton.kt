@@ -18,13 +18,8 @@ import android.os.Looper
 import android.util.AttributeSet
 import de.codevoid.andronavibar.AppEntry
 import de.codevoid.andronavibar.ButtonConfig
-import de.codevoid.andronavibar.PaneContent
 import de.codevoid.andronavibar.R
 import de.codevoid.andronavibar.UrlIcon
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import java.io.File
 
 // ── LauncherButton ────────────────────────────────────────────────────────────
@@ -113,14 +108,6 @@ class LauncherButton @JvmOverloads constructor(
         }
         super.onDraw(canvas)
     }
-
-    // ── Pane loading (used by future toggle/pane types) ───────────────────────
-
-    private var paneContent: PaneContent? = null
-    private var isLoading = false
-
-    /** CoroutineScope for async work (pane loading, favicon fetch); cancelled when detached. */
-    val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // ── Internal ─────────────────────────────────────────────────────────────
 
@@ -451,8 +438,4 @@ class LauncherButton @JvmOverloads constructor(
         }, 150L)
     }
 
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        scope.cancel()
-    }
 }
