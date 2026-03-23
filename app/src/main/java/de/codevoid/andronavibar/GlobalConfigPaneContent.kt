@@ -61,6 +61,7 @@ class GlobalConfigPaneContent(
     private var buttonListContainer: LinearLayout? = null
     private var detailContainer: FrameLayout? = null
     private var selectedButtonIndex: Int = -1
+    private var editSnapshot: Map<String, String?> = emptyMap()
 
     private var installedApps: List<ResolveInfo> = emptyList()
     private var widgetProviders: List<AppWidgetProviderInfo> = emptyList()
@@ -94,13 +95,128 @@ class GlobalConfigPaneContent(
         selectedButtonIndex = -1
     }
 
-    /** Rebuild the right-side button list after a structural change. */
+    /** Rebuild both the right-side list and the detail editor (if open). */
     fun rebuild() {
+        rebuildButtonList()
+        if (selectedButtonIndex >= 0) refreshDetailEditor()
+    }
+
+    private fun rebuildButtonList() {
         val container = buttonListContainer ?: return
         container.removeAllViews()
         val count = prefs.getInt("button_count", 6)
         for (i in 0 until count) container.addView(buildButtonListEntry(i))
         container.addView(buildFooter())
+    }
+
+    // ── Detail editor (left side) ──────────────────────────────────────────
+
+    private fun showDetailEditor(index: Int) {
+        if (index == selectedButtonIndex) {
+            clearDetailEditor()
+            return
+        }
+        // Switching buttons: discard unsaved changes on the previous one
+        if (selectedButtonIndex >= 0) {
+            restoreSnapshot(selectedButtonIndex, editSnapshot)
+            callbacks.onReloadButton(selectedButtonIndex)
+        }
+        selectedButtonIndex = index
+        editSnapshot = snapshotButton(index)
+        refreshDetailEditor()
+        rebuildButtonList()
+    }
+
+    private fun clearDetailEditor() {
+        detailContainer?.removeAllViews()
+        selectedButtonIndex = -1
+        editSnapshot = emptyMap()
+        rebuildButtonList()
+    }
+
+    private fun refreshDetailEditor() {
+        val container = detailContainer ?: return
+        val index = selectedButtonIndex
+        if (index < 0) return
+        container.removeAllViews()
+
+        val scroll = ScrollView(context).apply {
+            layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
+        }
+
+        val content = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
+            val p = dpToPx(16)
+            setPadding(p, p, p, p)
+        }
+
+        val type = prefs.getString("btn_${index}_type", null)
+        val label = prefs.getString("btn_${index}_label", "") ?: ""
+
+        // Header
+        content.addView(TextView(context).apply {
+            text = "Button ${index + 1}" + if (label.isNotEmpty()) " \u2014 $label" else ""
+            textSize = 18f
+            setTextColor(context.getColor(R.color.text_primary))
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+        })
+
+        // Type selector
+        content.addView(buildTypeSelector(index, type))
+
+        // Label field
+        if (type != null) content.addView(buildLabelField(index, label))
+
+        // Type-specific config
+        if (type != null) buildTypeConfig(index, type)?.let { content.addView(it) }
+
+        // Icon selector (non-app types)
+        if (type != null && type != "app") {
+            val iconType = prefs.getString("btn_${index}_icon_type", null)
+            val iconData = prefs.getString("btn_${index}_icon_data", null)
+            content.addView(buildIconSelector(index, iconType, iconData))
+        }
+
+        // Save / Cancel
+        val btnRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dpToPx(16) }
+            gravity = Gravity.START
+        }
+
+        btnRow.addView(makeActionButton("Save") {
+            editSnapshot = emptyMap()
+            clearDetailEditor()
+        })
+
+        btnRow.addView(View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(dpToPx(12), 0)
+        })
+
+        btnRow.addView(makeActionButton("Cancel") {
+            restoreSnapshot(index, editSnapshot)
+            callbacks.onReloadButton(index)
+            clearDetailEditor()
+        })
+
+        content.addView(btnRow)
+        scroll.addView(content)
+        container.addView(scroll)
+    }
+
+    private fun snapshotButton(index: Int): Map<String, String?> {
+        val keys = BUTTON_PREF_SUFFIXES
+        return keys.associateWith { k -> prefs.getString("btn_$index$k", null) }
+    }
+
+    private fun restoreSnapshot(index: Int, snapshot: Map<String, String?>) {
+        if (snapshot.isEmpty()) return
+        val edit = prefs.edit()
+        for ((k, v) in snapshot) {
+            if (v != null) edit.putString("btn_$index$k", v) else edit.remove("btn_$index$k")
+        }
+        edit.apply()
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -200,12 +316,8 @@ class GlobalConfigPaneContent(
             }
         })
 
-        // Tap opens detail editor
-        row.setOnClickListener {
-            selectedButtonIndex = index
-            // Detail editor will be built in Step 3; for now just highlight.
-            rebuild()
-        }
+        // Tap opens detail editor on the left side
+        row.setOnClickListener { showDetailEditor(index) }
 
         return row
     }
@@ -246,86 +358,6 @@ class GlobalConfigPaneContent(
             }
             else -> null
         }
-    }
-
-    private fun buildButtonEntry(index: Int): LinearLayout {
-        val type = prefs.getString("btn_${index}_type", null)
-        val label = prefs.getString("btn_${index}_label", "") ?: ""
-        val iconType = prefs.getString("btn_${index}_icon_type", null)
-        val iconData = prefs.getString("btn_${index}_icon_data", null)
-
-        val card = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                bottomMargin = dpToPx(8)
-            }
-            val p = dpToPx(12)
-            setPadding(p, p, p, p)
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpToPx(12).toFloat()
-                setColor(context.getColor(R.color.surface_card))
-            }
-        }
-
-        // ── Header: slot number + move buttons ──────────────────────────
-        card.addView(buildHeader(index))
-
-        // ── Type selector ───────────────────────────────────────────────
-        card.addView(buildTypeSelector(index, type))
-
-        // ── Label field (only for non-empty buttons) ────────────────────
-        if (type != null) {
-            card.addView(buildLabelField(index, label))
-        }
-
-        // ── Type-specific config ────────────────────────────────────────
-        if (type != null) {
-            buildTypeConfig(index, type)?.let { card.addView(it) }
-        }
-
-        // ── Icon selector (non-empty, non-app buttons) ─────────────────
-        if (type != null && type != "app") {
-            card.addView(buildIconSelector(index, iconType, iconData))
-        }
-
-        return card
-    }
-
-    // ── Header row ──────────────────────────────────────────────────────────
-
-    private fun buildHeader(index: Int): LinearLayout {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        row.addView(TextView(context).apply {
-            text = "Button ${index + 1}"
-            textSize = 16f
-            setTextColor(context.getColor(R.color.text_primary))
-            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
-        })
-
-        row.addView(makeSmallButton("\u2191") { // ↑
-            if (index > 0) {
-                swapButtonPrefs(index, index - 1)
-                callbacks.onReloadAll()
-                rebuild()
-            }
-        })
-
-        row.addView(makeSmallButton("\u2193") { // ↓
-            val count = prefs.getInt("button_count", 6)
-            if (index < count - 1) {
-                swapButtonPrefs(index, index + 1)
-                callbacks.onReloadAll()
-                rebuild()
-            }
-        })
-
-        return row
     }
 
     // ── Type selector ───────────────────────────────────────────────────────
@@ -797,8 +829,9 @@ class GlobalConfigPaneContent(
         }
 
         row.addView(makeActionButton("+ Add Button") {
+            if (selectedButtonIndex >= 0) clearDetailEditor()
             callbacks.onAddButton()
-            rebuild()
+            rebuildButtonList()
         })
 
         row.addView(View(context).apply {
@@ -806,8 +839,9 @@ class GlobalConfigPaneContent(
         })
 
         row.addView(makeActionButton("\u2212 Remove Last") { // −
+            if (selectedButtonIndex >= 0) clearDetailEditor()
             callbacks.onRemoveLastButton()
-            rebuild()
+            rebuildButtonList()
         })
 
         return row
@@ -890,10 +924,7 @@ class GlobalConfigPaneContent(
     // ── Button reorder ──────────────────────────────────────────────────────
 
     private fun swapButtonPrefs(a: Int, b: Int) {
-        val keys = listOf(
-            "_type", "_value", "_label", "_icon_type", "_icon_data",
-            "_widget_id", "_open_browser", "_apps"
-        )
+        val keys = BUTTON_PREF_SUFFIXES
         val aVals = keys.associateWith { k -> prefs.getString("btn_$a$k", null) }
         val bVals = keys.associateWith { k -> prefs.getString("btn_$b$k", null) }
 
@@ -1023,5 +1054,9 @@ class GlobalConfigPaneContent(
     companion object {
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
+        private val BUTTON_PREF_SUFFIXES = listOf(
+            "_type", "_value", "_label", "_icon_type", "_icon_data",
+            "_widget_id", "_open_browser", "_apps"
+        )
     }
 }
