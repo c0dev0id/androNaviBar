@@ -130,6 +130,9 @@ class MainActivity : Activity() {
             btn.index = i
             wireButton(btn, i)
             btn.loadConfig(prefs)
+            if (!prefs.getBoolean("btn_${i}_active", true)) {
+                btn.visibility = View.GONE
+            }
             buttonPanel.addView(btn)
             buttons.add(btn)
         }
@@ -138,7 +141,7 @@ class MainActivity : Activity() {
         buttonPanel.addView(configureButton)
 
         preCreateWidgetViews()
-        focusedIndex = focusedIndex.coerceIn(0, buttons.lastIndex.coerceAtLeast(0))
+        focusedIndex = nearestVisibleButton(focusedIndex)
 
         buttonPanel.post {
             adjustButtonHeights()
@@ -238,14 +241,30 @@ class MainActivity : Activity() {
 
     private fun setFocus(index: Int) {
         if (buttons.isEmpty()) return
-        focusedIndex = index.coerceIn(0, buttons.lastIndex)
+        focusedIndex = nearestVisibleButton(index.coerceIn(0, buttons.lastIndex))
         prefs.edit().putInt("focused_index", focusedIndex).apply()
         updateFocus()
         scrollToFocused()
     }
 
     private fun moveFocus(delta: Int) {
-        setFocus(focusedIndex + delta)
+        val dir = if (delta > 0) 1 else -1
+        var next = focusedIndex + dir
+        while (next in buttons.indices && buttons[next].visibility == View.GONE) next += dir
+        if (next in buttons.indices) setFocus(next)
+    }
+
+    /** Find the nearest visible button to [index], searching forward then backward. */
+    private fun nearestVisibleButton(index: Int): Int {
+        if (buttons.isEmpty()) return 0
+        val clamped = index.coerceIn(0, buttons.lastIndex)
+        if (buttons[clamped].visibility != View.GONE) return clamped
+        // Search outward from clamped
+        for (d in 1..buttons.lastIndex) {
+            if (clamped + d in buttons.indices && buttons[clamped + d].visibility != View.GONE) return clamped + d
+            if (clamped - d in buttons.indices && buttons[clamped - d].visibility != View.GONE) return clamped - d
+        }
+        return 0 // fallback — shouldn't happen if at least one button exists
     }
 
     private fun updateFocus() {
@@ -668,7 +687,9 @@ class MainActivity : Activity() {
     private fun adjustButtonHeights() {
         val totalH = buttonScroll.height
         val margin = dpToPx(4) * 2  // top + bottom margin per button
-        val btnH = totalH / MAX_VISIBLE_BUTTONS - margin
+        val visibleCount = buttons.count { it.visibility != View.GONE } + 1 // +1 for configure button
+        val slots = visibleCount.coerceIn(1, MAX_VISIBLE_BUTTONS)
+        val btnH = totalH / slots - margin
         for (btn in buttons) {
             val lp = btn.layoutParams as LinearLayout.LayoutParams
             lp.height = btnH
@@ -677,6 +698,16 @@ class MainActivity : Activity() {
         val clp = configureButton.layoutParams as LinearLayout.LayoutParams
         clp.height = btnH
         configureButton.layoutParams = clp
+    }
+
+    private fun applyButtonVisibility() {
+        for (i in buttons.indices) {
+            buttons[i].visibility = if (prefs.getBoolean("btn_${i}_active", true)) View.VISIBLE else View.GONE
+        }
+        adjustButtonHeights()
+        if (buttons.getOrNull(focusedIndex)?.visibility == View.GONE) {
+            setFocus(nearestVisibleButton(focusedIndex))
+        }
     }
 
     private fun scrollToFocused() {
@@ -700,7 +731,12 @@ class MainActivity : Activity() {
             }
             override fun onReloadAll() {
                 for (btn in buttons) btn.loadConfig(prefs)
+                applyButtonVisibility()
                 updateFocus()
+            }
+            override fun onActiveChanged(index: Int, active: Boolean) {
+                prefs.edit().putBoolean("btn_${index}_active", active).apply()
+                applyButtonVisibility()
             }
             override fun onAddButton() {
                 val i = buttons.size

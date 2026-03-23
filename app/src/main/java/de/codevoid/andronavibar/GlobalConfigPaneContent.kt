@@ -47,6 +47,7 @@ class GlobalConfigPaneContent(
     interface Callbacks {
         fun onReloadButton(index: Int)
         fun onReloadAll()
+        fun onActiveChanged(index: Int, active: Boolean)
         fun onAddButton()
         fun onRemoveLastButton()
         fun onPickImage(buttonIndex: Int)
