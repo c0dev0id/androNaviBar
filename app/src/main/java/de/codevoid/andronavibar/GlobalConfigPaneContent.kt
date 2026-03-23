@@ -63,23 +63,29 @@ class GlobalConfigPaneContent(
     private var selectedButtonIndex: Int = -1
     private var editSnapshot: Map<String, String?> = emptyMap()
 
-    private var installedApps: List<ResolveInfo> = emptyList()
-    private var widgetProviders: List<AppWidgetProviderInfo> = emptyList()
+    private var cachedApps: List<ResolveInfo>? = null
+    private var cachedWidgets: List<AppWidgetProviderInfo>? = null
+
+    private val installedApps: List<ResolveInfo>
+        get() = cachedApps ?: run {
+            val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            context.packageManager
+                .queryIntentActivities(mainIntent, PackageManager.MATCH_ALL)
+                .sortedBy { it.loadLabel(context.packageManager).toString().lowercase() }
+                .also { cachedApps = it }
+        }
+
+    private val widgetProviders: List<AppWidgetProviderInfo>
+        get() = cachedWidgets ?: run {
+            AppWidgetManager.getInstance(context)
+                .installedProviders
+                .sortedBy { it.loadLabel(context.packageManager).lowercase() }
+                .also { cachedWidgets = it }
+        }
 
     // ── PaneContent ─────────────────────────────────────────────────────────
 
-    override fun load(onReady: () -> Unit) {
-        val mainIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        installedApps = context.packageManager
-            .queryIntentActivities(mainIntent, PackageManager.MATCH_ALL)
-            .sortedBy { it.loadLabel(context.packageManager).toString().lowercase() }
-
-        widgetProviders = AppWidgetManager.getInstance(context)
-            .installedProviders
-            .sortedBy { it.loadLabel(context.packageManager).lowercase() }
-
-        onReady()
-    }
+    override fun load(onReady: () -> Unit) { onReady() }
 
     override fun show(container: ViewGroup) {
         val root = buildLayout()
@@ -93,6 +99,8 @@ class GlobalConfigPaneContent(
         buttonListContainer = null
         detailContainer = null
         selectedButtonIndex = -1
+        cachedApps = null
+        cachedWidgets = null
     }
 
     /** Rebuild both the right-side list and the detail editor (if open). */
