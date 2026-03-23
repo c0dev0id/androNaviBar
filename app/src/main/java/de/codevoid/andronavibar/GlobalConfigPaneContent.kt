@@ -13,7 +13,6 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.text.Editable
@@ -23,8 +22,6 @@ import android.view.DragEvent
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.widget.EditText
 import android.graphics.BitmapFactory
@@ -33,7 +30,6 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
 import java.io.File
@@ -514,7 +510,7 @@ class GlobalConfigPaneContent(
         val labels = types.map { it.second }
         val selectedIdx = types.indexOfFirst { it.first == currentType }.coerceAtLeast(0)
 
-        row.addView(makeDarkSpinner(labels, selectedIdx) { position ->
+        row.addView(makeChooser("Button type", labels, selectedIdx) { position ->
             val newType = types[position].first
             if (newType != currentType) {
                 changeButtonType(index, newType)
@@ -606,15 +602,14 @@ class GlobalConfigPaneContent(
         val selectedIndex = if (currentPkg != null) {
             installedApps.indexOfFirst { it.activityInfo.packageName == currentPkg }
                 .coerceAtLeast(0)
-        } else 0
+        } else -1
 
-        val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
+        row.addView(makeChooser("Select app", labels, selectedIndex) { position ->
             val app = installedApps[position]
             pendingEdits["btn_${index}_value"] = app.activityInfo.packageName
             pendingEdits["btn_${index}_label"] = app.loadLabel(context.packageManager).toString()
             rebuild()
-        }
-        row.addView(spinner)
+        })
 
         return row
     }
@@ -714,18 +709,13 @@ class GlobalConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
 
-        // Placeholder + real providers
-        val placeholder = "Select widget\u2026"
-        val labels = listOf(placeholder) +
-            widgetProviders.map { it.loadLabel(context.packageManager) }
+        val labels = widgetProviders.map { it.loadLabel(context.packageManager).toString() }
         val selectedIndex = if (currentProvider != null) {
-            val provIdx = widgetProviders.indexOfFirst { it.provider == currentProvider }
-            if (provIdx >= 0) provIdx + 1 else 0
-        } else 0
+            widgetProviders.indexOfFirst { it.provider == currentProvider }
+        } else -1
 
-        val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
-            if (position == 0) return@makeDarkSpinner // placeholder
-            val provider = widgetProviders[position - 1]
+        row.addView(makeChooser("Select widget", labels, selectedIndex) { position ->
+            val provider = widgetProviders[position]
             pendingEdits["btn_${index}_value"] = provider.provider.flattenToString()
             if (getEditValue("btn_${index}_label").isNullOrEmpty()) {
                 pendingEdits["btn_${index}_label"] = provider.loadLabel(context.packageManager)
@@ -734,8 +724,7 @@ class GlobalConfigPaneContent(
             // resulting widget_id in prefs be visible through getEditValue.
             pendingEdits.remove("btn_${index}_widget_id")
             callbacks.onWidgetBind(index, provider.provider)
-        }
-        row.addView(spinner)
+        })
         wrapper.addView(row)
 
         // Bind status + retry button
@@ -839,13 +828,11 @@ class GlobalConfigPaneContent(
         val labels = installedApps.map { it.loadLabel(context.packageManager).toString() }
         val selectedIndex = if (currentPkg != null) {
             installedApps.indexOfFirst { it.activityInfo.packageName == currentPkg }
-                .coerceAtLeast(0)
-        } else 0
+        } else -1
 
-        val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
+        row.addView(makeChooser("Select player", labels, selectedIndex) { position ->
             pendingEdits["btn_${index}_value"] = installedApps[position].activityInfo.packageName
-        }
-        row.addView(spinner)
+        })
 
         return row
     }
@@ -883,7 +870,7 @@ class GlobalConfigPaneContent(
             else     -> 0
         }
 
-        row.addView(makeDarkSpinner(labels, selectedIdx) { position ->
+        row.addView(makeChooser("Icon type", labels, selectedIdx) { position ->
             val key = options[position].first
             val currentKey = currentIconType ?: "none"
             if (key != currentKey) {
@@ -1111,57 +1098,31 @@ class GlobalConfigPaneContent(
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private fun makeDarkSpinner(
+    private fun makeChooser(
+        title: String,
         labels: List<String>,
         selectedIndex: Int,
         onSelected: (Int) -> Unit
-    ): Spinner {
-        val spinner = Spinner(context).apply {
+    ): TextView {
+        val display = if (selectedIndex in labels.indices) labels[selectedIndex] else "Select\u2026"
+        return TextView(context).apply {
+            text = "$display \u25BE"
+            textSize = 18f
+            setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
-            setPopupBackgroundDrawable(
-                ColorDrawable(context.getColor(R.color.surface_card))
-            )
-        }
-
-        val adapter = object : ArrayAdapter<String>(
-            context, android.R.layout.simple_spinner_item, labels
-        ) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                return (super.getView(position, convertView, parent) as TextView).apply {
-                    setTextColor(context.getColor(R.color.text_primary))
-                    textSize = 18f
-                }
-            }
-            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
-                return (super.getDropDownView(position, convertView, parent) as TextView).apply {
-                    setTextColor(context.getColor(R.color.text_primary))
-                    textSize = 18f
-                    val p = context.resources.dpToPx(12)
-                    setPadding(p, p, p, p)
-                }
+            setOnClickListener {
+                AlertDialog.Builder(context)
+                    .setTitle(title)
+                    .setSingleChoiceItems(
+                        labels.toTypedArray(),
+                        selectedIndex.coerceAtLeast(0)
+                    ) { dialog, which ->
+                        dialog.dismiss()
+                        onSelected(which)
+                    }
+                    .show()
             }
         }
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        spinner.adapter = adapter
-        spinner.setSelection(selectedIndex)
-
-        // Only fire callback on genuine user interaction, not programmatic selection.
-        var userTouched = false
-        spinner.setOnTouchListener { _, _ ->
-            userTouched = true
-            false
-        }
-        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(
-                parent: AdapterView<*>?, view: View?, position: Int, id: Long
-            ) {
-                if (!userTouched) return
-                onSelected(position)
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
-        return spinner
     }
 
     private fun makeActionButton(label: String, onClick: () -> Unit): MaterialButton {
