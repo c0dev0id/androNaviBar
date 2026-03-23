@@ -1,6 +1,7 @@
 package de.codevoid.andronavibar
 
 import android.content.ComponentName
+import android.content.SharedPreferences
 
 // ── Icon type for URL buttons ─────────────────────────────────────────────────
 
@@ -10,6 +11,26 @@ sealed class UrlIcon {
     object CustomFile : UrlIcon()
     /** Emoji rendered onto a tinted background; no file on disk. */
     data class Emoji(val emoji: String) : UrlIcon()
+
+    companion object {
+        fun fromPrefs(prefs: SharedPreferences, index: Int): UrlIcon {
+            val iconType = prefs.getString("btn_${index}_icon_type", null)
+            val iconData = prefs.getString("btn_${index}_icon_data", null)
+            return when (iconType) {
+                "custom" -> CustomFile
+                "emoji"  -> Emoji(iconData ?: "")
+                else     -> None
+            }
+        }
+
+        fun writeTo(edit: SharedPreferences.Editor, index: Int, icon: UrlIcon) {
+            when (icon) {
+                is None       -> edit.remove("btn_${index}_icon_type").remove("btn_${index}_icon_data")
+                is CustomFile -> edit.putString("btn_${index}_icon_type", "custom").remove("btn_${index}_icon_data")
+                is Emoji      -> edit.putString("btn_${index}_icon_type", "emoji").putString("btn_${index}_icon_data", icon.emoji)
+            }
+        }
+    }
 }
 
 // ── Apps grid entry ───────────────────────────────────────────────────────────

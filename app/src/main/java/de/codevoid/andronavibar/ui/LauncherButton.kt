@@ -135,63 +135,35 @@ class LauncherButton @JvmOverloads constructor(
                 if (cn == null) {
                     ButtonConfig.Empty
                 } else {
-                    val widgetId  = prefs.getString("btn_${index}_widget_id", null)?.toIntOrNull() ?: -1
-                    val labelRaw  = prefs.getString("btn_${index}_label", "") ?: ""
-                    val iconType  = prefs.getString("btn_${index}_icon_type", null)
-                    val iconData  = prefs.getString("btn_${index}_icon_data", null)
-                    val icon = when (iconType) {
-                        "custom" -> UrlIcon.CustomFile
-                        "emoji"  -> UrlIcon.Emoji(iconData ?: "")
-                        else     -> UrlIcon.None
-                    }
-                    ButtonConfig.WidgetLauncher(cn, widgetId, labelRaw, icon)
+                    val widgetId = prefs.getString("btn_${index}_widget_id", null)?.toIntOrNull() ?: -1
+                    val label    = prefs.getString("btn_${index}_label", "") ?: ""
+                    ButtonConfig.WidgetLauncher(cn, widgetId, label, UrlIcon.fromPrefs(prefs, index))
                 }
             }
             type == "url" && value != null -> {
                 val labelRaw = prefs.getString("btn_${index}_label", "") ?: ""
                 // Migrate: old code stored url as label — treat label==url as empty.
                 val label = if (labelRaw == value) "" else labelRaw
-                val iconType = prefs.getString("btn_${index}_icon_type", null)
-                val iconData = prefs.getString("btn_${index}_icon_data", null)
-                val icon = when (iconType) {
-                    "custom" -> UrlIcon.CustomFile
-                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
-                    else     -> UrlIcon.None   // includes legacy "favicon" → no icon
-                }
                 val openInBrowser = prefs.getString("btn_${index}_open_browser", null) == "true"
-                ButtonConfig.UrlLauncher(value, label, icon, openInBrowser)
+                ButtonConfig.UrlLauncher(value, label, UrlIcon.fromPrefs(prefs, index), openInBrowser)
             }
             type == "apps" -> {
-                val labelRaw = prefs.getString("btn_${index}_label", "") ?: ""
-                val iconType = prefs.getString("btn_${index}_icon_type", null)
-                val iconData = prefs.getString("btn_${index}_icon_data", null)
-                val icon = when (iconType) {
-                    "custom" -> UrlIcon.CustomFile
-                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
-                    else     -> UrlIcon.None
-                }
+                val label   = prefs.getString("btn_${index}_label", "") ?: ""
                 val appsRaw = prefs.getString("btn_${index}_apps", "") ?: ""
                 val entries = appsRaw.split("|").filter { it.isNotEmpty() }.mapNotNull { pkg ->
-                    val label = try {
+                    val appLabel = try {
                         context.packageManager.getApplicationLabel(
                             context.packageManager.getApplicationInfo(pkg, 0)
                         ).toString()
                     } catch (_: Exception) { return@mapNotNull null }
-                    AppEntry(pkg, label)
+                    AppEntry(pkg, appLabel)
                 }
-                ButtonConfig.AppsGrid(entries, labelRaw, icon)
+                ButtonConfig.AppsGrid(entries, label, UrlIcon.fromPrefs(prefs, index))
             }
             type == "music" -> {
-                val labelRaw = prefs.getString("btn_${index}_label", "") ?: ""
-                val iconType = prefs.getString("btn_${index}_icon_type", null)
-                val iconData = prefs.getString("btn_${index}_icon_data", null)
-                val icon = when (iconType) {
-                    "custom" -> UrlIcon.CustomFile
-                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
-                    else     -> UrlIcon.None
-                }
+                val label     = prefs.getString("btn_${index}_label", "") ?: ""
                 val playerPkg = prefs.getString("btn_${index}_value", "") ?: ""
-                ButtonConfig.MusicPlayer(playerPkg, labelRaw, icon)
+                ButtonConfig.MusicPlayer(playerPkg, label, UrlIcon.fromPrefs(prefs, index))
             }
             else -> ButtonConfig.Empty
         }
@@ -201,12 +173,14 @@ class LauncherButton @JvmOverloads constructor(
     fun saveConfig(prefs: SharedPreferences, newConfig: ButtonConfig) {
         config = newConfig
         when (newConfig) {
-            is ButtonConfig.AppLauncher -> prefs.edit()
-                .putString("btn_${index}_type",  "app")
-                .putString("btn_${index}_value", newConfig.packageName)
-                .putString("btn_${index}_label", newConfig.label)
-                .removeIconKeys()
-                .apply()
+            is ButtonConfig.AppLauncher -> {
+                val edit = prefs.edit()
+                    .putString("btn_${index}_type",  "app")
+                    .putString("btn_${index}_value", newConfig.packageName)
+                    .putString("btn_${index}_label", newConfig.label)
+                UrlIcon.writeTo(edit, index, UrlIcon.None)
+                edit.apply()
+            }
 
             is ButtonConfig.UrlLauncher -> {
                 val edit = prefs.edit()
@@ -215,21 +189,9 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_label", newConfig.label)
                 if (newConfig.openInBrowser) edit.putString("btn_${index}_open_browser", "true")
                 else edit.remove("btn_${index}_open_browser")
-                when (val ico = newConfig.icon) {
-                    is UrlIcon.None -> edit.removeIconKeys()
-                    is UrlIcon.CustomFile -> edit
-                        .putString("btn_${index}_icon_type", "custom")
-                        .remove("btn_${index}_icon_data")
-                    is UrlIcon.Emoji -> edit
-                        .putString("btn_${index}_icon_type", "emoji")
-                        .putString("btn_${index}_icon_data", ico.emoji)
-                }
+                UrlIcon.writeTo(edit, index, newConfig.icon)
                 edit.apply()
-
-                // Delete stale icon file when not using a file-based icon.
-                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    buttonIconFile(context.filesDir, index).delete()
-                }
+                cleanStaleIconFile(newConfig.icon)
             }
 
             is ButtonConfig.WidgetLauncher -> {
@@ -238,19 +200,9 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_value",     newConfig.provider.flattenToString())
                     .putString("btn_${index}_label",     newConfig.label)
                     .putString("btn_${index}_widget_id", newConfig.appWidgetId.toString())
-                when (val ico = newConfig.icon) {
-                    is UrlIcon.None       -> edit.removeIconKeys()
-                    is UrlIcon.CustomFile -> edit
-                        .putString("btn_${index}_icon_type", "custom")
-                        .remove("btn_${index}_icon_data")
-                    is UrlIcon.Emoji      -> edit
-                        .putString("btn_${index}_icon_type", "emoji")
-                        .putString("btn_${index}_icon_data", ico.emoji)
-                }
+                UrlIcon.writeTo(edit, index, newConfig.icon)
                 edit.apply()
-                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    buttonIconFile(context.filesDir, index).delete()
-                }
+                cleanStaleIconFile(newConfig.icon)
             }
 
             is ButtonConfig.AppsGrid -> {
@@ -259,19 +211,9 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_value", "")
                     .putString("btn_${index}_label", newConfig.label)
                     .putString("btn_${index}_apps",  newConfig.apps.joinToString("|") { it.packageName })
-                when (val ico = newConfig.icon) {
-                    is UrlIcon.None       -> edit.removeIconKeys()
-                    is UrlIcon.CustomFile -> edit
-                        .putString("btn_${index}_icon_type", "custom")
-                        .remove("btn_${index}_icon_data")
-                    is UrlIcon.Emoji      -> edit
-                        .putString("btn_${index}_icon_type", "emoji")
-                        .putString("btn_${index}_icon_data", ico.emoji)
-                }
+                UrlIcon.writeTo(edit, index, newConfig.icon)
                 edit.apply()
-                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    buttonIconFile(context.filesDir, index).delete()
-                }
+                cleanStaleIconFile(newConfig.icon)
             }
 
             is ButtonConfig.MusicPlayer -> {
@@ -279,19 +221,9 @@ class LauncherButton @JvmOverloads constructor(
                     .putString("btn_${index}_type",  "music")
                     .putString("btn_${index}_value", newConfig.playerPackage)
                     .putString("btn_${index}_label", newConfig.label)
-                when (val ico = newConfig.icon) {
-                    is UrlIcon.None       -> edit.removeIconKeys()
-                    is UrlIcon.CustomFile -> edit
-                        .putString("btn_${index}_icon_type", "custom")
-                        .remove("btn_${index}_icon_data")
-                    is UrlIcon.Emoji      -> edit
-                        .putString("btn_${index}_icon_type", "emoji")
-                        .putString("btn_${index}_icon_data", ico.emoji)
-                }
+                UrlIcon.writeTo(edit, index, newConfig.icon)
                 edit.apply()
-                if (newConfig.icon is UrlIcon.None || newConfig.icon is UrlIcon.Emoji) {
-                    buttonIconFile(context.filesDir, index).delete()
-                }
+                cleanStaleIconFile(newConfig.icon)
             }
 
             is ButtonConfig.Empty -> clearConfig(prefs)
@@ -302,21 +234,22 @@ class LauncherButton @JvmOverloads constructor(
     fun clearConfig(prefs: SharedPreferences) {
         config = ButtonConfig.Empty
         buttonIconFile(context.filesDir, index).delete()
-        prefs.edit()
+        val edit = prefs.edit()
             .remove("btn_${index}_type")
             .remove("btn_${index}_value")
             .remove("btn_${index}_label")
             .remove("btn_${index}_widget_id")
             .remove("btn_${index}_open_browser")
             .remove("btn_${index}_apps")
-            .removeIconKeys()
-            .apply()
+        UrlIcon.writeTo(edit, index, UrlIcon.None)
+        edit.apply()
         applyConfig()
     }
 
-    private fun SharedPreferences.Editor.removeIconKeys() = this
-        .remove("btn_${index}_icon_type")
-        .remove("btn_${index}_icon_data")
+    /** Delete stale icon file when not using a file-based icon. */
+    private fun cleanStaleIconFile(icon: UrlIcon) {
+        if (icon !is UrlIcon.CustomFile) buttonIconFile(context.filesDir, index).delete()
+    }
 
     private fun applyConfig() {
         icon = null   // always suppress MaterialButton's built-in icon slot
@@ -332,37 +265,27 @@ class LauncherButton @JvmOverloads constructor(
             }
             is ButtonConfig.UrlLauncher -> {
                 text = cfg.label.ifEmpty { cfg.url }
-                buttonIcon = when (val ico = cfg.icon) {
-                    is UrlIcon.None       -> null
-                    is UrlIcon.CustomFile -> loadIconFile()
-                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
-                }
+                buttonIcon = resolveIcon(cfg.icon)
             }
             is ButtonConfig.WidgetLauncher -> {
                 text = cfg.label.ifEmpty { cfg.provider.packageName }
-                buttonIcon = when (val ico = cfg.icon) {
-                    is UrlIcon.None       -> null
-                    is UrlIcon.CustomFile -> loadIconFile()
-                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
-                }
+                buttonIcon = resolveIcon(cfg.icon)
             }
             is ButtonConfig.AppsGrid -> {
                 text = cfg.label.ifEmpty { context.getString(R.string.tab_apps) }
-                buttonIcon = when (val ico = cfg.icon) {
-                    is UrlIcon.None       -> null
-                    is UrlIcon.CustomFile -> loadIconFile()
-                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
-                }
+                buttonIcon = resolveIcon(cfg.icon)
             }
             is ButtonConfig.MusicPlayer -> {
                 text = cfg.label.ifEmpty { context.getString(R.string.tab_music) }
-                buttonIcon = when (val ico = cfg.icon) {
-                    is UrlIcon.None       -> null
-                    is UrlIcon.CustomFile -> loadIconFile()
-                    is UrlIcon.Emoji      -> renderEmojiIcon(ico.emoji)
-                }
+                buttonIcon = resolveIcon(cfg.icon)
             }
         }
+    }
+
+    private fun resolveIcon(icon: UrlIcon): Drawable? = when (icon) {
+        is UrlIcon.None       -> null
+        is UrlIcon.CustomFile -> loadIconFile()
+        is UrlIcon.Emoji      -> renderEmojiIcon(icon.emoji)
     }
 
     // ── Activation ────────────────────────────────────────────────────────────

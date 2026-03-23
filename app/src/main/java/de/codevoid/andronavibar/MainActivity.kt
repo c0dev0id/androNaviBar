@@ -778,13 +778,7 @@ class MainActivity : Activity() {
                 }
 
                 val label = prefs.getString("btn_${buttonIndex}_label", "") ?: ""
-                val iconType = prefs.getString("btn_${buttonIndex}_icon_type", null)
-                val iconData = prefs.getString("btn_${buttonIndex}_icon_data", null)
-                val icon = when (iconType) {
-                    "custom" -> UrlIcon.CustomFile
-                    "emoji"  -> UrlIcon.Emoji(iconData ?: "")
-                    else     -> UrlIcon.None
-                }
+                val icon = UrlIcon.fromPrefs(prefs, buttonIndex)
 
                 val newId = appWidgetHost.allocateAppWidgetId()
                 savePendingWidgetId(newId)
