@@ -373,7 +373,20 @@ class MainActivity : Activity() {
     }
 
     private fun showWidgetPane(appWidgetId: Int) {
-        val hv = widgetViews[appWidgetId] ?: return
+        // Always create a fresh host view so we pick up current RemoteViews.
+        // Pre-created views can hold corrupted state on API 34 after the
+        // provider app is updated — the initial stale RemoteViews fail silently
+        // in SafeAppWidgetHostView, leaving internal state that blocks future
+        // valid updates from being applied.
+        val mgr = AppWidgetManager.getInstance(this)
+        val info = mgr.getAppWidgetInfo(appWidgetId)
+        val hv = if (info != null) {
+            appWidgetHost.createView(this, appWidgetId, info).also {
+                widgetViews[appWidgetId] = it
+            }
+        } else {
+            widgetViews[appWidgetId] ?: return
+        }
         val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading(); showGearIcon() }
         activeWidgetPane = pane
