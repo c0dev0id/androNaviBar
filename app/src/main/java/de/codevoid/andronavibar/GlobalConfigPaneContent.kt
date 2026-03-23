@@ -413,7 +413,7 @@ class GlobalConfigPaneContent(
         // Drag handle — long press starts drag
         val handle = TextView(context).apply {
             text = "\u2261" // ≡
-            textSize = 26f
+            textSize = 52f
             setTextColor(context.getColor(R.color.text_secondary))
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(
