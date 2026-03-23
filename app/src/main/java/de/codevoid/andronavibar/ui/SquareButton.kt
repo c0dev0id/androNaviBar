@@ -5,6 +5,7 @@ import android.content.res.ColorStateList
 import android.graphics.Color
 import android.util.AttributeSet
 import de.codevoid.andronavibar.R
+import de.codevoid.andronavibar.dpToPx
 
 /**
  * Square variant of FocusableButton for use in content panes.
@@ -31,7 +32,7 @@ class SquareButton @JvmOverloads constructor(
         elevation = 0f
         stateListAnimator = null
         backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-        cornerRadius = dpToPx(CORNER_RADIUS_DP)
+        cornerRadius = resources.dpToPx(CORNER_RADIUS_DP)
         rippleColor = ColorStateList.valueOf(
             context.getColor(R.color.colorPrimary) and 0x33FFFFFF
         )
