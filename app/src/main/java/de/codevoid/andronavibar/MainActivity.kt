@@ -691,12 +691,17 @@ class MainActivity : Activity() {
                 buttons.add(btn)
                 adjustButtonHeights()
             }
-            override fun onRemoveLastButton() {
+            override fun onRemoveButton(index: Int) {
                 if (buttons.size <= 1) return
-                val last = buttons.removeAt(buttons.lastIndex)
-                last.clearConfig(prefs)
-                buttonPanel.removeView(last)
+                // Prefs already shifted by GlobalConfigPaneContent.removeButtonAt()
+                val removed = buttons.removeAt(index)
+                buttonPanel.removeView(removed)
                 prefs.edit().putInt("button_count", buttons.size).apply()
+                // Re-index and reload remaining buttons
+                for (i in buttons.indices) {
+                    buttons[i].index = i
+                    buttons[i].loadConfig(prefs)
+                }
                 if (focusedIndex >= buttons.size) {
                     focusedIndex = buttons.lastIndex
                     prefs.edit().putInt("focused_index", focusedIndex).apply()

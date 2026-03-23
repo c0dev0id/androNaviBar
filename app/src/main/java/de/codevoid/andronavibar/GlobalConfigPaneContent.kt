@@ -56,7 +56,7 @@ class GlobalConfigPaneContent(
         fun onReloadAll()
         fun onActiveChanged(index: Int, active: Boolean)
         fun onAddButton()
-        fun onRemoveLastButton()
+        fun onRemoveButton(index: Int)
         fun onPickImage(buttonIndex: Int)
         fun onWidgetBind(buttonIndex: Int, provider: ComponentName)
         fun onWidgetCleanup(appWidgetId: Int)
@@ -411,15 +411,14 @@ class GlobalConfigPaneContent(
         })
 
         // Drag handle — long press starts drag
+        val handleSize = context.resources.dpToPx(40)
         val handle = TextView(context).apply {
             text = "\u2261" // ≡
-            textSize = 52f
+            textSize = 32f
             setTextColor(context.getColor(R.color.text_secondary))
             gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(
-                context.resources.dpToPx(48),
-                context.resources.dpToPx(48)
-            ).apply {
+            includeFontPadding = false
+            layoutParams = LinearLayout.LayoutParams(handleSize, handleSize).apply {
                 marginStart = context.resources.dpToPx(12)
             }
         }
@@ -432,6 +431,23 @@ class GlobalConfigPaneContent(
             true
         }
         row.addView(handle)
+
+        // Delete button
+        row.addView(TextView(context).apply {
+            text = "\u2715" // ✕
+            textSize = 22f
+            setTextColor(context.getColor(R.color.text_secondary))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(handleSize, handleSize).apply {
+                marginStart = context.resources.dpToPx(16)
+            }
+            setOnClickListener {
+                val count = prefs.getInt("button_count", 6)
+                if (count <= 1) return@setOnClickListener
+                if (selectedButtonIndex >= 0) clearDetailEditor()
+                removeButtonAt(index)
+            }
+        })
 
         // Tap opens detail editor on the left side
         row.setOnClickListener { showDetailEditor(index) }
@@ -973,21 +989,6 @@ class GlobalConfigPaneContent(
             container.addView(buildButtonListEntry(newIndex), container.childCount - 1)
         })
 
-        row.addView(View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(context.resources.dpToPx(16), 0)
-        })
-
-        row.addView(makeActionButton("\u2212 Remove Last") { // −
-            if (selectedButtonIndex >= 0) clearDetailEditor()
-            val container = buttonListContainer ?: return@makeActionButton
-            val count = prefs.getInt("button_count", 6)
-            if (count <= 1) return@makeActionButton
-            callbacks.onRemoveLastButton()
-            // Remove last entry (before footer)
-            iconCache.remove(count - 1)
-            container.removeViewAt(container.childCount - 2)
-        })
-
         wrapper.addView(row)
 
         wrapper.addView(makeActionButton("Check for Update") {
@@ -1075,7 +1076,38 @@ class GlobalConfigPaneContent(
         if (option == "none") buttonIconFile(context.filesDir, index).delete()
     }
 
-    // ── Button reorder ──────────────────────────────────────────────────────
+    // ── Button remove / reorder ────────────────────────────────────────────
+
+    /** Remove button at [index], shifting subsequent entries down. */
+    private fun removeButtonAt(index: Int) {
+        val count = prefs.getInt("button_count", 6)
+        if (count <= 1) return
+        val keys = BUTTON_PREF_SUFFIXES
+
+        // Shift entries after index down by one
+        val edit = prefs.edit()
+        for (i in index until count - 1) {
+            val next = i + 1
+            for (k in keys) {
+                val v = prefs.getString("btn_$next$k", null)
+                if (v != null) edit.putString("btn_$i$k", v) else edit.remove("btn_$i$k")
+            }
+            edit.putBoolean("btn_${i}_active", prefs.getBoolean("btn_${next}_active", true))
+            val src = buttonIconFile(context.filesDir, next)
+            val dst = buttonIconFile(context.filesDir, i)
+            if (src.exists()) src.copyTo(dst, overwrite = true) else dst.delete()
+        }
+
+        // Clear last slot
+        for (k in keys) edit.remove("btn_${count - 1}$k")
+        edit.remove("btn_${count - 1}_active")
+        edit.apply()
+        buttonIconFile(context.filesDir, count - 1).delete()
+
+        callbacks.onRemoveButton(index)
+        iconCache.clear()
+        rebuildButtonList()
+    }
 
     /** Move button at [from] to [to], shifting intermediate entries. */
     private fun moveButtonPrefs(from: Int, to: Int) {
