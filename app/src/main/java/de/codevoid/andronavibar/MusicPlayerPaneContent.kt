@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -197,7 +198,8 @@ class MusicPlayerPaneContent(
             BitmapDrawable(context.resources, drawPrev(iconSz, iconColor)),
             playIcon,
             BitmapDrawable(context.resources, drawNext(iconSz, iconColor)),
-            shuffleOffIcon
+            shuffleOffIcon,
+            BitmapDrawable(context.resources, drawLaunch(iconSz, iconColor))
         )
 
         val builtViews = mutableListOf<SquareButton>()
@@ -275,15 +277,13 @@ class MusicPlayerPaneContent(
             2 -> mediaController?.transportControls?.skipToNext() ?: launchPlayerApp()
             3 -> {
                 val mc = mediaController ?: return
-                isShuffleOn = !isShuffleOn
-                mc.transportControls.sendCustomAction(
-                    COMPAT_ACTION_SET_SHUFFLE,
-                    android.os.Bundle().apply {
-                        putInt(COMPAT_EXTRA_SHUFFLE, if (isShuffleOn) 1 else 0)
-                    }
-                )
-                updateShuffleVisual()
+                val newMode = if (isShuffleOn)
+                    PlaybackState.SHUFFLE_MODE_NONE
+                else
+                    PlaybackState.SHUFFLE_MODE_ALL
+                mc.transportControls.setShuffleMode(newMode)
             }
+            4 -> launchPlayerApp()
         }
     }
 
@@ -336,8 +336,7 @@ class MusicPlayerPaneContent(
         controller.registerCallback(mediaCallback)
         updateMetadata(controller.metadata)
         updatePlaybackState(controller.playbackState)
-        isShuffleOn = controller.extras?.getInt(COMPAT_EXTRA_SHUFFLE, 0) == 1
-        updateShuffleVisual()
+        syncShuffleMode(controller.shuffleMode)
     }
 
     private fun detachController() {
@@ -345,6 +344,7 @@ class MusicPlayerPaneContent(
         mediaController = null
         showPlaceholder()
         updatePlayPauseIcon(false)
+        syncShuffleMode(PlaybackState.SHUFFLE_MODE_NONE)
     }
 
     private val mediaCallback = object : MediaController.Callback() {
@@ -353,6 +353,9 @@ class MusicPlayerPaneContent(
         }
         override fun onPlaybackStateChanged(state: PlaybackState?) {
             updatePlaybackState(state)
+        }
+        override fun onShuffleModeChanged(shuffleMode: Int) {
+            syncShuffleMode(shuffleMode)
         }
         override fun onSessionDestroyed() {
             detachController()
@@ -393,11 +396,20 @@ class MusicPlayerPaneContent(
     }
 
     private fun updatePlayPauseIcon(isPlaying: Boolean) {
-        controlViews.getOrNull(1)?.icon = if (isPlaying) pauseIcon else playIcon
+        val btn = controlViews.getOrNull(1) ?: return
+        btn.icon = if (isPlaying) pauseIcon else playIcon
+        btn.backgroundTintList = ColorStateList.valueOf(
+            if (isPlaying) context.getColor(R.color.colorPrimary) else Color.TRANSPARENT
+        )
     }
 
-    private fun updateShuffleVisual() {
-        controlViews.getOrNull(3)?.icon = if (isShuffleOn) shuffleOnIcon else shuffleOffIcon
+    private fun syncShuffleMode(mode: Int) {
+        isShuffleOn = mode != PlaybackState.SHUFFLE_MODE_NONE
+        val btn = controlViews.getOrNull(3) ?: return
+        btn.icon = if (isShuffleOn) shuffleOnIcon else shuffleOffIcon
+        btn.backgroundTintList = ColorStateList.valueOf(
+            if (isShuffleOn) context.getColor(R.color.colorPrimary) else Color.TRANSPARENT
+        )
     }
 
     private fun showPlaceholder() {
@@ -496,14 +508,30 @@ class MusicPlayerPaneContent(
         return bmp
     }
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-
-    companion object {
-        // AndroidX MediaSessionCompat action/extra keys — used via sendCustomAction
-        // because the framework MediaController has no shuffle mode API.
-        private const val COMPAT_ACTION_SET_SHUFFLE =
-            "android.support.v4.media.session.action.SET_SHUFFLE_MODE"
-        private const val COMPAT_EXTRA_SHUFFLE =
-            "android.support.v4.media.session.extra.SHUFFLE_MODE"
+    private fun drawLaunch(size: Int, color: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color; style = Paint.Style.STROKE
+            strokeWidth = size * 0.08f; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+        }
+        val m = size * 0.22f
+        val r = size - m
+        val mid = size * 0.5f
+        // Box, open at top-right corner
+        val path = Path().apply {
+            moveTo(mid, m)
+            lineTo(m, m)
+            lineTo(m, r)
+            lineTo(r, r)
+            lineTo(r, mid)
+        }
+        canvas.drawPath(path, paint)
+        // Diagonal arrow from center to top-right
+        canvas.drawLine(mid, mid, r, m, paint)
+        val arr = size * 0.15f
+        canvas.drawLine(r, m, r - arr, m, paint)
+        canvas.drawLine(r, m, r, m + arr, paint)
+        return bmp
     }
 }
