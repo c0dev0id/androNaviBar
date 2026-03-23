@@ -906,9 +906,14 @@ class GlobalConfigPaneContent(
     // ── Footer (add / remove) ───────────────────────────────────────────────
 
     private fun buildFooter(): LinearLayout {
+        val wrapper = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(16) }
+        }
+
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(16) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
             gravity = Gravity.CENTER
         }
 
@@ -936,7 +941,17 @@ class GlobalConfigPaneContent(
             container.removeViewAt(container.childCount - 2)
         })
 
-        return row
+        wrapper.addView(row)
+
+        wrapper.addView(makeActionButton("Check for Update") {
+            (context as? android.app.Activity)?.let { UpdateChecker.check(it) }
+        }.apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                topMargin = context.resources.dpToPx(16)
+            }
+        })
+
+        return wrapper
     }
 
     // ── Type change ─────────────────────────────────────────────────────────

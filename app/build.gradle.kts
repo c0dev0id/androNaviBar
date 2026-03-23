@@ -3,6 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+fun gitSha(): String = try {
+    val proc = ProcessBuilder("git", "rev-parse", "--short=7", "HEAD")
+        .redirectErrorStream(true).start()
+    proc.inputStream.bufferedReader().readText().trim()
+} catch (_: Exception) { "unknown" }
+
 android {
     namespace = "de.codevoid.andronavibar"
     compileSdk = 35
@@ -13,6 +19,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {
