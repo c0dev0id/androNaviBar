@@ -531,7 +531,7 @@ class GlobalConfigPaneContent(
                 .putString("btn_${index}_label", appLabel)
                 .apply()
             callbacks.onReloadButton(index)
-            rebuildPreservingScroll()
+            rebuild()
         }
         row.addView(spinner)
 
@@ -733,7 +733,7 @@ class GlobalConfigPaneContent(
                     .putString("btn_${index}_apps", selectedPkgs.joinToString("|"))
                     .apply()
                 callbacks.onReloadButton(index)
-                rebuildPreservingScroll()
+                rebuild()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -1018,10 +1018,6 @@ class GlobalConfigPaneContent(
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private fun rebuildPreservingScroll() {
-        rebuild()
-    }
 
     private fun makeDarkSpinner(
         labels: List<String>,
