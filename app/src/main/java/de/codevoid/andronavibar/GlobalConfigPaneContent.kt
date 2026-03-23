@@ -67,6 +67,8 @@ class GlobalConfigPaneContent(
     private var detailContainer: FrameLayout? = null
     private var selectedButtonIndex: Int = -1
     private var editSnapshot: Map<String, String?> = emptyMap()
+    private var dragFromIndex = -1
+    private var dragGhostIndex = -1
 
     private val iconCache = mutableMapOf<Int, Drawable?>()
 
@@ -293,18 +295,45 @@ class GlobalConfigPaneContent(
         buttonListContainer = list
 
         list.setOnDragListener { _, event ->
+            val count = prefs.getInt("button_count", 6)
             when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED -> true
-                DragEvent.ACTION_DRAG_LOCATION -> true
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    dragFromIndex = event.localState as? Int ?: -1
+                    dragGhostIndex = dragFromIndex
+                    if (dragFromIndex in 0 until count) {
+                        list.getChildAt(dragFromIndex)?.alpha = 0.4f
+                    }
+                    dragFromIndex >= 0
+                }
+                DragEvent.ACTION_DRAG_LOCATION -> {
+                    val target = dropTargetIndex(list, event.y)
+                    if (target in 0 until count && target != dragGhostIndex) {
+                        val child = list.getChildAt(dragGhostIndex)
+                        if (child != null) {
+                            list.removeViewAt(dragGhostIndex)
+                            list.addView(child, target)
+                            dragGhostIndex = target
+                        }
+                    }
+                    true
+                }
                 DragEvent.ACTION_DROP -> {
-                    val from = event.clipData?.getItemAt(0)?.text?.toString()?.toIntOrNull() ?: return@setOnDragListener false
-                    val to = dropTargetIndex(list, event.y)
-                    if (from != to && to >= 0) {
+                    if (dragFromIndex >= 0 && dragGhostIndex != dragFromIndex) {
                         if (selectedButtonIndex >= 0) clearDetailEditor()
-                        moveButtonPrefs(from, to)
+                        moveButtonPrefs(dragFromIndex, dragGhostIndex)
                         iconCache.clear()
                         callbacks.onReloadAll()
+                    }
+                    rebuildButtonList()
+                    dragFromIndex = -1
+                    dragGhostIndex = -1
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    if (dragFromIndex >= 0) {
                         rebuildButtonList()
+                        dragFromIndex = -1
+                        dragGhostIndex = -1
                     }
                     true
                 }
@@ -386,7 +415,11 @@ class GlobalConfigPaneContent(
             text = "\u2261" // ≡
             textSize = 26f
             setTextColor(context.getColor(R.color.text_secondary))
-            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                context.resources.dpToPx(48),
+                context.resources.dpToPx(48)
+            ).apply {
                 marginStart = context.resources.dpToPx(12)
             }
         }
@@ -395,7 +428,7 @@ class GlobalConfigPaneContent(
                 ClipDescription("button", arrayOf(ClipDescription.MIMETYPE_TEXT_PLAIN)),
                 ClipData.Item(index.toString())
             )
-            row.startDragAndDrop(clip, View.DragShadowBuilder(row), null, 0)
+            row.startDragAndDrop(clip, View.DragShadowBuilder(row), index, 0)
             true
         }
         row.addView(handle)
