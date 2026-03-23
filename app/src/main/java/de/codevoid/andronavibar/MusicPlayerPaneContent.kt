@@ -15,6 +15,7 @@ import android.media.MediaMetadata
 import android.media.browse.MediaBrowser
 import android.media.session.MediaController
 import android.media.session.PlaybackState
+import android.os.Bundle
 import android.service.media.MediaBrowserService
 import android.view.Gravity
 import android.view.View
@@ -277,11 +278,12 @@ class MusicPlayerPaneContent(
             2 -> mediaController?.transportControls?.skipToNext() ?: launchPlayerApp()
             3 -> {
                 val mc = mediaController ?: return
-                val newMode = if (isShuffleOn)
-                    PlaybackState.SHUFFLE_MODE_NONE
-                else
-                    PlaybackState.SHUFFLE_MODE_ALL
-                mc.transportControls.setShuffleMode(newMode)
+                isShuffleOn = !isShuffleOn
+                mc.transportControls.sendCustomAction(
+                    ACTION_SET_SHUFFLE,
+                    Bundle().apply { putInt(ARG_SHUFFLE_MODE, if (isShuffleOn) SHUFFLE_ALL else SHUFFLE_NONE) }
+                )
+                syncShuffleVisual()
             }
             4 -> launchPlayerApp()
         }
@@ -336,7 +338,8 @@ class MusicPlayerPaneContent(
         controller.registerCallback(mediaCallback)
         updateMetadata(controller.metadata)
         updatePlaybackState(controller.playbackState)
-        syncShuffleMode(controller.shuffleMode)
+        isShuffleOn = controller.extras?.getInt(ARG_SHUFFLE_MODE, SHUFFLE_NONE) != SHUFFLE_NONE
+        syncShuffleVisual()
     }
 
     private fun detachController() {
@@ -344,7 +347,8 @@ class MusicPlayerPaneContent(
         mediaController = null
         showPlaceholder()
         updatePlayPauseIcon(false)
-        syncShuffleMode(PlaybackState.SHUFFLE_MODE_NONE)
+        isShuffleOn = false
+        syncShuffleVisual()
     }
 
     private val mediaCallback = object : MediaController.Callback() {
@@ -354,8 +358,10 @@ class MusicPlayerPaneContent(
         override fun onPlaybackStateChanged(state: PlaybackState?) {
             updatePlaybackState(state)
         }
-        override fun onShuffleModeChanged(shuffleMode: Int) {
-            syncShuffleMode(shuffleMode)
+        override fun onExtrasChanged(extras: Bundle?) {
+            val mode = extras?.getInt(ARG_SHUFFLE_MODE, SHUFFLE_NONE) ?: SHUFFLE_NONE
+            isShuffleOn = mode != SHUFFLE_NONE
+            syncShuffleVisual()
         }
         override fun onSessionDestroyed() {
             detachController()
@@ -403,8 +409,7 @@ class MusicPlayerPaneContent(
         )
     }
 
-    private fun syncShuffleMode(mode: Int) {
-        isShuffleOn = mode != PlaybackState.SHUFFLE_MODE_NONE
+    private fun syncShuffleVisual() {
         val btn = controlViews.getOrNull(3) ?: return
         btn.icon = if (isShuffleOn) shuffleOnIcon else shuffleOffIcon
         btn.backgroundTintList = ColorStateList.valueOf(
@@ -533,5 +538,16 @@ class MusicPlayerPaneContent(
         canvas.drawLine(r, m, r - arr, m, paint)
         canvas.drawLine(r, m, r, m + arr, paint)
         return bmp
+    }
+
+    companion object {
+        // AndroidX MediaSessionCompat keys for shuffle via sendCustomAction.
+        // The framework MediaController has no shuffle mode API.
+        private const val ACTION_SET_SHUFFLE =
+            "android.support.v4.media.session.action.SET_SHUFFLE_MODE"
+        private const val ARG_SHUFFLE_MODE =
+            "android.support.v4.media.session.extras.SET_SHUFFLE_MODE"
+        private const val SHUFFLE_NONE = 0
+        private const val SHUFFLE_ALL  = 1
     }
 }
