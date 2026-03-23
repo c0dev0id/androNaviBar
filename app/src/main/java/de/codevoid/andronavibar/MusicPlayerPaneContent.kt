@@ -217,7 +217,7 @@ class MusicPlayerPaneContent(
 
                 backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
 
-                isFocusedButton = (i == focusIndex)
+                isFocusedButton = false
                 onFocusRequested = { moveFocus(idx) }
                 setOnClickListener { activateControl(idx) }
             }
@@ -246,10 +246,10 @@ class MusicPlayerPaneContent(
     }
 
     fun setInitialFocus() {
-        focusIndex = 1
-        for (i in controlViews.indices) {
-            controlViews[i].isFocusedButton = (i == focusIndex)
-        }
+        // Focus enters from the button column on the right, so land on the
+        // rightmost control — the closest spatial neighbor.
+        focusIndex = controlViews.lastIndex
+        controlViews.getOrNull(focusIndex)?.isFocusedButton = true
     }
 
     fun clearFocus() {
