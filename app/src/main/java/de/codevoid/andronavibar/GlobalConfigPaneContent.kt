@@ -262,7 +262,7 @@ class GlobalConfigPaneContent(
         list.setOnDragListener { _, event ->
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> true
-                DragEvent.ACTION_DRAG_OVER -> true
+                DragEvent.ACTION_DRAG_LOCATION -> true
                 DragEvent.ACTION_DROP -> {
                     val from = event.clipData?.getItemAt(0)?.text?.toString()?.toIntOrNull() ?: return@setOnDragListener false
                     val to = dropTargetIndex(list, event.y)
