@@ -41,19 +41,18 @@ internal class SafeAppWidgetHostView(context: Context) : AppWidgetHostView(conte
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         try {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-        } catch (e: SecurityException) {
-            setMeasuredDimension(
-                MeasureSpec.getSize(widthMeasureSpec),
-                MeasureSpec.getSize(heightMeasureSpec)
-            )
-            Log.w(TAG, "Widget measure failed: ${e.message}")
-            hasSecurityError = true
         } catch (e: Exception) {
             setMeasuredDimension(
                 MeasureSpec.getSize(widthMeasureSpec),
                 MeasureSpec.getSize(heightMeasureSpec)
             )
             Log.w(TAG, "Widget measure failed: ${e.message}")
+            // The SecurityException may arrive directly or wrapped in a
+            // RuntimeException (observed on API 34).  Check both.
+            if (e is SecurityException || e.cause is SecurityException
+                || e.message?.contains("SecurityException") == true) {
+                hasSecurityError = true
+            }
         }
     }
 
