@@ -66,7 +66,7 @@ class GlobalConfigPaneContent(
     private var buttonListContainer: LinearLayout? = null
     private var detailContainer: FrameLayout? = null
     private var selectedButtonIndex: Int = -1
-    private var editSnapshot: Map<String, String?> = emptyMap()
+    private val pendingEdits = mutableMapOf<String, String?>()
     private var dragFromIndex = -1
     private var dragGhostIndex = -1
 
@@ -108,19 +108,15 @@ class GlobalConfigPaneContent(
         buttonListContainer = null
         detailContainer = null
         selectedButtonIndex = -1
+        pendingEdits.clear()
         iconCache.clear()
         cachedApps = null
         cachedWidgets = null
     }
 
-    /** Update the currently-edited entry and refresh the detail editor. */
+    /** Refresh the detail editor (e.g. after type change or image pick). */
     fun rebuild() {
-        val idx = selectedButtonIndex
-        if (idx >= 0) {
-            iconCache.remove(idx)
-            replaceEntry(idx)
-            refreshDetailEditor()
-        }
+        if (selectedButtonIndex >= 0) refreshDetailEditor()
     }
 
     private fun rebuildButtonList() {
@@ -151,12 +147,10 @@ class GlobalConfigPaneContent(
         if (selectedButtonIndex >= 0) {
             val prev = selectedButtonIndex
             selectedButtonIndex = -1
-            restoreSnapshot(prev, editSnapshot)
-            iconCache.remove(prev)
+            pendingEdits.clear()
             replaceEntry(prev)
         }
         selectedButtonIndex = index
-        editSnapshot = snapshotButton(index)
         refreshDetailEditor()
         setEntryHighlight(index, true)
     }
@@ -165,7 +159,7 @@ class GlobalConfigPaneContent(
         val prev = selectedButtonIndex
         detailContainer?.removeAllViews()
         selectedButtonIndex = -1
-        editSnapshot = emptyMap()
+        pendingEdits.clear()
         if (prev >= 0) {
             iconCache.remove(prev)
             replaceEntry(prev)
@@ -196,8 +190,8 @@ class GlobalConfigPaneContent(
             setPadding(p, p, p, p)
         }
 
-        val type = prefs.getString("btn_${index}_type", null)
-        val label = prefs.getString("btn_${index}_label", "") ?: ""
+        val type = getEditValue("btn_${index}_type")
+        val label = getEditValue("btn_${index}_label") ?: ""
 
         // Header
         content.addView(TextView(context).apply {
@@ -218,8 +212,8 @@ class GlobalConfigPaneContent(
 
         // Icon selector (non-app types)
         if (type != null && type != "app") {
-            val iconType = prefs.getString("btn_${index}_icon_type", null)
-            val iconData = prefs.getString("btn_${index}_icon_data", null)
+            val iconType = getEditValue("btn_${index}_icon_type")
+            val iconData = getEditValue("btn_${index}_icon_data")
             content.addView(buildIconSelector(index, iconType, iconData))
         }
 
@@ -231,8 +225,18 @@ class GlobalConfigPaneContent(
         }
 
         btnRow.addView(makeActionButton("Save") {
-            editSnapshot = emptyMap()
-            callbacks.onReloadButton(index)
+            val idx = selectedButtonIndex
+            val edit = prefs.edit()
+            for ((key, value) in pendingEdits) {
+                if (value != null) edit.putString(key, value) else edit.remove(key)
+            }
+            edit.apply()
+            // Clean up orphaned icon file
+            if (prefs.getString("btn_${idx}_icon_type", null) != "custom") {
+                buttonIconFile(context.filesDir, idx).delete()
+            }
+            iconCache.remove(idx)
+            callbacks.onReloadButton(idx)
             clearDetailEditor()
         })
 
@@ -241,7 +245,6 @@ class GlobalConfigPaneContent(
         })
 
         btnRow.addView(makeActionButton("Cancel") {
-            restoreSnapshot(index, editSnapshot)
             clearDetailEditor()
         })
 
@@ -250,19 +253,9 @@ class GlobalConfigPaneContent(
         container.addView(scroll)
     }
 
-    private fun snapshotButton(index: Int): Map<String, String?> {
-        val keys = BUTTON_PREF_SUFFIXES
-        return keys.associateWith { k -> prefs.getString("btn_$index$k", null) }
-    }
-
-    private fun restoreSnapshot(index: Int, snapshot: Map<String, String?>) {
-        if (snapshot.isEmpty()) return
-        val edit = prefs.edit()
-        for ((k, v) in snapshot) {
-            if (v != null) edit.putString("btn_$index$k", v) else edit.remove("btn_$index$k")
-        }
-        edit.apply()
-    }
+    /** Read a value from pending edits, falling back to saved prefs. */
+    private fun getEditValue(key: String): String? =
+        if (pendingEdits.containsKey(key)) pendingEdits[key] else prefs.getString(key, null)
 
     // ── Layout ──────────────────────────────────────────────────────────────
 
@@ -563,7 +556,7 @@ class GlobalConfigPaneContent(
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                prefs.edit().putString("btn_${index}_label", s?.toString() ?: "").apply()
+                pendingEdits["btn_${index}_label"] = s?.toString() ?: ""
             }
         })
 
@@ -585,7 +578,7 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildAppConfig(index: Int): View {
-        val currentPkg = prefs.getString("btn_${index}_value", null)
+        val currentPkg = getEditValue("btn_${index}_value")
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -617,11 +610,8 @@ class GlobalConfigPaneContent(
 
         val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
             val app = installedApps[position]
-            val appLabel = app.loadLabel(context.packageManager).toString()
-            prefs.edit()
-                .putString("btn_${index}_value", app.activityInfo.packageName)
-                .putString("btn_${index}_label", appLabel)
-                .apply()
+            pendingEdits["btn_${index}_value"] = app.activityInfo.packageName
+            pendingEdits["btn_${index}_label"] = app.loadLabel(context.packageManager).toString()
             rebuild()
         }
         row.addView(spinner)
@@ -630,8 +620,8 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildUrlConfig(index: Int): View {
-        val currentUrl = prefs.getString("btn_${index}_value", "") ?: ""
-        val currentOpenBrowser = prefs.getString("btn_${index}_open_browser", null) == "true"
+        val currentUrl = getEditValue("btn_${index}_value") ?: ""
+        val currentOpenBrowser = getEditValue("btn_${index}_open_browser") == "true"
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -668,7 +658,7 @@ class GlobalConfigPaneContent(
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                prefs.edit().putString("btn_${index}_value", s?.toString() ?: "").apply()
+                pendingEdits["btn_${index}_value"] = s?.toString() ?: ""
             }
         })
 
@@ -684,8 +674,7 @@ class GlobalConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(4) }
         }
         checkbox.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) prefs.edit().putString("btn_${index}_open_browser", "true").apply()
-            else prefs.edit().remove("btn_${index}_open_browser").apply()
+            pendingEdits["btn_${index}_open_browser"] = if (isChecked) "true" else null
         }
 
         wrapper.addView(checkbox)
@@ -693,9 +682,9 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildWidgetConfig(index: Int): View {
-        val currentValue = prefs.getString("btn_${index}_value", null)
+        val currentValue = getEditValue("btn_${index}_value")
         val currentProvider = currentValue?.let { ComponentName.unflattenFromString(it) }
-        val currentWidgetId = prefs.getString("btn_${index}_widget_id", null)
+        val currentWidgetId = getEditValue("btn_${index}_widget_id")
             ?.toIntOrNull() ?: -1
 
         val wrapper = LinearLayout(context).apply {
@@ -737,16 +726,13 @@ class GlobalConfigPaneContent(
         val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
             if (position == 0) return@makeDarkSpinner // placeholder
             val provider = widgetProviders[position - 1]
-            prefs.edit()
-                .putString("btn_${index}_value", provider.provider.flattenToString())
-                .apply()
-            val label = prefs.getString("btn_${index}_label", "") ?: ""
-            if (label.isEmpty()) {
-                prefs.edit().putString(
-                    "btn_${index}_label",
-                    provider.loadLabel(context.packageManager)
-                ).apply()
+            pendingEdits["btn_${index}_value"] = provider.provider.flattenToString()
+            if (getEditValue("btn_${index}_label").isNullOrEmpty()) {
+                pendingEdits["btn_${index}_label"] = provider.loadLabel(context.packageManager)
             }
+            // Widget binding is immediate (system side effect); let the
+            // resulting widget_id in prefs be visible through getEditValue.
+            pendingEdits.remove("btn_${index}_widget_id")
             callbacks.onWidgetBind(index, provider.provider)
         }
         row.addView(spinner)
@@ -776,7 +762,7 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildAppsGridConfig(index: Int): View {
-        val currentApps = prefs.getString("btn_${index}_apps", "") ?: ""
+        val currentApps = getEditValue("btn_${index}_apps") ?: ""
         val selectedPkgs = currentApps.split("|").filter { it.isNotEmpty() }.toMutableSet()
 
         val row = LinearLayout(context).apply {
@@ -802,7 +788,7 @@ class GlobalConfigPaneContent(
     }
 
     private fun showAppsPickerDialog(index: Int) {
-        val currentApps = prefs.getString("btn_${index}_apps", "") ?: ""
+        val currentApps = getEditValue("btn_${index}_apps") ?: ""
         val selectedPkgs = currentApps.split("|").filter { it.isNotEmpty() }.toMutableSet()
 
         val labels = installedApps.map {
@@ -818,9 +804,7 @@ class GlobalConfigPaneContent(
                 else selectedPkgs.remove(packages[which])
             }
             .setPositiveButton("Done") { _, _ ->
-                prefs.edit()
-                    .putString("btn_${index}_apps", selectedPkgs.joinToString("|"))
-                    .apply()
+                pendingEdits["btn_${index}_apps"] = selectedPkgs.joinToString("|")
                 rebuild()
             }
             .setNegativeButton("Cancel", null)
@@ -828,7 +812,7 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildMusicConfig(index: Int): View {
-        val currentPkg = prefs.getString("btn_${index}_value", null)
+        val currentPkg = getEditValue("btn_${index}_value")
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -859,10 +843,7 @@ class GlobalConfigPaneContent(
         } else 0
 
         val spinner = makeDarkSpinner(labels, selectedIndex) { position ->
-            val app = installedApps[position]
-            prefs.edit()
-                .putString("btn_${index}_value", app.activityInfo.packageName)
-                .apply()
+            pendingEdits["btn_${index}_value"] = installedApps[position].activityInfo.packageName
         }
         row.addView(spinner)
 
@@ -939,7 +920,7 @@ class GlobalConfigPaneContent(
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                 override fun afterTextChanged(s: Editable?) {
-                    prefs.edit().putString("btn_${index}_icon_data", s?.toString() ?: "").apply()
+                    pendingEdits["btn_${index}_icon_data"] = s?.toString() ?: ""
                 }
             })
         }
@@ -996,74 +977,61 @@ class GlobalConfigPaneContent(
 
     private fun changeButtonType(index: Int, typeKey: String?) {
         // Clean up old widget if changing away from widget type
-        val oldType = prefs.getString("btn_${index}_type", null)
+        val oldType = getEditValue("btn_${index}_type")
         if (oldType == "widget") {
-            val widgetId = prefs.getString("btn_${index}_widget_id", null)
+            val widgetId = getEditValue("btn_${index}_widget_id")
                 ?.toIntOrNull() ?: -1
             if (widgetId != -1) callbacks.onWidgetCleanup(widgetId)
         }
 
-        val edit = prefs.edit()
-            .remove("btn_${index}_type")
-            .remove("btn_${index}_value")
-            .remove("btn_${index}_label")
-            .remove("btn_${index}_widget_id")
-            .remove("btn_${index}_apps")
-            .remove("btn_${index}_icon_type")
-            .remove("btn_${index}_icon_data")
-            .remove("btn_${index}_open_browser")
+        // Clear all keys in pending
+        for (suffix in BUTTON_PREF_SUFFIXES) {
+            pendingEdits["btn_$index$suffix"] = null
+        }
 
         if (typeKey != null) {
-            edit.putString("btn_${index}_type", typeKey)
+            pendingEdits["btn_${index}_type"] = typeKey
             when (typeKey) {
                 "app" -> {
                     val first = installedApps.firstOrNull()
                     if (first != null) {
-                        edit.putString("btn_${index}_value",
-                            first.activityInfo.packageName)
-                        edit.putString("btn_${index}_label",
-                            first.loadLabel(context.packageManager).toString())
+                        pendingEdits["btn_${index}_value"] = first.activityInfo.packageName
+                        pendingEdits["btn_${index}_label"] =
+                            first.loadLabel(context.packageManager).toString()
                     } else {
-                        edit.putString("btn_${index}_label", "")
+                        pendingEdits["btn_${index}_label"] = ""
                     }
                 }
-                "url" -> edit.putString("btn_${index}_label", "")
-                "widget" -> edit.putString("btn_${index}_label", "")
-                "apps" -> edit.putString("btn_${index}_label", "Apps")
+                "url" -> pendingEdits["btn_${index}_label"] = ""
+                "widget" -> pendingEdits["btn_${index}_label"] = ""
+                "apps" -> pendingEdits["btn_${index}_label"] = "Apps"
                 "music" -> {
                     val first = installedApps.firstOrNull()
                     if (first != null) {
-                        edit.putString("btn_${index}_value",
-                            first.activityInfo.packageName)
+                        pendingEdits["btn_${index}_value"] = first.activityInfo.packageName
                     }
-                    edit.putString("btn_${index}_label", "Music")
+                    pendingEdits["btn_${index}_label"] = "Music"
                 }
             }
         }
-
-        edit.apply()
-        buttonIconFile(context.filesDir, index).delete()
     }
 
     private fun applyIconOption(index: Int, option: String) {
-        val edit = prefs.edit()
         when (option) {
-            "none" -> edit
-                .remove("btn_${index}_icon_type")
-                .remove("btn_${index}_icon_data")
-            "emoji" -> edit
-                .putString("btn_${index}_icon_type", "emoji")
-                .putString("btn_${index}_icon_data", "")
+            "none" -> {
+                pendingEdits["btn_${index}_icon_type"] = null
+                pendingEdits["btn_${index}_icon_data"] = null
+            }
+            "emoji" -> {
+                pendingEdits["btn_${index}_icon_type"] = "emoji"
+                pendingEdits["btn_${index}_icon_data"] = ""
+            }
             "custom" -> {
-                edit.putString("btn_${index}_icon_type", "custom")
-                    .remove("btn_${index}_icon_data")
-                edit.apply()
+                pendingEdits["btn_${index}_icon_type"] = "custom"
+                pendingEdits["btn_${index}_icon_data"] = null
                 callbacks.onPickImage(index)
-                return
             }
         }
-        edit.apply()
-        if (option == "none") buttonIconFile(context.filesDir, index).delete()
     }
 
     // ── Button remove / reorder ────────────────────────────────────────────
