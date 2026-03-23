@@ -23,6 +23,9 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.widget.EditText
+import android.graphics.BitmapFactory
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
@@ -33,10 +36,9 @@ import java.io.File
 /**
  * Global configuration pane shown by the Configure button.
  *
- * Displays a scrollable list of all button slots. Each slot shows:
- * type selector, label editor, type-specific config (app/URL/widget/apps/music
- * picker), icon selector, and move up/down controls.
- * Changes are written to SharedPreferences immediately (no save/cancel).
+ * Split-pane layout: right side shows a compact button list (active checkbox,
+ * icon, label, drag handle) with immediate-save changes. Left side shows the
+ * detail editor for a selected button with Save/Cancel.
  */
 class GlobalConfigPaneContent(
     private val context: Context,
@@ -55,8 +57,10 @@ class GlobalConfigPaneContent(
         fun onWidgetCleanup(appWidgetId: Int)
     }
 
-    private var rootView: ScrollView? = null
-    private var listContainer: LinearLayout? = null
+    private var rootView: LinearLayout? = null
+    private var buttonListContainer: LinearLayout? = null
+    private var detailContainer: FrameLayout? = null
+    private var selectedButtonIndex: Int = -1
 
     private var installedApps: List<ResolveInfo> = emptyList()
     private var widgetProviders: List<AppWidgetProviderInfo> = emptyList()
@@ -85,40 +89,163 @@ class GlobalConfigPaneContent(
     override fun unload() {
         (rootView?.parent as? ViewGroup)?.removeView(rootView)
         rootView = null
-        listContainer = null
+        buttonListContainer = null
+        detailContainer = null
+        selectedButtonIndex = -1
     }
 
-    /** Rebuild the list after a structural change (reorder, add, remove, image pick). */
+    /** Rebuild the right-side button list after a structural change. */
     fun rebuild() {
-        val container = listContainer ?: return
+        val container = buttonListContainer ?: return
         container.removeAllViews()
         val count = prefs.getInt("button_count", 6)
-        for (i in 0 until count) container.addView(buildButtonEntry(i))
+        for (i in 0 until count) container.addView(buildButtonListEntry(i))
         container.addView(buildFooter())
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
 
-    private fun buildLayout(): ScrollView {
-        val scroll = ScrollView(context).apply {
+    private fun buildLayout(): LinearLayout {
+        val root = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
             setBackgroundColor(context.getColor(R.color.surface_dark))
         }
 
-        val container = LinearLayout(context).apply {
+        // Left side: detail editor (starts empty)
+        val detail = FrameLayout(context).apply {
+            layoutParams = LinearLayout.LayoutParams(0, MATCH, 2f)
+        }
+        detailContainer = detail
+        root.addView(detail)
+
+        // Right side: scrollable button list
+        val scroll = ScrollView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(0, MATCH, 1f)
+        }
+
+        val list = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(MATCH, WRAP)
-            val p = dpToPx(16)
+            val p = dpToPx(12)
             setPadding(p, p, p, p)
         }
-        listContainer = container
+        buttonListContainer = list
 
         val count = prefs.getInt("button_count", 6)
-        for (i in 0 until count) container.addView(buildButtonEntry(i))
-        container.addView(buildFooter())
+        for (i in 0 until count) list.addView(buildButtonListEntry(i))
+        list.addView(buildFooter())
 
-        scroll.addView(container)
-        return scroll
+        scroll.addView(list)
+        root.addView(scroll)
+        return root
+    }
+
+    // ── Right-side button list entries ───────────────────────────────────────
+
+    private fun buildButtonListEntry(index: Int): LinearLayout {
+        val type = prefs.getString("btn_${index}_type", null)
+        val label = prefs.getString("btn_${index}_label", "") ?: ""
+        val active = prefs.getBoolean("btn_${index}_active", true)
+        val displayName = label.ifEmpty { type?.replaceFirstChar { it.uppercase() } ?: "Empty" }
+
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                bottomMargin = dpToPx(4)
+            }
+            val p = dpToPx(8)
+            setPadding(p, p, p, p)
+            gravity = Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpToPx(8).toFloat()
+                setColor(context.getColor(
+                    if (index == selectedButtonIndex) R.color.colorPrimary else R.color.surface_card
+                ))
+            }
+        }
+
+        // Active checkbox
+        val checkbox = CheckBox(context).apply {
+            isChecked = active
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+            setOnCheckedChangeListener { _, isChecked ->
+                callbacks.onActiveChanged(index, isChecked)
+            }
+        }
+        row.addView(checkbox)
+
+        // Icon preview
+        buildIconPreview(index)?.let { row.addView(it) }
+
+        // Label
+        row.addView(TextView(context).apply {
+            text = displayName
+            textSize = 14f
+            setTextColor(context.getColor(R.color.text_primary))
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
+                marginStart = dpToPx(8)
+            }
+            isSingleLine = true
+        })
+
+        // Drag handle (visual placeholder; drag in Step 5)
+        row.addView(TextView(context).apply {
+            text = "\u2261" // ≡
+            textSize = 20f
+            setTextColor(context.getColor(R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
+                marginStart = dpToPx(8)
+            }
+        })
+
+        // Tap opens detail editor
+        row.setOnClickListener {
+            selectedButtonIndex = index
+            // Detail editor will be built in Step 3; for now just highlight.
+            rebuild()
+        }
+
+        return row
+    }
+
+    private fun buildIconPreview(index: Int): View? {
+        val iconType = prefs.getString("btn_${index}_icon_type", null)
+        val iconData = prefs.getString("btn_${index}_icon_data", null)
+        val type = prefs.getString("btn_${index}_type", null)
+        val size = dpToPx(28)
+
+        return when {
+            iconType == "emoji" && !iconData.isNullOrEmpty() -> TextView(context).apply {
+                text = iconData
+                textSize = 18f
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(size, size)
+            }
+            iconType == "custom" -> {
+                val file = File(context.filesDir, "btn_${index}_icon.png")
+                if (file.exists()) {
+                    ImageView(context).apply {
+                        setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        layoutParams = LinearLayout.LayoutParams(size, size)
+                    }
+                } else null
+            }
+            type == "app" -> {
+                val pkg = prefs.getString("btn_${index}_value", null)
+                if (pkg != null) {
+                    try {
+                        ImageView(context).apply {
+                            setImageDrawable(context.packageManager.getApplicationIcon(pkg))
+                            layoutParams = LinearLayout.LayoutParams(size, size)
+                        }
+                    } catch (_: Exception) { null }
+                } else null
+            }
+            else -> null
+        }
     }
 
     private fun buildButtonEntry(index: Int): LinearLayout {
@@ -792,9 +919,7 @@ class GlobalConfigPaneContent(
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun rebuildPreservingScroll() {
-        val scrollY = rootView?.scrollY ?: 0
         rebuild()
-        rootView?.post { rootView?.scrollTo(0, scrollY) }
     }
 
     private fun makeDarkSpinner(
