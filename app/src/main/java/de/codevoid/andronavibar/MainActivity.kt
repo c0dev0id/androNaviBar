@@ -149,6 +149,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        widgetRebindAttempted = false
         appWidgetHost.startListening()
         LauncherApplication.mainActivity = WeakReference(this)
         registerReceiver(
@@ -373,6 +374,8 @@ class MainActivity : Activity() {
         pane.load { pane.show(reservedArea); showLoading() }
     }
 
+    private var widgetRebindAttempted = false
+
     private fun showWidgetPane(appWidgetId: Int) {
         val hv = widgetViews[appWidgetId] ?: return
         val pane = WidgetPaneContent(this, hv, appWidgetId)
@@ -380,20 +383,19 @@ class MainActivity : Activity() {
         activeWidgetPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
         // After the first layout pass, check whether the widget hit a
-        // SecurityException (stale FileProvider URI permissions on API 34).
-        // If so, rebind to get fresh URI grants from the provider.
-        // OnGlobalLayoutListener fires after onMeasure() — View.post() doesn't
-        // guarantee that and ran too early in practice.
-        hv.viewTreeObserver.addOnGlobalLayoutListener(object :
-            android.view.ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                hv.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                if ((hv as? SafeAppWidgetHostView)?.hasSecurityError == true) {
-                    Log.d("aR2Launcher", "SecurityException detected for widget $appWidgetId, rebinding")
-                    rebindWidget(appWidgetId)
+        // SecurityException (stale content:// URI permissions on API 34).
+        // OnGlobalLayoutListener fires after onMeasure(), unlike View.post().
+        if (!widgetRebindAttempted) {
+            hv.viewTreeObserver.addOnGlobalLayoutListener(object :
+                android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    hv.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    if ((hv as? SafeAppWidgetHostView)?.hasSecurityError == true) {
+                        rebindWidget(appWidgetId)
+                    }
                 }
-            }
-        })
+            })
+        }
     }
 
     /**
@@ -403,26 +405,24 @@ class MainActivity : Activity() {
      * content:// URI permissions that were lost after an app update.
      */
     private fun rebindWidget(oldAppWidgetId: Int) {
+        widgetRebindAttempted = true
         val mgr = AppWidgetManager.getInstance(this)
-        val info = mgr.getAppWidgetInfo(oldAppWidgetId)
-        if (info == null) { Log.w("aR2Launcher", "rebind: no info for $oldAppWidgetId"); return }
+        val info = mgr.getAppWidgetInfo(oldAppWidgetId) ?: return
         val buttonIndex = buttons.indexOfFirst {
             (it.config as? ButtonConfig.WidgetLauncher)?.appWidgetId == oldAppWidgetId
         }
-        if (buttonIndex == -1) { Log.w("aR2Launcher", "rebind: no button for $oldAppWidgetId"); return }
+        if (buttonIndex == -1) return
         val oldConfig = buttons[buttonIndex].config as? ButtonConfig.WidgetLauncher ?: return
 
-        appWidgetHost.deleteAppWidgetId(oldAppWidgetId)
-        widgetViews.remove(oldAppWidgetId)
+        releaseWidgetId(oldAppWidgetId)
 
         val newId = appWidgetHost.allocateAppWidgetId()
         if (!mgr.bindAppWidgetIdIfAllowed(newId, info.provider)) {
-            Log.w("aR2Launcher", "rebind: bindAppWidgetIdIfAllowed denied for ${info.provider}")
-            appWidgetHost.deleteAppWidgetId(newId)
+            Log.w(TAG, "Widget rebind denied for ${info.provider}")
+            releaseWidgetId(newId)
             return
         }
 
-        Log.d("aR2Launcher", "rebind: $oldAppWidgetId → $newId for ${info.provider}")
         val newConfig = oldConfig.copy(appWidgetId = newId)
         buttons[buttonIndex].saveConfig(prefs, newConfig)
         widgetViews[newId] = appWidgetHost.createView(this, newId, info)
@@ -447,6 +447,11 @@ class MainActivity : Activity() {
 
     // ── Widget binding ────────────────────────────────────────────────────────
 
+    private fun releaseWidgetId(appWidgetId: Int) {
+        appWidgetHost.deleteAppWidgetId(appWidgetId)
+        widgetViews.remove(appWidgetId)
+    }
+
     /**
      * If the process was killed between allocateAppWidgetId() and
      * onActivityResult(), the allocated ID is orphaned. Clean it up on
@@ -455,8 +460,7 @@ class MainActivity : Activity() {
     private fun cleanupOrphanedWidgetId() {
         val orphan = prefs.getInt("pending_widget_id", -1)
         if (orphan != -1) {
-            appWidgetHost.deleteAppWidgetId(orphan)
-            widgetViews.remove(orphan)
+            releaseWidgetId(orphan)
             prefs.edit().remove("pending_widget_id").apply()
         }
     }
@@ -492,6 +496,24 @@ class MainActivity : Activity() {
             )
         } else {
             finishWidgetSetup()
+        }
+    }
+
+    private fun cancelPendingWidget() {
+        val fromGlobalConfig = pendingWidgetFromGlobalConfig
+        pendingWidgetConfig?.let {
+            if (it.appWidgetId != -1) releaseWidgetId(it.appWidgetId)
+        }
+        pendingWidgetConfig = null
+        pendingWidgetFromGlobalConfig = false
+        clearPendingWidgetId()
+        if (fromGlobalConfig) {
+            prefs.edit().remove("btn_${pendingWidgetButtonIndex}_widget_id").apply()
+            buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(prefs)
+            activeGlobalConfigPane?.rebuild()
+        } else {
+            deactivateActiveButton()
+            setFocusOwner(FocusOwner.BUTTONS)
         }
     }
 
@@ -549,24 +571,7 @@ class MainActivity : Activity() {
                     val id = pendingWidgetConfig?.appWidgetId ?: -1
                     if (id != -1) completeWidgetBinding(id)
                 } else {
-                    val fromGlobalConfig = pendingWidgetFromGlobalConfig
-                    pendingWidgetConfig?.let {
-                        if (it.appWidgetId != -1) {
-                            appWidgetHost.deleteAppWidgetId(it.appWidgetId)
-                            widgetViews.remove(it.appWidgetId)
-                        }
-                    }
-                    pendingWidgetConfig = null
-                    pendingWidgetFromGlobalConfig = false
-                    clearPendingWidgetId()
-                    if (fromGlobalConfig) {
-                        prefs.edit().remove("btn_${pendingWidgetButtonIndex}_widget_id").apply()
-                        buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(prefs)
-                        activeGlobalConfigPane?.rebuild()
-                    } else {
-                        deactivateActiveButton()
-                        setFocusOwner(FocusOwner.BUTTONS)
-                    }
+                    cancelPendingWidget()
                 }
                 return
             }
@@ -574,24 +579,7 @@ class MainActivity : Activity() {
                 if (resultCode == RESULT_OK) {
                     finishWidgetSetup()
                 } else {
-                    val fromGlobalConfig = pendingWidgetFromGlobalConfig
-                    pendingWidgetConfig?.let {
-                        if (it.appWidgetId != -1) {
-                            appWidgetHost.deleteAppWidgetId(it.appWidgetId)
-                            widgetViews.remove(it.appWidgetId)
-                        }
-                    }
-                    pendingWidgetConfig = null
-                    pendingWidgetFromGlobalConfig = false
-                    clearPendingWidgetId()
-                    if (fromGlobalConfig) {
-                        prefs.edit().remove("btn_${pendingWidgetButtonIndex}_widget_id").apply()
-                        buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(prefs)
-                        activeGlobalConfigPane?.rebuild()
-                    } else {
-                        deactivateActiveButton()
-                        setFocusOwner(FocusOwner.BUTTONS)
-                    }
+                    cancelPendingWidget()
                 }
                 return
             }
@@ -751,8 +739,7 @@ class MainActivity : Activity() {
                 // Clean up old widget for this button
                 val oldCfg = buttons.getOrNull(buttonIndex)?.config
                 if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
-                    appWidgetHost.deleteAppWidgetId(oldCfg.appWidgetId)
-                    widgetViews.remove(oldCfg.appWidgetId)
+                    releaseWidgetId(oldCfg.appWidgetId)
                 }
 
                 val label = prefs.getString("btn_${buttonIndex}_label", "") ?: ""
@@ -783,8 +770,7 @@ class MainActivity : Activity() {
                 }
             }
             override fun onWidgetCleanup(appWidgetId: Int) {
-                appWidgetHost.deleteAppWidgetId(appWidgetId)
-                widgetViews.remove(appWidgetId)
+                releaseWidgetId(appWidgetId)
             }
         })
         activeGlobalConfigPane = pane
@@ -794,6 +780,7 @@ class MainActivity : Activity() {
     private fun dpToPx(dp: Int) = (dp * resources.displayMetrics.density + 0.5f).toInt()
 
     companion object {
+        private const val TAG = "aR2Launcher"
         private const val CONFIGURE_BUTTON_INDEX          = -2
         private const val MAX_VISIBLE_BUTTONS             = 6
         private const val DEFAULT_BUTTON_COUNT            = 6

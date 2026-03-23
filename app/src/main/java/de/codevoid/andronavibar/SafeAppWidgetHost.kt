@@ -46,12 +46,14 @@ internal class SafeAppWidgetHostView(context: Context) : AppWidgetHostView(conte
                 MeasureSpec.getSize(widthMeasureSpec),
                 MeasureSpec.getSize(heightMeasureSpec)
             )
-            Log.w(TAG, "Widget measure failed: ${e.message}")
-            // The SecurityException may arrive directly or wrapped in a
-            // RuntimeException (observed on API 34).  Check both.
-            if (e is SecurityException || e.cause is SecurityException
-                || e.message?.contains("SecurityException") == true) {
-                hasSecurityError = true
+            if (!hasSecurityError) {
+                Log.w(TAG, "Widget measure failed: ${e.message}")
+                // On API 34 the SecurityException arrives wrapped in a
+                // RuntimeException, so check type, cause, and message.
+                if (e is SecurityException || e.cause is SecurityException
+                    || e.message?.contains("SecurityException") == true) {
+                    hasSecurityError = true
+                }
             }
         }
     }
