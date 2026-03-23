@@ -233,6 +233,7 @@ class GlobalConfigPaneContent(
 
         btnRow.addView(makeActionButton("Save") {
             editSnapshot = emptyMap()
+            callbacks.onReloadButton(index)
             clearDetailEditor()
         })
 
@@ -566,7 +567,6 @@ class GlobalConfigPaneContent(
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 prefs.edit().putString("btn_${index}_label", s?.toString() ?: "").apply()
-                callbacks.onReloadButton(index)
             }
         })
 
@@ -673,7 +673,6 @@ class GlobalConfigPaneContent(
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 prefs.edit().putString("btn_${index}_value", s?.toString() ?: "").apply()
-                callbacks.onReloadButton(index)
             }
         })
 
@@ -949,7 +948,6 @@ class GlobalConfigPaneContent(
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                 override fun afterTextChanged(s: Editable?) {
                     prefs.edit().putString("btn_${index}_icon_data", s?.toString() ?: "").apply()
-                    callbacks.onReloadButton(index)
                 }
             })
         }
