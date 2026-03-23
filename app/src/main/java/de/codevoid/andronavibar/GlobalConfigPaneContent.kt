@@ -201,7 +201,7 @@ class GlobalConfigPaneContent(
         // Header
         content.addView(TextView(context).apply {
             text = "Button ${index + 1}" + if (label.isNotEmpty()) " \u2014 $label" else ""
-            textSize = 18f
+            textSize = 22f
             setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
         })
@@ -450,13 +450,13 @@ class GlobalConfigPaneContent(
     private fun buildTypeSelector(index: Int, currentType: String?): LinearLayout {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
         row.addView(TextView(context).apply {
             text = "Type: "
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
@@ -490,20 +490,20 @@ class GlobalConfigPaneContent(
     private fun buildLabelField(index: Int, currentLabel: String): LinearLayout {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
         row.addView(TextView(context).apply {
             text = "Label: "
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
 
         val edit = EditText(context).apply {
             setText(currentLabel)
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_primary))
             setHintTextColor(context.getColor(R.color.text_secondary))
             hint = "Button label"
@@ -543,13 +543,13 @@ class GlobalConfigPaneContent(
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
         row.addView(TextView(context).apply {
             text = "App: "
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
@@ -557,7 +557,7 @@ class GlobalConfigPaneContent(
         if (installedApps.isEmpty()) {
             row.addView(TextView(context).apply {
                 text = "No apps found"
-                textSize = 14f
+                textSize = 18f
                 setTextColor(context.getColor(R.color.text_secondary))
             })
             return row
@@ -590,7 +590,7 @@ class GlobalConfigPaneContent(
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
         }
 
         // URL field
@@ -602,7 +602,7 @@ class GlobalConfigPaneContent(
 
         urlRow.addView(TextView(context).apply {
             text = "URL: "
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
@@ -610,7 +610,7 @@ class GlobalConfigPaneContent(
         val urlEdit = EditText(context).apply {
             setText(currentUrl)
             hint = "https://\u2026"
-            textSize = 14f
+            textSize = 18f
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             setTextColor(context.getColor(R.color.text_primary))
             setHintTextColor(context.getColor(R.color.text_secondary))
@@ -635,7 +635,7 @@ class GlobalConfigPaneContent(
         val checkbox = CheckBox(context).apply {
             text = "Open in browser"
             isChecked = currentOpenBrowser
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(4) }
         }
@@ -657,13 +657,13 @@ class GlobalConfigPaneContent(
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
         }
 
         if (widgetProviders.isEmpty()) {
             wrapper.addView(TextView(context).apply {
                 text = "No widget providers found"
-                textSize = 14f
+                textSize = 18f
                 setTextColor(context.getColor(R.color.text_secondary))
             })
             return wrapper
@@ -677,7 +677,7 @@ class GlobalConfigPaneContent(
 
         row.addView(TextView(context).apply {
             text = "Widget: "
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
@@ -713,10 +713,10 @@ class GlobalConfigPaneContent(
         if (currentWidgetId != -1) {
             wrapper.addView(TextView(context).apply {
                 text = "\u2713 Widget bound"
-                textSize = 12f
+                textSize = 16f
                 setTextColor(context.getColor(R.color.text_secondary))
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                    topMargin = context.resources.dpToPx(4)
+                    topMargin = context.resources.dpToPx(6)
                 }
             })
         } else if (currentProvider != null) {
@@ -724,7 +724,7 @@ class GlobalConfigPaneContent(
                 callbacks.onWidgetBind(index, currentProvider)
             }.apply {
                 layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                    topMargin = context.resources.dpToPx(4)
+                    topMargin = context.resources.dpToPx(6)
                 }
             })
         }
@@ -738,13 +738,13 @@ class GlobalConfigPaneContent(
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
         row.addView(TextView(context).apply {
             text = "${selectedPkgs.size} app${if (selectedPkgs.size != 1) "s" else ""} selected"
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
         })
@@ -790,13 +790,13 @@ class GlobalConfigPaneContent(
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
             gravity = Gravity.CENTER_VERTICAL
         }
 
         row.addView(TextView(context).apply {
             text = "Player: "
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
@@ -804,7 +804,7 @@ class GlobalConfigPaneContent(
         if (installedApps.isEmpty()) {
             row.addView(TextView(context).apply {
                 text = "No apps found"
-                textSize = 14f
+                textSize = 18f
                 setTextColor(context.getColor(R.color.text_secondary))
             })
             return row
@@ -837,7 +837,7 @@ class GlobalConfigPaneContent(
     ): LinearLayout {
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(8) }
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
         }
 
         val row = LinearLayout(context).apply {
@@ -848,7 +848,7 @@ class GlobalConfigPaneContent(
 
         row.addView(TextView(context).apply {
             text = "Icon: "
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_secondary))
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
@@ -886,12 +886,12 @@ class GlobalConfigPaneContent(
         return EditText(context).apply {
             setText(currentEmoji ?: "")
             hint = "Paste emoji\u2026"
-            textSize = 14f
+            textSize = 18f
             setTextColor(context.getColor(R.color.text_primary))
             setHintTextColor(context.getColor(R.color.text_secondary))
             setSingleLine(true)
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = context.resources.dpToPx(4)
+                topMargin = context.resources.dpToPx(6)
             }
             setBackgroundColor(Color.TRANSPARENT)
 
@@ -912,7 +912,7 @@ class GlobalConfigPaneContent(
             callbacks.onPickImage(index)
         }.apply {
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                topMargin = context.resources.dpToPx(4)
+                topMargin = context.resources.dpToPx(6)
             }
         }
     }
@@ -1106,13 +1106,13 @@ class GlobalConfigPaneContent(
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 return (super.getView(position, convertView, parent) as TextView).apply {
                     setTextColor(context.getColor(R.color.text_primary))
-                    textSize = 14f
+                    textSize = 18f
                 }
             }
             override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
                 return (super.getDropDownView(position, convertView, parent) as TextView).apply {
                     setTextColor(context.getColor(R.color.text_primary))
-                    textSize = 14f
+                    textSize = 18f
                     val p = context.resources.dpToPx(12)
                     setPadding(p, p, p, p)
                 }
@@ -1146,7 +1146,7 @@ class GlobalConfigPaneContent(
             context, null, com.google.android.material.R.attr.materialButtonStyle
         ).apply {
             text = label
-            textSize = 14f
+            textSize = 18f
             cornerRadius = context.resources.dpToPx(12)
             backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
             setTextColor(context.getColor(R.color.text_primary))
