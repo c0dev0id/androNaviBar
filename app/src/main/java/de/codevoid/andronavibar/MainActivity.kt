@@ -373,19 +373,26 @@ class MainActivity : Activity() {
     }
 
     private fun showWidgetPane(appWidgetId: Int) {
-        // Always create a fresh host view so we pick up current RemoteViews.
-        // Pre-created views can hold corrupted state on API 34 after the
-        // provider app is updated — the initial stale RemoteViews fail silently
-        // in SafeAppWidgetHostView, leaving internal state that blocks future
-        // valid updates from being applied.
         val mgr = AppWidgetManager.getInstance(this)
         val info = mgr.getAppWidgetInfo(appWidgetId)
+        // Create a fresh host view for clean internal state.
         val hv = if (info != null) {
             appWidgetHost.createView(this, appWidgetId, info).also {
                 widgetViews[appWidgetId] = it
             }
         } else {
             widgetViews[appWidgetId] ?: return
+        }
+        // Ask the provider to re-push its RemoteViews.  On API 34, content://
+        // URI permissions from the provider's FileProvider are lost after an app
+        // update.  Only the push path (provider → AppWidgetManager.updateAppWidget
+        // → system service) re-grants them; neither createView() nor
+        // startListening() does.
+        if (info != null) {
+            sendBroadcast(Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
+                component = info.provider
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
+            })
         }
         val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading(); showGearIcon() }
