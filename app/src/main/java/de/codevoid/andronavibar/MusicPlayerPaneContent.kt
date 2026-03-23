@@ -48,6 +48,12 @@ class MusicPlayerPaneContent(
     private var mediaController: MediaController? = null
     private var isShuffleOn = false
 
+    // Pre-rendered transport icons — allocated once in buildLayout(), swapped by reference.
+    private lateinit var playIcon: BitmapDrawable
+    private lateinit var pauseIcon: BitmapDrawable
+    private lateinit var shuffleOnIcon: BitmapDrawable
+    private lateinit var shuffleOffIcon: BitmapDrawable
+
     var onContentReady: (() -> Unit)? = null
 
     // ── PaneContent ─────────────────────────────────────────────────────────
@@ -179,12 +185,19 @@ class MusicPlayerPaneContent(
         val iconSz  = context.resources.dpToPx(54)
         val spacing = context.resources.dpToPx(30)
         val iconColor = context.getColor(R.color.text_primary)
+        val accentColor = context.getColor(R.color.colorPrimary)
+
+        // Pre-render all icon variants once
+        playIcon = BitmapDrawable(context.resources, drawPlay(iconSz, iconColor))
+        pauseIcon = BitmapDrawable(context.resources, drawPause(iconSz, iconColor))
+        shuffleOffIcon = BitmapDrawable(context.resources, drawShuffle(iconSz, iconColor))
+        shuffleOnIcon = BitmapDrawable(context.resources, drawShuffle(iconSz, accentColor))
 
         val icons = listOf(
-            drawPrev(iconSz, iconColor),
-            drawPlay(iconSz, iconColor),
-            drawNext(iconSz, iconColor),
-            drawShuffle(iconSz, iconColor)
+            BitmapDrawable(context.resources, drawPrev(iconSz, iconColor)),
+            playIcon,
+            BitmapDrawable(context.resources, drawNext(iconSz, iconColor)),
+            shuffleOffIcon
         )
 
         val builtViews = mutableListOf<SquareButton>()
@@ -196,7 +209,7 @@ class MusicPlayerPaneContent(
                     if (i > 0) marginStart = spacing
                 }
 
-                icon = BitmapDrawable(context.resources, icons[i])
+                icon = icons[i]
                 this.iconSize = iconSz
                 iconPadding = 0
                 iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
@@ -380,17 +393,11 @@ class MusicPlayerPaneContent(
     }
 
     private fun updatePlayPauseIcon(isPlaying: Boolean) {
-        val iconSz = context.resources.dpToPx(54)
-        val color = context.getColor(R.color.text_primary)
-        val bmp = if (isPlaying) drawPause(iconSz, color) else drawPlay(iconSz, color)
-        controlViews.getOrNull(1)?.icon = BitmapDrawable(context.resources, bmp)
+        controlViews.getOrNull(1)?.icon = if (isPlaying) pauseIcon else playIcon
     }
 
     private fun updateShuffleVisual() {
-        val iconSz = context.resources.dpToPx(54)
-        val color = if (isShuffleOn)
-            context.getColor(R.color.colorPrimary) else context.getColor(R.color.text_primary)
-        controlViews.getOrNull(3)?.icon = BitmapDrawable(context.resources, drawShuffle(iconSz, color))
+        controlViews.getOrNull(3)?.icon = if (isShuffleOn) shuffleOnIcon else shuffleOffIcon
     }
 
     private fun showPlaceholder() {
