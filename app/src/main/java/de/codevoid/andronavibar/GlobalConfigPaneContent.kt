@@ -131,18 +131,27 @@ class GlobalConfigPaneContent(
         if (selectedButtonIndex >= 0) {
             restoreSnapshot(selectedButtonIndex, editSnapshot)
             callbacks.onReloadButton(selectedButtonIndex)
+            setEntryHighlight(selectedButtonIndex, false)
         }
         selectedButtonIndex = index
         editSnapshot = snapshotButton(index)
         refreshDetailEditor()
-        rebuildButtonList()
+        setEntryHighlight(index, true)
     }
 
     private fun clearDetailEditor() {
+        val prev = selectedButtonIndex
         detailContainer?.removeAllViews()
         selectedButtonIndex = -1
         editSnapshot = emptyMap()
-        rebuildButtonList()
+        if (prev >= 0) setEntryHighlight(prev, false)
+    }
+
+    private fun setEntryHighlight(index: Int, selected: Boolean) {
+        val view = buttonListContainer?.getChildAt(index) ?: return
+        (view.background as? GradientDrawable)?.setColor(
+            context.getColor(if (selected) R.color.colorPrimary else R.color.surface_card)
+        )
     }
 
     private fun refreshDetailEditor() {
