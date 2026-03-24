@@ -13,10 +13,11 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.RectF
 import com.caverock.androidsvg.SVG
-import android.animation.ValueAnimator
 import android.os.Bundle
 import android.os.SystemClock
-import android.view.animation.AccelerateDecelerateInterpolator
+import androidx.dynamicanimation.animation.SpringAnimation
+import androidx.dynamicanimation.animation.SpringForce
+import androidx.dynamicanimation.animation.FloatValueHolder
 import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
@@ -47,7 +48,7 @@ class MainActivity : Activity() {
     private val widgetViews = mutableMapOf<Int, AppWidgetHostView>()
 
     private var focusedIndex = 0
-    private var scrollAnimator: ValueAnimator? = null
+    private var scrollSpring: SpringAnimation? = null
     private lateinit var gestureDetector: GestureDetector
 
     // ── Window focus ──────────────────────────────────────────────────────────
@@ -755,19 +756,27 @@ class MainActivity : Activity() {
         val slotH = target.measuredHeight +
             ((target.layoutParams as? LinearLayout.LayoutParams)
                 ?.let { it.topMargin + it.bottomMargin } ?: 0)
-        val scrollY = (target.top - 2 * slotH).coerceAtLeast(0)
-        scrollAnimator?.cancel()
+        val scrollY = (target.top - 2 * slotH).coerceAtLeast(0).toFloat()
         if (!animate) {
-            buttonScroll.scrollTo(0, scrollY)
+            scrollSpring?.cancel()
+            scrollSpring = null
+            buttonScroll.scrollTo(0, scrollY.toInt())
             return
         }
-        val startY = buttonScroll.scrollY
-        if (startY == scrollY) return
-        scrollAnimator = ValueAnimator.ofInt(startY, scrollY).apply {
-            duration = 1000L
-            interpolator = AccelerateDecelerateInterpolator()
-            addUpdateListener { buttonScroll.scrollTo(0, animatedValue as Int) }
-            start()
+        val spring = scrollSpring
+        if (spring != null && spring.isRunning) {
+            // Redirect in-flight animation to the new target without losing velocity
+            spring.animateToFinalPosition(scrollY)
+        } else {
+            val holder = FloatValueHolder(buttonScroll.scrollY.toFloat())
+            scrollSpring = SpringAnimation(holder).apply {
+                setSpring(SpringForce(scrollY).apply {
+                    dampingRatio = SpringForce.DAMPING_RATIO_NO_BOUNCY
+                    stiffness    = SpringForce.STIFFNESS_MEDIUM
+                })
+                addUpdateListener { _, value, _ -> buttonScroll.scrollTo(0, value.toInt()) }
+                start()
+            }
         }
     }
 
