@@ -697,7 +697,8 @@ class MainActivity : Activity() {
     }
 
     private fun adjustButtonHeights() {
-        val totalH = buttonScroll.height
+        val panelPad = resources.dpToPx(8) * 2  // buttonPanel top + bottom padding
+        val totalH = buttonScroll.height - panelPad
         val margin = resources.dpToPx(4) * 2  // top + bottom margin per button
         val visibleCount = buttons.count { it.visibility != View.GONE } + 1 // +1 for configure button
         val slots = visibleCount.coerceIn(1, MAX_VISIBLE_BUTTONS)

@@ -5,9 +5,12 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -85,15 +88,17 @@ class LauncherButton @JvmOverloads constructor(
         }
 
     // Pre-allocated draw objects — never allocate inside onDraw.
-    private val cornerRad = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
-    private val barW      = resources.dpToPx(BAR_WIDTH_DP).toFloat()
-    private val drawPath  = Path()
-    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val cornerRad  = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
+    private val barW       = resources.dpToPx(BAR_WIDTH_DP).toFloat()
+    private val drawPath   = Path()
+    private val fillPaint  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.button_active_body)
     }
-    private val barPaint  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val barPaint   = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.colorPrimary)
     }
+    // Depth gradient: subtle top-highlight + bottom-shadow for a tactile, non-flat look.
+    private val depthPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     private fun updateIconPadding() {
         val iconWidth = if (buttonIcon != null && height > 0) height else 0
@@ -104,12 +109,28 @@ class LauncherButton @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         drawPath.rewind()
         drawPath.addRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), cornerRad, cornerRad, Path.Direction.CW)
+        depthPaint.shader = LinearGradient(
+            0f, 0f, 0f, h.toFloat(),
+            intArrayOf(
+                Color.argb(28, 255, 255, 255),  // 11% white highlight at top
+                Color.TRANSPARENT,               // clear at 45%
+                Color.argb(20, 0, 0, 0)         // 8% black shadow at bottom
+            ),
+            floatArrayOf(0f, 0.45f, 1f),
+            Shader.TileMode.CLAMP
+        )
         updateIconPadding()
     }
 
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
+
+        // Depth gradient — always drawn, gives buttons a tactile top-lit look.
+        canvas.save()
+        canvas.clipPath(drawPath)
+        canvas.drawRect(0f, 0f, w, h, depthPaint)
+        canvas.restore()
 
         // Active body fill — drawn before super so it sits behind text/icon.
         if (isActiveButton) {
