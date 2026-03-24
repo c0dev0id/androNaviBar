@@ -56,6 +56,14 @@ class LauncherButton @JvmOverloads constructor(
 
     // ── Visual state ─────────────────────────────────────────────────────────
 
+    /** Suppress the white focus ring from FocusableButton — the left bar is the focus indicator. */
+    override var isFocusedButton: Boolean = false
+        set(value) {
+            field = value
+            foreground = null   // never draw the ring on launcher buttons
+            invalidate()
+        }
+
     /** Persistent highlight showing this button's content pane is displayed. */
     var isActiveButton: Boolean = false
         set(value) {
@@ -77,8 +85,9 @@ class LauncherButton @JvmOverloads constructor(
         }
 
     private fun updateIconPadding() {
+        val bar = resources.dpToPx(BAR_WIDTH_DP)
         val iconWidth = if (buttonIcon != null && height > 0) height else 0
-        setPaddingRelative(iconWidth, paddingTop, paddingEnd, paddingBottom)
+        setPaddingRelative(bar + iconWidth, paddingTop, paddingEnd, paddingBottom)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -88,18 +97,26 @@ class LauncherButton @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         val cornerRad = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
-        val roundedRect = RectF(0f, 0f, width.toFloat(), height.toFloat())
-        val path = Path().also { it.addRoundRect(roundedRect, cornerRad, cornerRad, Path.Direction.CW) }
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val path = Path().also { it.addRoundRect(RectF(0f, 0f, w, h), cornerRad, cornerRad, Path.Direction.CW) }
+        val barW = resources.dpToPx(BAR_WIDTH_DP).toFloat()
+
+        // Active body fill — drawn before super so it sits behind text/icon.
+        if (isActiveButton) {
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = context.getColor(R.color.button_active_body)
+            }
+            canvas.save()
+            canvas.clipPath(path)
+            canvas.drawRect(barW, 0f, w, h, fillPaint)
+            canvas.restore()
+        }
 
         buttonIcon?.let { drawable ->
-            // Inset by 2 × focus ring stroke on all sides so the icon sits
-            // visually inside the focus frame rather than behind it.
-            // The horizontal inset is halved to compensate for Material3's
-            // default insetTop/insetBottom (6dp each), which shrink the visible button
-            // background away from the view's top/bottom edges — making the top/bottom
-            // gap look smaller than the left gap at equal insets.
+            // Icon sits to the right of the bar with a small gap.
             val vInset = resources.dpToPx(FocusableButton.STROKE_WIDTH_DP) * 2
-            val hInset = resources.dpToPx(9)              // 9dp left (= 12dp − M3's ~3dp insetTop)
+            val hInset = resources.dpToPx(BAR_WIDTH_DP) + resources.dpToPx(4)
             val iconSize = height - vInset * 2
             canvas.save()
             canvas.clipPath(path)
@@ -110,15 +127,14 @@ class LauncherButton @JvmOverloads constructor(
 
         super.onDraw(canvas)
 
-        // Active state: orange bar on the left edge, clipped to the button's rounded corners.
-        if (isActiveButton) {
-            val barWidth = resources.dpToPx(4).toFloat()
+        // Bar: shown when focused OR active — this is the sole focus/active indicator.
+        if (isFocusedButton || isActiveButton) {
             val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = context.getColor(R.color.colorPrimary)
             }
             canvas.save()
             canvas.clipPath(path)
-            canvas.drawRect(0f, 0f, barWidth, height.toFloat(), barPaint)
+            canvas.drawRect(0f, 0f, barW, h, barPaint)
             canvas.restore()
         }
     }
@@ -357,6 +373,11 @@ class LauncherButton @JvmOverloads constructor(
         canvas.drawText(emoji, x, y, textPaint)
 
         return BitmapDrawable(resources, bmp)
+    }
+
+    companion object {
+        /** Width of the left accent/focus bar in dp. Large enough to be visible while riding. */
+        const val BAR_WIDTH_DP = 12
     }
 
 }

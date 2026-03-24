@@ -23,7 +23,7 @@ open class FocusableButton @JvmOverloads constructor(
 
     var onFocusRequested: (() -> Unit)? = null
 
-    var isFocusedButton: Boolean = false
+    open var isFocusedButton: Boolean = false
         set(value) {
             field = value
             foreground = if (value) focusRing else null
