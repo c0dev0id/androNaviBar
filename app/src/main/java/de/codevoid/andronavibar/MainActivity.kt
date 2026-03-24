@@ -81,6 +81,9 @@ class MainActivity : Activity() {
     /** Non-null while a web pane is displayed in reservedArea. */
     private var activeWebPane: WebPaneContent? = null
 
+    /** Non-null while an app launcher pane is displayed in reservedArea. */
+    private var activeAppLauncherPane: AppLauncherPaneContent? = null
+
     /** Non-null while a URL launcher pane (browser-mode) is displayed in reservedArea. */
     private var activeUrlLauncherPane: UrlLauncherPaneContent? = null
 
@@ -281,6 +284,7 @@ class MainActivity : Activity() {
             FocusOwner.PANE -> {
                 val handled = activeAppsGridPane?.handleKey(keyCode)
                     ?: activeMusicPlayerPane?.handleKey(keyCode)
+                    ?: activeAppLauncherPane?.handleKey(keyCode)
                     ?: activeUrlLauncherPane?.handleKey(keyCode)
                     ?: activeGlobalConfigPane?.handleKey(keyCode)
                     ?: false
@@ -354,11 +358,13 @@ class MainActivity : Activity() {
         if (owner == FocusOwner.PANE) {
             activeMusicPlayerPane?.setInitialFocus()
             activeAppsGridPane?.setInitialFocus()
+            activeAppLauncherPane?.setInitialFocus()
             activeUrlLauncherPane?.setInitialFocus()
             activeGlobalConfigPane?.setInitialFocus()
         } else {
             activeMusicPlayerPane?.clearFocus()
             activeAppsGridPane?.clearFocus()
+            activeAppLauncherPane?.clearFocus()
             activeUrlLauncherPane?.clearFocus()
             activeGlobalConfigPane?.clearFocus()
         }
@@ -386,6 +392,7 @@ class MainActivity : Activity() {
 
     private fun dismissCurrentPane() {
         activeWebPane?.unload();            activeWebPane = null
+        activeAppLauncherPane?.unload();    activeAppLauncherPane = null
         activeUrlLauncherPane?.unload();    activeUrlLauncherPane = null
         activeWidgetPane?.unload();         activeWidgetPane = null
         activeAppsGridPane?.unload();       activeAppsGridPane = null
@@ -421,6 +428,16 @@ class MainActivity : Activity() {
         pane.onContentReady = { hideLoading() }
         activeWebPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
+    }
+
+    private fun showAppLauncherPane(packageName: String, label: String) {
+        val pane = AppLauncherPaneContent(this, packageName, label) {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent != null) startActivity(intent)
+        }
+        pane.onHoverEnter = { if (focusOwner != FocusOwner.PANE) setFocusOwner(FocusOwner.PANE) }
+        activeAppLauncherPane = pane
+        pane.load { pane.show(reservedArea) }
     }
 
     private fun showUrlLauncherPane(url: String, label: String, icon: UrlIcon, buttonIndex: Int) {
@@ -684,6 +701,7 @@ class MainActivity : Activity() {
     // ── Button setup ────────────────────────────────────────────────────────
 
     private fun wireButton(btn: LauncherButton, i: Int) {
+        btn.onAppLauncherActivated = { pkg, lbl     -> activateToggleButton(i) { showAppLauncherPane(pkg, lbl) } }
         btn.onUrlActivated         = { url         -> activateToggleButton(i) { showWebPane(url) } }
         btn.onUrlLauncherActivated = { url, lbl, ic -> activateToggleButton(i) { showUrlLauncherPane(url, lbl, ic, i) } }
         btn.onWidgetActivated      = { id          -> activateToggleButton(i) { showWidgetPane(id) } }
@@ -783,7 +801,8 @@ class MainActivity : Activity() {
     /** Move focus into the active content pane (if it has interactive elements). */
     private fun enterPane() {
         if (activeAppsGridPane != null || activeMusicPlayerPane != null
-            || activeUrlLauncherPane != null || activeGlobalConfigPane != null) {
+            || activeAppLauncherPane != null || activeUrlLauncherPane != null
+            || activeGlobalConfigPane != null) {
             setFocusOwner(FocusOwner.PANE)
         }
     }

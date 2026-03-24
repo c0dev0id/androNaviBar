@@ -20,6 +20,7 @@
     <string name="image_picked">New image selected</string>
     <string name="image_current">Using current image</string>
     <string name="open_in_browser">Open in external browser</string>
+    <string name="start_app">Start App</string>
     <string name="config_mode">Configuration Mode</string>
     <string name="widget_tab">Widget</string>
     <string name="no_widgets">No widgets available</string>

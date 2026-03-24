@@ -40,6 +40,9 @@ class LauncherButton @JvmOverloads constructor(
 
     // ── Callbacks wired by MainActivity ──────────────────────────────────────
 
+    /** Fired when an App button is activated; MainActivity shows the app launcher pane. */
+    var onAppLauncherActivated: ((packageName: String, label: String) -> Unit)? = null
+
     /** Fired when a URL button (WebView mode) is activated; MainActivity shows the WebView pane. */
     var onUrlActivated: ((String) -> Unit)? = null
 
@@ -297,9 +300,7 @@ class LauncherButton @JvmOverloads constructor(
         when (val cfg = config) {
             is ButtonConfig.Empty -> Unit
             is ButtonConfig.AppLauncher -> {
-                flashActivation()
-                val intent = context.packageManager.getLaunchIntentForPackage(cfg.packageName)
-                if (intent != null) context.startActivity(intent)
+                onAppLauncherActivated?.invoke(cfg.packageName, cfg.label)
             }
             is ButtonConfig.UrlLauncher -> {
                 val url = if (cfg.url.startsWith("http://") || cfg.url.startsWith("https://"))
