@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -53,6 +55,10 @@ class LauncherButton @JvmOverloads constructor(
 
     // ── Full-height icon ──────────────────────────────────────────────────────
 
+    private val iconBackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(20, 255, 255, 255)  // ~8% white — defines the icon slot
+    }
+
     /**
      * Icon drawn as a full-height square on the left edge of the button.
      * Setting this automatically adjusts paddingStart and triggers a redraw.
@@ -74,7 +80,7 @@ class LauncherButton @JvmOverloads constructor(
         updateIconPadding()
     }
 
-    /** Draw the app icon between the active fill and the button text. */
+    /** Draw the icon slot backing, then the icon, between the active fill and button text. */
     override fun onDrawContent(canvas: Canvas) {
         buttonIcon?.let { drawable ->
             val vInset = resources.dpToPx(STROKE_WIDTH_DP) * 2
@@ -82,6 +88,8 @@ class LauncherButton @JvmOverloads constructor(
             val iconSize = height - vInset * 2
             canvas.save()
             canvas.clipPath(drawPath)
+            // Backing rectangle — slightly lighter column that frames the icon slot.
+            canvas.drawRect(barW, 0f, barW + height, height.toFloat(), iconBackPaint)
             drawable.setBounds(hInset, vInset, hInset + iconSize, vInset + iconSize)
             drawable.draw(canvas)
             canvas.restore()
