@@ -709,7 +709,25 @@ class GlobalConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
         })
 
-        val labels = widgetProviders.map { it.loadLabel(context.packageManager).toString() }
+        val labels = widgetProviders.map { info ->
+            val name = info.loadLabel(context.packageManager).toString()
+            val appName = try {
+                context.packageManager
+                    .getApplicationInfo(info.provider.packageName, PackageManager.ApplicationInfoFlags.of(0))
+                    .loadLabel(context.packageManager).toString()
+                    .takeIf { it != name }
+            } catch (_: PackageManager.NameNotFoundException) { null }
+            val desc = info.loadDescription(context.packageManager)?.toString()?.takeIf { it.isNotBlank() }
+            val size = when {
+                info.targetCellWidth > 0 && info.targetCellHeight > 0 ->
+                    "${info.targetCellWidth}\u00D7${info.targetCellHeight} cells"
+                info.minWidth > 0 && info.minHeight > 0 ->
+                    "${info.minWidth}\u00D7${info.minHeight}dp"
+                else -> null
+            }
+            val sub = listOfNotNull(appName, desc, size).joinToString(" \u00B7 ")
+            if (sub.isEmpty()) name else "$name\n$sub"
+        }
         val selectedIndex = if (currentProvider != null) {
             widgetProviders.indexOfFirst { it.provider == currentProvider }
         } else -1
