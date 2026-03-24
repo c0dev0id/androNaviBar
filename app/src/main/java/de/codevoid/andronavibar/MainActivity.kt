@@ -190,6 +190,10 @@ class MainActivity : Activity() {
         if (event.action == KeyEvent.ACTION_DOWN) {
             // Pass through when a text field owns Android focus (cursor navigation, etc.)
             if (currentFocus is android.widget.EditText) return super.dispatchKeyEvent(event)
+            // Only handle keyboard-sourced events here. Physical remote buttons arrive via
+            // the broadcast receiver; intercepting their injected KeyEvents too would double-fire.
+            if (event.source and android.view.InputDevice.SOURCE_KEYBOARD == 0)
+                return super.dispatchKeyEvent(event)
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_UP,
                 KeyEvent.KEYCODE_DPAD_DOWN,
