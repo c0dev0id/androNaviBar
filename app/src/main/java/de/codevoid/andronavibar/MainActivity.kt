@@ -17,11 +17,14 @@ import android.animation.ValueAnimator
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import kotlin.math.abs
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -44,6 +47,7 @@ class MainActivity : Activity() {
 
     private var focusedIndex = 0
     private var scrollAnimator: ValueAnimator? = null
+    private lateinit var gestureDetector: GestureDetector
 
     // ── Window focus ──────────────────────────────────────────────────────────
 
@@ -144,7 +148,34 @@ class MainActivity : Activity() {
             adjustButtonHeights()
             scrollToFocused(animate = false)
         }
+
+        val minSwipePx = resources.dpToPx(40).toFloat()
+        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent,
+                velocityX: Float, velocityY: Float
+            ): Boolean {
+                val dx = e2.x - (e1?.x ?: return false)
+                val dy = e2.y - (e1?.y ?: return false)
+                val absX = abs(dx)
+                val absY = abs(dy)
+                if (absX < minSwipePx && absY < minSwipePx) return false
+                if (absX >= absY) handleKey(if (dx > 0) 22 else 21)
+                else              handleKey(if (dy > 0) 20 else 19)
+                return true
+            }
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                handleKey(66)
+                return true
+            }
+        })
+
         updateFocus()
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        gestureDetector.onTouchEvent(ev)
+        return true
     }
 
     override fun onResume() {
@@ -195,28 +226,7 @@ class MainActivity : Activity() {
                     return
                 }
 
-                // All other keys are gated on window focus.
-                if (!isWindowFocused) return
-
-                when (focusOwner) {
-                    FocusOwner.PANE -> {
-                        val handled = activeAppsGridPane?.handleKey(keyCode)
-                            ?: activeMusicPlayerPane?.handleKey(keyCode)
-                            ?: false
-                        if (!handled && keyCode == 22) {    // RIGHT at pane edge
-                            setFocusOwner(FocusOwner.BUTTONS)
-                        }
-                    }
-                    FocusOwner.BUTTONS -> when (keyCode) {
-                        19 -> moveFocus(-1)                     // DPAD_UP
-                        20 -> moveFocus(+1)                     // DPAD_DOWN
-                        21 -> enterPane()                       // LEFT → enter pane
-                        66 -> {                                 // ROUND BUTTON 1
-                            if (focusedIndex < buttons.size)
-                                buttons[focusedIndex].activate()
-                        }
-                    }
-                }
+                handleKey(keyCode)
 
             } else if (intent.hasExtra("key_release")) {
                 val keyCode = intent.getIntExtra("key_release", 0)
@@ -236,11 +246,52 @@ class MainActivity : Activity() {
         }
     }
 
+    // ── Input routing ─────────────────────────────────────────────────────────
+
+    /**
+     * Central key handler called by both the hardware remote receiver and the
+     * on-screen swipe gesture detector. Key codes match Android DPAD constants:
+     * 19=UP, 20=DOWN, 21=LEFT, 22=RIGHT, 66=CONFIRM.
+     */
+    private fun handleKey(keyCode: Int) {
+        if (!isWindowFocused) return
+        when (focusOwner) {
+            FocusOwner.PANE -> {
+                val handled = activeAppsGridPane?.handleKey(keyCode)
+                    ?: activeMusicPlayerPane?.handleKey(keyCode)
+                    ?: false
+                if (!handled && keyCode == 22) setFocusOwner(FocusOwner.BUTTONS)
+            }
+            FocusOwner.BUTTONS -> when (keyCode) {
+                19 -> moveFocus(-1)
+                20 -> moveFocus(+1)
+                21 -> enterPane()
+                66 -> when {
+                    focusedIndex < buttons.size  -> buttons[focusedIndex].activate()
+                    focusedIndex == buttons.size -> activateConfigureButton()
+                }
+            }
+        }
+    }
+
+    private fun activateConfigureButton() {
+        if (activeButtonIndex == CONFIGURE_BUTTON_INDEX) return
+        dismissCurrentPane()
+        deactivateActiveButton()
+        activeButtonIndex = CONFIGURE_BUTTON_INDEX
+        configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
+        showGlobalConfigPane()
+    }
+
     // ── Focus management ──────────────────────────────────────────────────────
 
     private fun setFocus(index: Int) {
         if (buttons.isEmpty()) return
-        focusedIndex = nearestVisibleButton(index.coerceIn(0, buttons.lastIndex))
+        focusedIndex = if (index == buttons.size) {
+            buttons.size
+        } else {
+            nearestVisibleButton(index.coerceIn(0, buttons.lastIndex))
+        }
         prefs.edit().putInt("focused_index", focusedIndex).apply()
         updateFocus()
         scrollToFocused()
@@ -250,7 +301,7 @@ class MainActivity : Activity() {
         val dir = if (delta > 0) 1 else -1
         var next = focusedIndex + dir
         while (next in buttons.indices && buttons[next].visibility == View.GONE) next += dir
-        if (next in buttons.indices) setFocus(next)
+        if (next in buttons.indices || next == buttons.size) setFocus(next)
     }
 
     /** Find the nearest visible button to [index], searching forward then backward. */
@@ -270,6 +321,7 @@ class MainActivity : Activity() {
         for (i in buttons.indices) {
             buttons[i].isFocusedButton = (focusOwner == FocusOwner.BUTTONS && i == focusedIndex)
         }
+        configureButton.isFocusedButton = (focusOwner == FocusOwner.BUTTONS && focusedIndex == buttons.size)
     }
 
     private fun setFocusOwner(owner: FocusOwner) {
@@ -594,10 +646,6 @@ class MainActivity : Activity() {
     // ── Button setup ────────────────────────────────────────────────────────
 
     private fun wireButton(btn: LauncherButton, i: Int) {
-        btn.onFocusRequested = {
-            if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
-            setFocus(i)
-        }
         btn.onUrlActivated         = { url  -> activateToggleButton(i) { showWebPane(url) } }
         btn.onWidgetActivated      = { id   -> activateToggleButton(i) { showWidgetPane(id) } }
         btn.onAppsGridActivated    = { apps -> activateToggleButton(i) { showAppsGridPane(apps) } }
@@ -616,16 +664,7 @@ class MainActivity : Activity() {
         btn.setTextColor(getColor(R.color.text_primary))
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
         btn.cornerRadius = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP)
-        // Touch-only, not d-pad navigable. Bypass the two-tap model.
-        btn.setOnTouchListener(null)
-        btn.setOnClickListener {
-            if (activeButtonIndex == CONFIGURE_BUTTON_INDEX) return@setOnClickListener
-            dismissCurrentPane()
-            deactivateActiveButton()
-            activeButtonIndex = CONFIGURE_BUTTON_INDEX
-            configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
-            showGlobalConfigPane()
-        }
+        btn.setOnClickListener { activateConfigureButton() }
         return btn
     }
 
@@ -656,7 +695,11 @@ class MainActivity : Activity() {
     }
 
     private fun scrollToFocused(animate: Boolean = true) {
-        val target = buttons.getOrNull(focusedIndex) ?: return
+        val target: View = if (focusedIndex < buttons.size) {
+            buttons.getOrNull(focusedIndex) ?: return
+        } else {
+            configureButton
+        }
         val slotH = target.measuredHeight +
             ((target.layoutParams as? LinearLayout.LayoutParams)
                 ?.let { it.topMargin + it.bottomMargin } ?: 0)
