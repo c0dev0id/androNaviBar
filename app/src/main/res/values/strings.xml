@@ -30,4 +30,5 @@
     <string name="tab_music">Music</string>
     <string name="no_music_playing">No music playing</string>
     <string name="config_button">Configure</string>
+    <string name="dashboard">Dashboard</string>
 </resources>

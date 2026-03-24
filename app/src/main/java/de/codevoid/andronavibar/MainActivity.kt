@@ -39,7 +39,8 @@ class MainActivity : Activity() {
     private val buttons = mutableListOf<LauncherButton>()
     private lateinit var buttonScroll:    ScrollView
     private lateinit var buttonPanel:     LinearLayout
-    private lateinit var configureButton: FocusableButton
+    private lateinit var dashboardButton: FocusableButton
+    private lateinit var appsButton:      FocusableButton
     private lateinit var reservedArea:    FrameLayout
     private lateinit var appWidgetHost:   SafeAppWidgetHost
     private val widgetViews = mutableMapOf<Int, AppWidgetHostView>()
@@ -73,6 +74,9 @@ class MainActivity : Activity() {
     }
 
     // ── Pane coordination ─────────────────────────────────────────────────────
+
+    /** Non-null while the dashboard pane is displayed in reservedArea. */
+    private var activeDashboardPane: DashboardPaneContent? = null
 
     /** Non-null while a web pane is displayed in reservedArea. */
     private var activeWebPane: WebPaneContent? = null
@@ -124,7 +128,10 @@ class MainActivity : Activity() {
         buttonPanel   = findViewById(R.id.buttonPanel)
         appWidgetHost = SafeAppWidgetHost(this, APP_WIDGET_HOST_ID)
         cleanupOrphanedWidgetId()
-        focusedIndex  = prefs.getInt("focused_index", 0)
+
+        // Dashboard fixed at top of column (panel position 0).
+        dashboardButton = createFixedButton(getString(R.string.dashboard)) { activateDashboardButton() }
+        buttonPanel.addView(dashboardButton)
 
         val count = prefs.getInt("button_count", DEFAULT_BUTTON_COUNT)
         for (i in 0 until count) {
@@ -141,11 +148,18 @@ class MainActivity : Activity() {
             buttons.add(btn)
         }
 
-        configureButton = createConfigureButton()
-        buttonPanel.addView(configureButton)
+        // Apps fixed at bottom of column (panel position buttons.size + 1).
+        appsButton = createFixedButton(getString(R.string.tab_apps)) { activateAppsButton() }
+        buttonPanel.addView(appsButton)
 
         preCreateWidgetViews()
-        focusedIndex = nearestVisibleButton(focusedIndex)
+
+        // focusedIndex is a panel position: 0=Dashboard, 1..N=configurable, N+1=Apps.
+        // Default to 1 (first configurable button). Clamp saved values to valid range.
+        focusedIndex = prefs.getInt("focused_index", 1).coerceIn(0, buttons.size + 1)
+        if (focusedIndex in 1..buttons.size && buttons[focusedIndex - 1].visibility == View.GONE) {
+            focusedIndex = nearestVisibleButton(focusedIndex - 1) + 1
+        }
 
         buttonPanel.post {
             adjustButtonHeights()
@@ -255,7 +269,8 @@ class MainActivity : Activity() {
         if (!isWindowFocused) return
         when (focusOwner) {
             FocusOwner.PANE -> {
-                val handled = activeAppsGridPane?.handleKey(keyCode)
+                val handled = activeDashboardPane?.handleKey(keyCode)
+                    ?: activeAppsGridPane?.handleKey(keyCode)
                     ?: activeMusicPlayerPane?.handleKey(keyCode)
                     ?: activeAppLauncherPane?.handleKey(keyCode)
                     ?: activeUrlLauncherPane?.handleKey(keyCode)
@@ -268,30 +283,48 @@ class MainActivity : Activity() {
                 20 -> moveFocus(+1)
                 21 -> enterPane()
                 66 -> when {
-                    focusedIndex < buttons.size  -> buttons[focusedIndex].activate()
-                    focusedIndex == buttons.size -> activateConfigureButton()
+                    focusedIndex == 0              -> activateDashboardButton()
+                    focusedIndex in 1..buttons.size -> buttons[focusedIndex - 1].activate()
+                    focusedIndex == buttons.size + 1 -> activateAppsButton()
                 }
             }
         }
     }
 
-    private fun activateConfigureButton() {
-        if (activeButtonIndex == CONFIGURE_BUTTON_INDEX) return
+    private fun activateDashboardButton() {
+        if (activeButtonIndex == 0) return
         dismissCurrentPane()
         deactivateActiveButton()
-        activeButtonIndex = CONFIGURE_BUTTON_INDEX
-        configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.colorPrimary))
-        showGlobalConfigPane()
+        activeButtonIndex = 0
+        dashboardButton.isActiveButton = true
+        showDashboardPane()
+    }
+
+    private fun activateAppsButton() {
+        if (activeButtonIndex == buttons.size + 1) return
+        dismissCurrentPane()
+        deactivateActiveButton()
+        activeButtonIndex = buttons.size + 1
+        appsButton.isActiveButton = true
+        showAllAppsPane()
     }
 
     // ── Focus management ──────────────────────────────────────────────────────
+    //
+    // focusedIndex is a panel position:
+    //   0          → dashboardButton
+    //   1..N       → buttons[focusedIndex - 1]
+    //   N+1        → appsButton   (N = buttons.size)
 
     private fun setFocus(index: Int) {
-        if (buttons.isEmpty()) return
-        focusedIndex = if (index == buttons.size) {
-            buttons.size
-        } else {
-            nearestVisibleButton(index.coerceIn(0, buttons.lastIndex))
+        val maxPos = buttons.size + 1
+        focusedIndex = when {
+            index <= 0      -> 0
+            index >= maxPos -> maxPos
+            else -> {
+                val btnIdx = (index - 1).coerceIn(0, buttons.lastIndex)
+                nearestVisibleButton(btnIdx) + 1
+            }
         }
         prefs.edit().putInt("focused_index", focusedIndex).apply()
         updateFocus()
@@ -301,40 +334,44 @@ class MainActivity : Activity() {
     private fun moveFocus(delta: Int) {
         val dir = if (delta > 0) 1 else -1
         var next = focusedIndex + dir
-        while (next in buttons.indices && buttons[next].visibility == View.GONE) next += dir
-        if (next in buttons.indices || next == buttons.size) setFocus(next)
+        // Skip hidden configurable buttons
+        while (next in 1..buttons.size && buttons[next - 1].visibility == View.GONE) next += dir
+        if (next in 0..(buttons.size + 1)) setFocus(next)
     }
 
-    /** Find the nearest visible button to [index], searching forward then backward. */
+    /** Find the nearest visible button to [index] (buttons[] index), searching outward. */
     private fun nearestVisibleButton(index: Int): Int {
         if (buttons.isEmpty()) return 0
         val clamped = index.coerceIn(0, buttons.lastIndex)
         if (buttons[clamped].visibility != View.GONE) return clamped
-        // Search outward from clamped
         for (d in 1..buttons.lastIndex) {
             if (clamped + d in buttons.indices && buttons[clamped + d].visibility != View.GONE) return clamped + d
             if (clamped - d in buttons.indices && buttons[clamped - d].visibility != View.GONE) return clamped - d
         }
-        return 0 // fallback — shouldn't happen if at least one button exists
+        return 0
     }
 
     private fun updateFocus() {
+        val inButtons = focusOwner == FocusOwner.BUTTONS
+        dashboardButton.isFocusedButton = inButtons && focusedIndex == 0
         for (i in buttons.indices) {
-            buttons[i].isFocusedButton = (focusOwner == FocusOwner.BUTTONS && i == focusedIndex)
+            buttons[i].isFocusedButton = inButtons && focusedIndex == i + 1
         }
-        configureButton.isFocusedButton = (focusOwner == FocusOwner.BUTTONS && focusedIndex == buttons.size)
+        appsButton.isFocusedButton = inButtons && focusedIndex == buttons.size + 1
     }
 
     private fun setFocusOwner(owner: FocusOwner) {
         focusOwner = owner
         updateFocus()
         if (owner == FocusOwner.PANE) {
+            activeDashboardPane?.setInitialFocus()
             activeMusicPlayerPane?.setInitialFocus()
             activeAppsGridPane?.setInitialFocus()
             activeAppLauncherPane?.setInitialFocus()
             activeUrlLauncherPane?.setInitialFocus()
             activeGlobalConfigPane?.setInitialFocus()
         } else {
+            activeDashboardPane?.clearFocus()
             activeMusicPlayerPane?.clearFocus()
             activeAppsGridPane?.clearFocus()
             activeAppLauncherPane?.clearFocus()
@@ -344,26 +381,26 @@ class MainActivity : Activity() {
     }
 
     /** Show a toggle button's content pane (no-op if already active). */
-    private fun activateToggleButton(index: Int, showPane: () -> Unit) {
-        if (activeButtonIndex == index) return
+    private fun activateToggleButton(panelPos: Int, showPane: () -> Unit) {
+        if (activeButtonIndex == panelPos) return
         dismissCurrentPane()
         deactivateActiveButton()
-        activeButtonIndex = index
-        buttons[index].isActiveButton = true
+        activeButtonIndex = panelPos
+        buttons[panelPos - 1].isActiveButton = true
         showPane()
     }
 
     private fun deactivateActiveButton() {
         when {
-            activeButtonIndex in buttons.indices ->
-                buttons[activeButtonIndex].isActiveButton = false
-            activeButtonIndex == CONFIGURE_BUTTON_INDEX ->
-                configureButton.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
+            activeButtonIndex == 0 -> dashboardButton.isActiveButton = false
+            activeButtonIndex in 1..buttons.size -> buttons[activeButtonIndex - 1].isActiveButton = false
+            activeButtonIndex == buttons.size + 1 -> appsButton.isActiveButton = false
         }
         activeButtonIndex = -1
     }
 
     private fun dismissCurrentPane() {
+        activeDashboardPane?.unload();      activeDashboardPane = null
         activeWebPane?.unload();            activeWebPane = null
         activeAppLauncherPane?.unload();    activeAppLauncherPane = null
         activeUrlLauncherPane?.unload();    activeUrlLauncherPane = null
@@ -395,6 +432,27 @@ class MainActivity : Activity() {
     }
 
     // ── Content panes ────────────────────────────────────────────────────────
+
+    private fun showDashboardPane() {
+        val pane = DashboardPaneContent(this)
+        pane.onConfigRequested = {
+            dismissCurrentPane()
+            showGlobalConfigPane()
+            setFocusOwner(FocusOwner.PANE)
+        }
+        activeDashboardPane = pane
+        pane.load { pane.show(reservedArea) }
+    }
+
+    private fun showAllAppsPane() {
+        val intent = android.content.Intent(android.content.Intent.ACTION_MAIN)
+            .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        @Suppress("DEPRECATION")
+        val apps = packageManager.queryIntentActivities(intent, 0)
+            .map { AppEntry(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
+            .sortedBy { it.label.lowercase() }
+        showAppsGridPane(apps)
+    }
 
     private fun showWebPane(url: String) {
         val pane = WebPaneContent(this, url)
@@ -672,27 +730,46 @@ class MainActivity : Activity() {
     // ── Button setup ────────────────────────────────────────────────────────
 
     private fun wireButton(btn: LauncherButton, i: Int) {
-        btn.onAppLauncherActivated = { pkg, lbl     -> activateToggleButton(i) { showAppLauncherPane(pkg, lbl) } }
-        btn.onUrlActivated         = { url         -> activateToggleButton(i) { showWebPane(url) } }
-        btn.onUrlLauncherActivated = { url, lbl, ic -> activateToggleButton(i) { showUrlLauncherPane(url, lbl, ic, i) } }
-        btn.onWidgetActivated      = { id          -> activateToggleButton(i) { showWidgetPane(id) } }
-        btn.onAppsGridActivated    = { apps -> activateToggleButton(i) { showAppsGridPane(apps) } }
-        btn.onMusicPlayerActivated = { pkg  -> activateToggleButton(i) { showMusicPlayerPane(pkg) } }
+        // Use buttons.indexOf(btn) + 1 for panel position so re-indexing after
+        // add/remove always resolves to the correct position at activation time.
+        btn.onAppLauncherActivated = { pkg, lbl ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showAppLauncherPane(pkg, lbl) }
+        }
+        btn.onUrlActivated = { url ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showWebPane(url) }
+        }
+        btn.onUrlLauncherActivated = { url, lbl, ic ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showUrlLauncherPane(url, lbl, ic, i) }
+        }
+        btn.onWidgetActivated = { id ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showWidgetPane(id) }
+        }
+        btn.onAppsGridActivated = { apps ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showAppsGridPane(apps) }
+        }
+        btn.onMusicPlayerActivated = { pkg ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showMusicPlayerPane(pkg) }
+        }
     }
 
-    private fun createConfigureButton(): FocusableButton {
+    private fun createFixedButton(label: String, onClick: () -> Unit): FocusableButton {
         val btn = FocusableButton(this)
         val m = resources.dpToPx(4)
         btn.layoutParams = LinearLayout.LayoutParams(MATCH, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             setMargins(m, m, m, m)
         }
-        btn.text = getString(R.string.config_button)
+        btn.text = label
         btn.textSize = 28f
         btn.gravity = Gravity.CENTER_VERTICAL or Gravity.START
         btn.setTextColor(getColor(R.color.text_primary))
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
-        btn.cornerRadius = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP)
-        btn.setOnClickListener { activateConfigureButton() }
+        btn.setOnClickListener { onClick() }
         return btn
     }
 
@@ -700,7 +777,7 @@ class MainActivity : Activity() {
         val panelPad = resources.dpToPx(8) * 2  // buttonPanel top + bottom padding
         val totalH = buttonScroll.height - panelPad
         val margin = resources.dpToPx(4) * 2  // top + bottom margin per button
-        val visibleCount = buttons.count { it.visibility != View.GONE } + 1 // +1 for configure button
+        val visibleCount = buttons.count { it.visibility != View.GONE } + 2 // +2 for dashboard + apps
         val slots = visibleCount.coerceIn(1, MAX_VISIBLE_BUTTONS)
         val btnH = totalH / slots - margin
         for (btn in buttons) {
@@ -708,9 +785,11 @@ class MainActivity : Activity() {
             lp.height = btnH
             btn.layoutParams = lp
         }
-        val clp = configureButton.layoutParams as LinearLayout.LayoutParams
-        clp.height = btnH
-        configureButton.layoutParams = clp
+        listOf(dashboardButton, appsButton).forEach { fixed ->
+            val lp = fixed.layoutParams as LinearLayout.LayoutParams
+            lp.height = btnH
+            fixed.layoutParams = lp
+        }
     }
 
     private fun applyButtonVisibility() {
@@ -718,16 +797,17 @@ class MainActivity : Activity() {
             buttons[i].visibility = if (prefs.getBoolean("btn_${i}_active", true)) View.VISIBLE else View.GONE
         }
         adjustButtonHeights()
-        if (buttons.getOrNull(focusedIndex)?.visibility == View.GONE) {
-            setFocus(nearestVisibleButton(focusedIndex))
+        // focusedIndex is a panel position; check if focused configurable button became hidden.
+        if (focusedIndex in 1..buttons.size && buttons[focusedIndex - 1].visibility == View.GONE) {
+            setFocus(nearestVisibleButton(focusedIndex - 1) + 1)
         }
     }
 
     private fun scrollToFocused(animate: Boolean = true) {
-        val target: View = if (focusedIndex < buttons.size) {
-            buttons.getOrNull(focusedIndex) ?: return
-        } else {
-            configureButton
+        val target: View = when {
+            focusedIndex == 0              -> dashboardButton
+            focusedIndex in 1..buttons.size -> buttons[focusedIndex - 1]
+            else                           -> appsButton
         }
         val slotH = target.measuredHeight +
             ((target.layoutParams as? LinearLayout.LayoutParams)
@@ -758,9 +838,9 @@ class MainActivity : Activity() {
 
     /** Move focus into the active content pane (if it has interactive elements). */
     private fun enterPane() {
-        if (activeAppsGridPane != null || activeMusicPlayerPane != null
-            || activeAppLauncherPane != null || activeUrlLauncherPane != null
-            || activeGlobalConfigPane != null) {
+        if (activeDashboardPane != null || activeAppsGridPane != null
+            || activeMusicPlayerPane != null || activeAppLauncherPane != null
+            || activeUrlLauncherPane != null || activeGlobalConfigPane != null) {
             setFocusOwner(FocusOwner.PANE)
         }
     }
@@ -790,7 +870,7 @@ class MainActivity : Activity() {
                 btn.index = i
                 wireButton(btn, i)
                 btn.loadConfig(prefs)
-                // Insert before the configure button
+                // Insert before appsButton (always the last child)
                 buttonPanel.addView(btn, buttonPanel.childCount - 1)
                 buttons.add(btn)
                 adjustButtonHeights()
@@ -806,8 +886,9 @@ class MainActivity : Activity() {
                     buttons[i].index = i
                     buttons[i].loadConfig(prefs)
                 }
-                if (focusedIndex >= buttons.size) {
-                    focusedIndex = buttons.lastIndex
+                // focusedIndex is a panel position; clamp if it now points past the last button
+                if (focusedIndex > buttons.size) {
+                    focusedIndex = buttons.size.coerceAtLeast(1)
                     prefs.edit().putInt("focused_index", focusedIndex).apply()
                 }
                 adjustButtonHeights()
@@ -857,7 +938,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val TAG = "aR2Launcher"
-        private const val CONFIGURE_BUTTON_INDEX          = -2
         private const val MAX_VISIBLE_BUTTONS             = 6
         private const val DEFAULT_BUTTON_COUNT            = 6
         private const val IMAGE_REQUEST_CODE              = 1001
