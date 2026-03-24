@@ -717,7 +717,7 @@ class GlobalConfigPaneContent(
                     .loadLabel(context.packageManager).toString()
                     .takeIf { it != name }
             } catch (_: PackageManager.NameNotFoundException) { null }
-            val desc = info.loadDescription(context.packageManager)?.toString()?.takeIf { it.isNotBlank() }
+            val desc = info.loadDescription(context)?.toString()?.takeIf { it.isNotBlank() }
             val size = when {
                 info.targetCellWidth > 0 && info.targetCellHeight > 0 ->
                     "${info.targetCellWidth}\u00D7${info.targetCellHeight} cells"
