@@ -219,8 +219,8 @@ class MainActivity : Activity() {
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
         pressedKeys.clear()
         key111PressedAt = 0L
-        scrollAnimator?.cancel()
-        scrollAnimator = null
+        scrollSpring?.cancel()
+        scrollSpring = null
     }
 
     // ── Remote input ──────────────────────────────────────────────────────────
