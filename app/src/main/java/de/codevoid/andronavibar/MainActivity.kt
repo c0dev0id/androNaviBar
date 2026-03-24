@@ -13,8 +13,10 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.RectF
 import com.caverock.androidsvg.SVG
+import android.animation.ValueAnimator
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -41,6 +43,7 @@ class MainActivity : Activity() {
     private val widgetViews = mutableMapOf<Int, AppWidgetHostView>()
 
     private var focusedIndex = 0
+    private var scrollAnimator: ValueAnimator? = null
 
     // ── Window focus ──────────────────────────────────────────────────────────
 
@@ -138,7 +141,7 @@ class MainActivity : Activity() {
 
         buttonPanel.post {
             adjustButtonHeights()
-            scrollToFocused()
+            scrollToFocused(animate = false)
         }
         updateFocus()
     }
@@ -162,6 +165,8 @@ class MainActivity : Activity() {
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
         pressedKeys.clear()
         key111PressedAt = 0L
+        scrollAnimator?.cancel()
+        scrollAnimator = null
     }
 
     // ── Remote input ──────────────────────────────────────────────────────────
@@ -649,9 +654,25 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun scrollToFocused() {
+    private fun scrollToFocused(animate: Boolean = true) {
         val target = buttons.getOrNull(focusedIndex) ?: return
-        buttonScroll.smoothScrollTo(0, target.top)
+        val slotH = target.measuredHeight +
+            ((target.layoutParams as? LinearLayout.LayoutParams)
+                ?.let { it.topMargin + it.bottomMargin } ?: 0)
+        val scrollY = (target.top - 2 * slotH).coerceAtLeast(0)
+        scrollAnimator?.cancel()
+        if (!animate) {
+            buttonScroll.scrollTo(0, scrollY)
+            return
+        }
+        val startY = buttonScroll.scrollY
+        if (startY == scrollY) return
+        scrollAnimator = ValueAnimator.ofInt(startY, scrollY).apply {
+            duration = 1000L
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { buttonScroll.scrollTo(0, animatedValue as Int) }
+            start()
+        }
     }
 
     /** Move focus into the active content pane (if it has interactive elements). */
