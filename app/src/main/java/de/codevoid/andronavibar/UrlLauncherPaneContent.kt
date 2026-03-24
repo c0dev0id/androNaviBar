@@ -1,11 +1,7 @@
 package de.codevoid.andronavibar
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.drawable.BitmapDrawable
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -114,24 +110,9 @@ class UrlLauncherPaneContent(
                 val bmp = if (file.exists()) BitmapFactory.decodeFile(file.path) else null
                 if (bmp != null) imageView.setImageBitmap(bmp) else fetchFavicon(imageView)
             }
-            is UrlIcon.Emoji -> imageView.setImageDrawable(renderEmoji(icon.emoji))
+            is UrlIcon.Emoji -> imageView.setImageDrawable(context.renderEmojiDrawable(icon.emoji))
             is UrlIcon.None  -> fetchFavicon(imageView)
         }
-    }
-
-    private fun renderEmoji(emoji: String): BitmapDrawable {
-        val size = 256
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = context.getColor(R.color.surface_card) }
-        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textAlign = Paint.Align.CENTER
-            textSize  = size * 0.65f
-        }
-        val fm = textPaint.fontMetrics
-        canvas.drawText(emoji, size / 2f, size / 2f - (fm.ascent + fm.descent) / 2f, textPaint)
-        return BitmapDrawable(context.resources, bmp)
     }
 
     private fun fetchFavicon(imageView: ImageView) {
@@ -149,7 +130,9 @@ class UrlLauncherPaneContent(
                 val bmp = BitmapFactory.decodeStream(conn.inputStream)
                 conn.disconnect()
                 if (bmp != null) {
-                    Handler(Looper.getMainLooper()).post { imageView.setImageBitmap(bmp) }
+                    Handler(Looper.getMainLooper()).post {
+                        if (imageView.isAttachedToWindow) imageView.setImageBitmap(bmp)
+                    }
                 }
             } catch (_: Exception) {}
         }.start()

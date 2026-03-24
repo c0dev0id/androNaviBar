@@ -3,7 +3,6 @@ package de.codevoid.andronavibar.ui
 import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -18,6 +17,7 @@ import de.codevoid.andronavibar.R
 import de.codevoid.andronavibar.UrlIcon
 import de.codevoid.andronavibar.buttonIconFile
 import de.codevoid.andronavibar.dpToPx
+import de.codevoid.andronavibar.renderEmojiDrawable
 import java.io.File
 
 // ── LauncherButton ────────────────────────────────────────────────────────────
@@ -84,31 +84,37 @@ class LauncherButton @JvmOverloads constructor(
             invalidate()
         }
 
+    // Pre-allocated draw objects — never allocate inside onDraw.
+    private val cornerRad = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
+    private val barW      = resources.dpToPx(BAR_WIDTH_DP).toFloat()
+    private val drawPath  = Path()
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = context.getColor(R.color.button_active_body)
+    }
+    private val barPaint  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = context.getColor(R.color.colorPrimary)
+    }
+
     private fun updateIconPadding() {
-        val bar = resources.dpToPx(BAR_WIDTH_DP)
         val iconWidth = if (buttonIcon != null && height > 0) height else 0
-        setPaddingRelative(bar + iconWidth, paddingTop, paddingEnd, paddingBottom)
+        setPaddingRelative(barW.toInt() + iconWidth, paddingTop, paddingEnd, paddingBottom)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        drawPath.rewind()
+        drawPath.addRoundRect(RectF(0f, 0f, w.toFloat(), h.toFloat()), cornerRad, cornerRad, Path.Direction.CW)
         updateIconPadding()
     }
 
     override fun onDraw(canvas: Canvas) {
-        val cornerRad = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
         val w = width.toFloat()
         val h = height.toFloat()
-        val path = Path().also { it.addRoundRect(RectF(0f, 0f, w, h), cornerRad, cornerRad, Path.Direction.CW) }
-        val barW = resources.dpToPx(BAR_WIDTH_DP).toFloat()
 
         // Active body fill — drawn before super so it sits behind text/icon.
         if (isActiveButton) {
-            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = context.getColor(R.color.button_active_body)
-            }
             canvas.save()
-            canvas.clipPath(path)
+            canvas.clipPath(drawPath)
             canvas.drawRect(barW, 0f, w, h, fillPaint)
             canvas.restore()
         }
@@ -116,10 +122,10 @@ class LauncherButton @JvmOverloads constructor(
         buttonIcon?.let { drawable ->
             // Icon sits to the right of the bar with a small gap.
             val vInset = resources.dpToPx(FocusableButton.STROKE_WIDTH_DP) * 2
-            val hInset = resources.dpToPx(BAR_WIDTH_DP) + resources.dpToPx(4)
+            val hInset = barW.toInt() + resources.dpToPx(4)
             val iconSize = height - vInset * 2
             canvas.save()
-            canvas.clipPath(path)
+            canvas.clipPath(drawPath)
             drawable.setBounds(hInset, vInset, hInset + iconSize, vInset + iconSize)
             drawable.draw(canvas)
             canvas.restore()
@@ -129,11 +135,8 @@ class LauncherButton @JvmOverloads constructor(
 
         // Bar: shown when focused OR active — this is the sole focus/active indicator.
         if (isFocusedButton || isActiveButton) {
-            val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = context.getColor(R.color.colorPrimary)
-            }
             canvas.save()
-            canvas.clipPath(path)
+            canvas.clipPath(drawPath)
             canvas.drawRect(0f, 0f, barW, h, barPaint)
             canvas.restore()
         }
@@ -311,7 +314,7 @@ class LauncherButton @JvmOverloads constructor(
     private fun resolveIcon(icon: UrlIcon): Drawable? = when (icon) {
         is UrlIcon.None       -> null
         is UrlIcon.CustomFile -> loadIconFile()
-        is UrlIcon.Emoji      -> renderEmojiIcon(icon.emoji)
+        is UrlIcon.Emoji      -> context.renderEmojiDrawable(icon.emoji)
     }
 
     // ── Activation ────────────────────────────────────────────────────────────
@@ -349,29 +352,6 @@ class LauncherButton @JvmOverloads constructor(
         val file = buttonIconFile(context.filesDir, index)
         if (!file.exists()) return null
         val bmp = BitmapFactory.decodeFile(file.path) ?: return null
-        return BitmapDrawable(resources, bmp)
-    }
-
-    private fun renderEmojiIcon(emoji: String): Drawable {
-        val size = 256
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-
-        // Background: surface_card colour
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-        bgPaint.color = context.getColor(R.color.surface_card)
-        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
-
-        // Emoji centred at 65 % of the tile size
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textAlign = Paint.Align.CENTER
-            textSize  = size * 0.65f
-        }
-        val fm = textPaint.fontMetrics
-        val x  = size / 2f
-        val y  = size / 2f - (fm.ascent + fm.descent) / 2f
-        canvas.drawText(emoji, x, y, textPaint)
-
         return BitmapDrawable(resources, bmp)
     }
 
