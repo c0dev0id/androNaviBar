@@ -113,6 +113,7 @@ class MainActivity : Activity() {
         prefs         = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
         reservedArea  = findViewById(R.id.reservedArea)
         buttonScroll  = findViewById(R.id.buttonScroll)
+        buttonScroll.setOnTouchListener { _, _ -> true }
         buttonPanel   = findViewById(R.id.buttonPanel)
         appWidgetHost = SafeAppWidgetHost(this, APP_WIDGET_HOST_ID)
         cleanupOrphanedWidgetId()
