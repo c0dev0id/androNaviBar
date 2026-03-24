@@ -133,8 +133,11 @@ class LauncherButton @JvmOverloads constructor(
 
         super.onDraw(canvas)
 
-        // Bar: shown when focused OR active — this is the sole focus/active indicator.
+        // Bar: white when focused (cursor), orange when active-only.
         if (isFocusedButton || isActiveButton) {
+            barPaint.color = context.getColor(
+                if (isFocusedButton) R.color.focus_ring else R.color.colorPrimary
+            )
             canvas.save()
             canvas.clipPath(drawPath)
             canvas.drawRect(0f, 0f, barW, h, barPaint)
