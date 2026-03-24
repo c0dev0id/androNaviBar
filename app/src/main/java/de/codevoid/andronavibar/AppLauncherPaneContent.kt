@@ -2,7 +2,6 @@ package de.codevoid.andronavibar
 
 import android.content.Context
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -22,8 +21,6 @@ class AppLauncherPaneContent(
     private val label: String,
     private val onStartApp: () -> Unit
 ) : PaneContent {
-
-    var onHoverEnter: (() -> Unit)? = null
 
     private var rootView: LinearLayout? = null
     private var startButton: FocusableButton? = null
@@ -73,13 +70,6 @@ class AppLauncherPaneContent(
                 gravity = Gravity.CENTER_HORIZONTAL
             }
             setOnClickListener { onStartApp() }
-            setOnHoverListener { _, ev ->
-                if (ev.action == MotionEvent.ACTION_HOVER_ENTER) {
-                    onHoverEnter?.invoke()
-                    setInitialFocus()
-                }
-                true
-            }
         }
         startButton = btn
         root.addView(btn)

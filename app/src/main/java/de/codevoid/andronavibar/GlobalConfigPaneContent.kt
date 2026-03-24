@@ -20,7 +20,6 @@ import android.text.InputType
 import android.text.TextWatcher
 import android.view.DragEvent
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
@@ -86,9 +85,6 @@ class GlobalConfigPaneContent(
     private var addButtonFocusView: View? = null
     private var checkUpdateFocusView: View? = null
     private var configScrollView: ScrollView? = null
-
-    /** Wired by MainActivity; called when a pane item is hovered so focus owner can switch. */
-    var onHoverEnter: (() -> Unit)? = null
 
     private var cachedApps: List<ResolveInfo>? = null
     private var cachedWidgets: List<AppWidgetProviderInfo>? = null
@@ -484,24 +480,6 @@ class GlobalConfigPaneContent(
         val targets = RowFocusTargets(checkbox, labelArea, handle, deleteBtn)
         if (index < rowFocusTargets.size) rowFocusTargets[index] = targets
         else rowFocusTargets.add(targets)
-
-        // Hover: move focus ring to the hovered target, suppress system state_hovered
-        checkbox.setOnHoverListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 0; updateFocusRings() }
-            true
-        }
-        labelArea.setOnHoverListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 1; updateFocusRings() }
-            true
-        }
-        handle.setOnHoverListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 2; updateFocusRings() }
-            true
-        }
-        deleteBtn.setOnHoverListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 3; updateFocusRings() }
-            true
-        }
 
         return row
     }
@@ -1031,12 +1009,6 @@ class GlobalConfigPaneContent(
 
         val addBtn = makeActionButton("+ Add Button") { doAddButton() }
         addButtonFocusView = addBtn
-        addBtn.setOnHoverListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) {
-                onHoverEnter?.invoke(); focusRow = prefs.getInt("button_count", 6); focusCol = 0; updateFocusRings()
-            }
-            true
-        }
         row.addView(addBtn)
         wrapper.addView(row)
 
@@ -1048,12 +1020,6 @@ class GlobalConfigPaneContent(
             }
         }
         checkUpdateFocusView = updateBtn
-        updateBtn.setOnHoverListener { _, ev ->
-            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) {
-                onHoverEnter?.invoke(); focusRow = prefs.getInt("button_count", 6) + 1; focusCol = 0; updateFocusRings()
-            }
-            true
-        }
         wrapper.addView(updateBtn)
 
         return wrapper

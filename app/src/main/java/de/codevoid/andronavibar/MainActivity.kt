@@ -18,15 +18,12 @@ import android.os.SystemClock
 import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.dynamicanimation.animation.FloatValueHolder
-import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import kotlin.math.abs
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -49,7 +46,6 @@ class MainActivity : Activity() {
 
     private var focusedIndex = 0
     private var scrollSpring: SpringAnimation? = null
-    private lateinit var gestureDetector: GestureDetector
 
     // ── Window focus ──────────────────────────────────────────────────────────
 
@@ -157,33 +153,7 @@ class MainActivity : Activity() {
             scrollToFocused(animate = false)
         }
 
-        val minSwipePx = resources.dpToPx(40).toFloat()
-        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onFling(
-                e1: MotionEvent?, e2: MotionEvent,
-                velocityX: Float, velocityY: Float
-            ): Boolean {
-                val dx = e2.x - (e1?.x ?: return false)
-                val dy = e2.y - (e1?.y ?: return false)
-                val absX = abs(dx)
-                val absY = abs(dy)
-                if (absX < minSwipePx && absY < minSwipePx) return false
-                if (absX >= absY) handleKey(if (dx > 0) 22 else 21)
-                else              handleKey(if (dy > 0) 20 else 19)
-                return true
-            }
-            override fun onSingleTapUp(e: MotionEvent): Boolean {
-                handleKey(66)
-                return true
-            }
-        })
-
         updateFocus()
-    }
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        gestureDetector.onTouchEvent(ev)
-        return true
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -439,7 +409,6 @@ class MainActivity : Activity() {
             val intent = packageManager.getLaunchIntentForPackage(packageName)
             if (intent != null) startActivity(intent)
         }
-        pane.onHoverEnter = { if (focusOwner != FocusOwner.PANE) setFocusOwner(FocusOwner.PANE) }
         activeAppLauncherPane = pane
         pane.load { pane.show(reservedArea) }
     }
@@ -448,7 +417,6 @@ class MainActivity : Activity() {
         val pane = UrlLauncherPaneContent(this, url, label, icon, buttonIndex) {
             startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
         }
-        pane.onHoverEnter = { if (focusOwner != FocusOwner.PANE) setFocusOwner(FocusOwner.PANE) }
         activeUrlLauncherPane = pane
         pane.load { pane.show(reservedArea) }
     }
@@ -711,13 +679,6 @@ class MainActivity : Activity() {
         btn.onWidgetActivated      = { id          -> activateToggleButton(i) { showWidgetPane(id) } }
         btn.onAppsGridActivated    = { apps -> activateToggleButton(i) { showAppsGridPane(apps) } }
         btn.onMusicPlayerActivated = { pkg  -> activateToggleButton(i) { showMusicPlayerPane(pkg) } }
-        btn.setOnHoverListener { _, event ->
-            if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
-                setFocus(i)
-            }
-            true  // suppress Material state_hovered overlay
-        }
     }
 
     private fun createConfigureButton(): FocusableButton {
@@ -733,13 +694,6 @@ class MainActivity : Activity() {
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
         btn.cornerRadius = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP)
         btn.setOnClickListener { activateConfigureButton() }
-        btn.setOnHoverListener { _, event ->
-            if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
-                if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
-                setFocus(buttons.size)
-            }
-            true
-        }
         return btn
     }
 
@@ -897,7 +851,6 @@ class MainActivity : Activity() {
                 releaseWidgetId(appWidgetId)
             }
         })
-        pane.onHoverEnter = { if (focusOwner != FocusOwner.PANE) setFocusOwner(FocusOwner.PANE) }
         activeGlobalConfigPane = pane
         pane.load { pane.show(reservedArea) }
     }

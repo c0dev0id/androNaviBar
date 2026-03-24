@@ -8,7 +8,6 @@ import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.os.Handler
 import android.os.Looper
-import android.view.MotionEvent
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -34,8 +33,6 @@ class UrlLauncherPaneContent(
     private val buttonIndex: Int,
     private val onOpenInBrowser: () -> Unit
 ) : PaneContent {
-
-    var onHoverEnter: (() -> Unit)? = null
 
     private var rootView: LinearLayout? = null
     private var openButton: FocusableButton? = null
@@ -85,13 +82,6 @@ class UrlLauncherPaneContent(
                 gravity = Gravity.CENTER_HORIZONTAL
             }
             setOnClickListener { onOpenInBrowser() }
-            setOnHoverListener { _, ev ->
-                if (ev.action == MotionEvent.ACTION_HOVER_ENTER) {
-                    onHoverEnter?.invoke()
-                    setInitialFocus()
-                }
-                true  // suppress Material state_hovered overlay
-            }
         }
         openButton = btn
         root.addView(btn)
