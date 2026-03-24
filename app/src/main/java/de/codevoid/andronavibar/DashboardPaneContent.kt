@@ -1,9 +1,11 @@
 package de.codevoid.andronavibar
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -47,33 +49,55 @@ class DashboardPaneContent(
         }
         rootView = root
 
-        // ── Centre column: clock + date ───────────────────────────────────────
+        // ── Clock + date group — optically centred at ~40% from top ──────────
+        //
+        // A plain gravity=CENTER lands at 50% which feels low for a clock face.
+        // Weighted spacers (top:2 / bottom:3) lift the group to the optical centre.
 
-        val center = LinearLayout(context).apply {
+        val column = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = FrameLayout.LayoutParams(MATCH, MATCH)
         }
 
+        // Top spacer — weight 2
+        column.addView(View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 2f)
+        })
+
         val clock = TextView(context).apply {
-            textSize = 80f
+            textSize = 88f
             setTextColor(context.getColor(R.color.text_primary))
             gravity = Gravity.CENTER
+            letterSpacing = -0.02f   // tighten the wide numerals slightly
         }
         clockView = clock
-        center.addView(clock)
+        column.addView(clock)
 
-        center.addView(TextView(context).apply {
-            text = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date())
-            textSize = 26f
-            setTextColor(context.getColor(R.color.text_secondary))
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                topMargin = res.dpToPx(8)
+        // Orange accent rule beneath the time
+        column.addView(View(context).apply {
+            setBackgroundColor(context.getColor(R.color.colorPrimary))
+            layoutParams = LinearLayout.LayoutParams(res.dpToPx(72), res.dpToPx(3)).apply {
+                topMargin    = res.dpToPx(10)
+                bottomMargin = res.dpToPx(10)
+                gravity = Gravity.CENTER_HORIZONTAL
             }
         })
 
-        root.addView(center)
+        column.addView(TextView(context).apply {
+            text = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date())
+            textSize = 22f
+            setTextColor(context.getColor(R.color.text_secondary))
+            gravity = Gravity.CENTER
+            letterSpacing = 0.04f   // slightly open tracking for the date label
+        })
+
+        // Bottom spacer — weight 3
+        column.addView(View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 3f)
+        })
+
+        root.addView(column)
 
         // ── Gear icon — top-right corner ──────────────────────────────────────
 
@@ -82,7 +106,7 @@ class DashboardPaneContent(
             textSize = 20f
             setTextColor(context.getColor(R.color.text_secondary))
             backgroundTintList = android.content.res.ColorStateList.valueOf(
-                context.getColor(R.color.button_inactive)
+                Color.TRANSPARENT
             )
             val size = res.dpToPx(56)
             layoutParams = FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.END).apply {
