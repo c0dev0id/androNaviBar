@@ -43,6 +43,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Inject weather API key
+        run: echo "meteoblue_key=${{ secrets.METEOBLUE_KEY }}" >> gradle.properties
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
