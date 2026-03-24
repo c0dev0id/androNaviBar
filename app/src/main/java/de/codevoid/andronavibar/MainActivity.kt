@@ -481,6 +481,13 @@ class MainActivity : Activity() {
     private var widgetRebindAttempted = false
 
     private fun showWidgetPane(appWidgetId: Int) {
+        // Re-register with the system to force re-delivery of RemoteViews through
+        // the push path. On API 34, content:// URI permissions from a widget
+        // provider's FileProvider are lost after an app update. Only the push path
+        // (provider → system service → host) re-grants them; the cached views alone
+        // are not sufficient. Without this call the pane renders empty or broken.
+        appWidgetHost.startListening()
+
         val hv = widgetViews[appWidgetId] ?: run {
             // Not pre-created — attempt late creation (handles bindings configured
             // after onCreate, or a first launch after preCreateWidgetViews skipped a null info).
