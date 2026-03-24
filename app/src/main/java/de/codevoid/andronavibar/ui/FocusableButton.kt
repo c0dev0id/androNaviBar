@@ -33,7 +33,7 @@ open class FocusableButton @JvmOverloads constructor(
         GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = resources.dpToPx(CORNER_RADIUS_DP).toFloat()
-            setStroke(resources.dpToPx(STROKE_WIDTH_DP), context.getColor(R.color.colorPrimary))
+            setStroke(resources.dpToPx(STROKE_WIDTH_DP), context.getColor(R.color.focus_ring))
             setColor(Color.TRANSPARENT)
         }
     }

@@ -1369,7 +1369,7 @@ class GlobalConfigPaneContent(
             GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = context.resources.dpToPx(12).toFloat()
-                setStroke(context.resources.dpToPx(6), context.getColor(R.color.colorPrimary))
+                setStroke(context.resources.dpToPx(6), context.getColor(R.color.focus_ring))
                 setColor(Color.TRANSPARENT)
             }
         } else null

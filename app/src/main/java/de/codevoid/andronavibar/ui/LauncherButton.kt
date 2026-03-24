@@ -2,9 +2,7 @@ package de.codevoid.andronavibar.ui
 
 import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
 import android.content.SharedPreferences
-import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -13,8 +11,6 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.os.Handler
-import android.os.Looper
 import android.util.AttributeSet
 import de.codevoid.andronavibar.AppEntry
 import de.codevoid.andronavibar.ButtonConfig
@@ -64,9 +60,7 @@ class LauncherButton @JvmOverloads constructor(
     var isActiveButton: Boolean = false
         set(value) {
             field = value
-            backgroundTintList = ColorStateList.valueOf(
-                context.getColor(if (value) R.color.colorPrimary else R.color.button_inactive)
-            )
+            invalidate()
         }
 
     // ── Full-height icon ──────────────────────────────────────────────────────
@@ -93,9 +87,11 @@ class LauncherButton @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
+        val cornerRad = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
+        val roundedRect = RectF(0f, 0f, width.toFloat(), height.toFloat())
+        val path = Path().also { it.addRoundRect(roundedRect, cornerRad, cornerRad, Path.Direction.CW) }
+
         buttonIcon?.let { drawable ->
-            val h = height.toFloat()
-            val cornerRad = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP).toFloat()
             // Inset by 2 × focus ring stroke on all sides so the icon sits
             // visually inside the focus frame rather than behind it.
             // The horizontal inset is halved to compensate for Material3's
@@ -105,21 +101,29 @@ class LauncherButton @JvmOverloads constructor(
             val vInset = resources.dpToPx(FocusableButton.STROKE_WIDTH_DP) * 2
             val hInset = resources.dpToPx(9)              // 9dp left (= 12dp − M3's ~3dp insetTop)
             val iconSize = height - vInset * 2
-            // Clip to the button's full rounded rect so the icon respects corner radius.
-            val path = Path()
-            path.addRoundRect(RectF(0f, 0f, width.toFloat(), h), cornerRad, cornerRad, Path.Direction.CW)
             canvas.save()
             canvas.clipPath(path)
             drawable.setBounds(hInset, vInset, hInset + iconSize, vInset + iconSize)
             drawable.draw(canvas)
             canvas.restore()
         }
+
         super.onDraw(canvas)
+
+        // Active state: orange bar on the left edge, clipped to the button's rounded corners.
+        if (isActiveButton) {
+            val barWidth = resources.dpToPx(4).toFloat()
+            val barPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = context.getColor(R.color.colorPrimary)
+            }
+            canvas.save()
+            canvas.clipPath(path)
+            canvas.drawRect(0f, 0f, barWidth, height.toFloat(), barPaint)
+            canvas.restore()
+        }
     }
 
     // ── Internal ─────────────────────────────────────────────────────────────
-
-    private val handler = Handler(Looper.getMainLooper())
 
     init {
         setOnClickListener { activate() }
@@ -353,15 +357,6 @@ class LauncherButton @JvmOverloads constructor(
         canvas.drawText(emoji, x, y, textPaint)
 
         return BitmapDrawable(resources, bmp)
-    }
-
-    // ── Visuals ───────────────────────────────────────────────────────────────
-
-    private fun flashActivation() {
-        backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.colorPrimary))
-        handler.postDelayed({
-            backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
-        }, 150L)
     }
 
 }
