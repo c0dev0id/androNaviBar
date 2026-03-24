@@ -40,8 +40,11 @@ class LauncherButton @JvmOverloads constructor(
 
     // ── Callbacks wired by MainActivity ──────────────────────────────────────
 
-    /** Fired when a URL button is activated; MainActivity shows the URL in a WebView pane. */
+    /** Fired when a URL button (WebView mode) is activated; MainActivity shows the WebView pane. */
     var onUrlActivated: ((String) -> Unit)? = null
+
+    /** Fired when a URL button (browser mode) is activated; MainActivity shows the launcher pane. */
+    var onUrlLauncherActivated: ((url: String, label: String, icon: UrlIcon) -> Unit)? = null
 
     /** Fired when a Widget button is activated; MainActivity shows the widget pane. */
     var onWidgetActivated: ((Int) -> Unit)? = null
@@ -302,8 +305,7 @@ class LauncherButton @JvmOverloads constructor(
                 val url = if (cfg.url.startsWith("http://") || cfg.url.startsWith("https://"))
                     cfg.url else "https://${cfg.url}"
                 if (cfg.openInBrowser) {
-                    flashActivation()
-                    context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                    onUrlLauncherActivated?.invoke(url, cfg.label, cfg.icon)
                 } else {
                     onUrlActivated?.invoke(url)
                 }

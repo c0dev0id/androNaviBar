@@ -20,6 +20,7 @@ import android.text.InputType
 import android.text.TextWatcher
 import android.view.DragEvent
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
@@ -68,6 +69,27 @@ class GlobalConfigPaneContent(
 
     private val iconCache = mutableMapOf<Int, Drawable?>()
 
+    // ── Remote navigation ──────────────────────────────────────────────────
+
+    /** -1 = none; 0..count-1 = button entry; count = Add Button; count+1 = Check for Update. */
+    private var focusRow: Int = -1
+    /** 0=checkbox, 1=label+icon, 2=drag, 3=X; always 0 for footer rows. */
+    private var focusCol: Int = 0
+
+    private data class RowFocusTargets(
+        val checkbox: CheckBox,
+        val labelArea: View,
+        val dragHandle: View,
+        val deleteBtn: View
+    )
+    private val rowFocusTargets = mutableListOf<RowFocusTargets>()
+    private var addButtonFocusView: View? = null
+    private var checkUpdateFocusView: View? = null
+    private var configScrollView: ScrollView? = null
+
+    /** Wired by MainActivity; called when a pane item is hovered so focus owner can switch. */
+    var onHoverEnter: (() -> Unit)? = null
+
     private var cachedApps: List<ResolveInfo>? = null
     private var cachedWidgets: List<AppWidgetProviderInfo>? = null
 
@@ -108,6 +130,11 @@ class GlobalConfigPaneContent(
         iconCache.clear()
         cachedApps = null
         cachedWidgets = null
+        focusRow = -1
+        rowFocusTargets.clear()
+        addButtonFocusView = null
+        checkUpdateFocusView = null
+        configScrollView = null
     }
 
     /** Refresh the detail editor (e.g. after type change or image pick). */
@@ -119,9 +146,11 @@ class GlobalConfigPaneContent(
         val container = buttonListContainer ?: return
         container.removeAllViews()
         iconCache.clear()
+        rowFocusTargets.clear()
         val count = prefs.getInt("button_count", 6)
         for (i in 0 until count) container.addView(buildButtonListEntry(i))
         container.addView(buildFooter())
+        updateFocusRings()
     }
 
     /** Replace a single entry in the button list without touching other entries. */
@@ -149,6 +178,7 @@ class GlobalConfigPaneContent(
         selectedButtonIndex = index
         refreshDetailEditor()
         setEntryHighlight(index, true)
+        updateFocusRings()
     }
 
     private fun clearDetailEditor() {
@@ -160,6 +190,7 @@ class GlobalConfigPaneContent(
             iconCache.remove(prev)
             replaceEntry(prev)
         }
+        updateFocusRings()
     }
 
     private fun setEntryHighlight(index: Int, selected: Boolean) {
@@ -273,6 +304,7 @@ class GlobalConfigPaneContent(
         val scroll = ScrollView(context).apply {
             layoutParams = LinearLayout.LayoutParams(0, MATCH, 1f)
         }
+        configScrollView = scroll
 
         val list = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -384,22 +416,29 @@ class GlobalConfigPaneContent(
         }
         row.addView(checkbox)
 
-        // Icon preview
-        buildIconPreview(index)?.let { row.addView(it) }
-
-        // Label
-        row.addView(TextView(context).apply {
+        // Icon + Label — single focus target for remote navigation
+        val handleSize = context.resources.dpToPx(40)
+        val labelArea = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
+                marginStart = context.resources.dpToPx(12)
+            }
+            setOnClickListener { showDetailEditor(index) }
+        }
+        buildIconPreview(index)?.let { labelArea.addView(it) }
+        labelArea.addView(TextView(context).apply {
             text = displayName
             textSize = 18f
             setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
-                marginStart = context.resources.dpToPx(12)
+                marginStart = context.resources.dpToPx(8)
             }
             isSingleLine = true
         })
+        row.addView(labelArea)
 
-        // Drag handle — long press starts drag
-        val handleSize = context.resources.dpToPx(40)
+        // Drag handle — long press starts drag (touch); UP/DOWN while focused (remote)
         val handle = TextView(context).apply {
             text = "\u2261" // ≡
             textSize = 32f
@@ -421,7 +460,7 @@ class GlobalConfigPaneContent(
         row.addView(handle)
 
         // Delete button
-        row.addView(TextView(context).apply {
+        val deleteBtn = TextView(context).apply {
             text = "\u2715" // ✕
             textSize = 22f
             setTextColor(context.getColor(R.color.text_secondary))
@@ -435,10 +474,34 @@ class GlobalConfigPaneContent(
                 if (selectedButtonIndex >= 0) clearDetailEditor()
                 removeButtonAt(index)
             }
-        })
+        }
+        row.addView(deleteBtn)
 
-        // Tap opens detail editor on the left side
+        // Touch fallback: tap anywhere on the row opens detail editor
         row.setOnClickListener { showDetailEditor(index) }
+
+        // Register focus targets (creates or replaces the slot for this index)
+        val targets = RowFocusTargets(checkbox, labelArea, handle, deleteBtn)
+        if (index < rowFocusTargets.size) rowFocusTargets[index] = targets
+        else rowFocusTargets.add(targets)
+
+        // Hover: move focus ring to the hovered target, suppress system state_hovered
+        checkbox.setOnHoverListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 0; updateFocusRings() }
+            true
+        }
+        labelArea.setOnHoverListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 1; updateFocusRings() }
+            true
+        }
+        handle.setOnHoverListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 2; updateFocusRings() }
+            true
+        }
+        deleteBtn.setOnHoverListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) { onHoverEnter?.invoke(); focusRow = index; focusCol = 3; updateFocusRings() }
+            true
+        }
 
         return row
     }
@@ -944,6 +1007,16 @@ class GlobalConfigPaneContent(
 
     // ── Footer (add / remove) ───────────────────────────────────────────────
 
+    private fun doAddButton() {
+        if (selectedButtonIndex >= 0) clearDetailEditor()
+        callbacks.onAddButton()
+        val newIndex = prefs.getInt("button_count", 6) - 1
+        val container = buttonListContainer ?: return
+        // Insert before the footer
+        container.addView(buildButtonListEntry(newIndex), container.childCount - 1)
+        updateFocusRings()
+    }
+
     private fun buildFooter(): LinearLayout {
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -956,24 +1029,32 @@ class GlobalConfigPaneContent(
             gravity = Gravity.CENTER
         }
 
-        row.addView(makeActionButton("+ Add Button") {
-            if (selectedButtonIndex >= 0) clearDetailEditor()
-            callbacks.onAddButton()
-            val newIndex = prefs.getInt("button_count", 6) - 1
-            val container = buttonListContainer ?: return@makeActionButton
-            // Insert before the footer
-            container.addView(buildButtonListEntry(newIndex), container.childCount - 1)
-        })
-
+        val addBtn = makeActionButton("+ Add Button") { doAddButton() }
+        addButtonFocusView = addBtn
+        addBtn.setOnHoverListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) {
+                onHoverEnter?.invoke(); focusRow = prefs.getInt("button_count", 6); focusCol = 0; updateFocusRings()
+            }
+            true
+        }
+        row.addView(addBtn)
         wrapper.addView(row)
 
-        wrapper.addView(makeActionButton("Check for Update") {
+        val updateBtn = makeActionButton("Check for Update") {
             (context as? android.app.Activity)?.let { UpdateChecker.check(it) }
         }.apply {
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
                 topMargin = context.resources.dpToPx(16)
             }
-        })
+        }
+        checkUpdateFocusView = updateBtn
+        updateBtn.setOnHoverListener { _, ev ->
+            if (ev.action == MotionEvent.ACTION_HOVER_ENTER) {
+                onHoverEnter?.invoke(); focusRow = prefs.getInt("button_count", 6) + 1; focusCol = 0; updateFocusRings()
+            }
+            true
+        }
+        wrapper.addView(updateBtn)
 
         return wrapper
     }
@@ -1155,6 +1236,143 @@ class GlobalConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
             setOnClickListener { onClick() }
         }
+    }
+
+    // ── Remote navigation public API ─────────────────────────────────────────
+
+    /** Called by MainActivity when focus enters this pane via LEFT key. */
+    fun setInitialFocus() {
+        focusRow = 0
+        focusCol = 1   // start on label+icon column
+        updateFocusRings()
+        scrollToFocused()
+    }
+
+    /** Called by MainActivity when focus leaves this pane. */
+    fun clearFocus() {
+        focusRow = -1
+        updateFocusRings()
+    }
+
+    /**
+     * Handle a remote d-pad key. Returns true if consumed.
+     * Returns false for RIGHT at the rightmost column so MainActivity exits the pane.
+     */
+    fun handleKey(keyCode: Int): Boolean {
+        val count = prefs.getInt("button_count", 6)
+        return when (keyCode) {
+            19 -> {  // UP
+                if (focusRow in 0 until count && focusCol == 2) moveEntryUp(focusRow, count)
+                else moveFocusRow(-1, count)
+                true
+            }
+            20 -> {  // DOWN
+                if (focusRow in 0 until count && focusCol == 2) moveEntryDown(focusRow, count)
+                else moveFocusRow(+1, count)
+                true
+            }
+            21 -> {  // LEFT — navigate columns; stop at col 0
+                if (focusCol > 0) { focusCol--; updateFocusRings() }
+                true
+            }
+            22 -> {  // RIGHT — navigate columns; exit pane at rightmost
+                val maxCol = if (focusRow in 0 until count) 3 else 0
+                if (focusCol < maxCol) { focusCol++; updateFocusRings(); true }
+                else false   // let MainActivity route this as pane exit
+            }
+            66 -> { activateFocused(count); true }
+            else -> false
+        }
+    }
+
+    // ── Remote navigation internals ──────────────────────────────────────────
+
+    private fun moveFocusRow(delta: Int, count: Int) {
+        val totalRows = count + 2  // entries + Add Button + Check for Update
+        val newRow = (focusRow + delta).coerceIn(0, totalRows - 1)
+        if (newRow == focusRow) return
+        focusRow = newRow
+        if (focusRow >= count) focusCol = 0  // footer rows have only col 0
+        updateFocusRings()
+        scrollToFocused()
+    }
+
+    private fun activateFocused(count: Int) {
+        when {
+            focusRow in 0 until count -> when (focusCol) {
+                0 -> rowFocusTargets.getOrNull(focusRow)?.checkbox?.toggle()
+                1 -> showDetailEditor(focusRow)
+                2 -> { focusCol = 1; updateFocusRings() }  // drop: move focus to label col
+                3 -> {
+                    if (count <= 1) return
+                    if (selectedButtonIndex >= 0) clearDetailEditor()
+                    val row = focusRow
+                    focusRow = row.coerceAtMost(count - 2).coerceAtLeast(0)
+                    focusCol = 1
+                    removeButtonAt(row)   // calls rebuildButtonList() → updateFocusRings()
+                }
+            }
+            focusRow == count -> {   // + Add Button
+                doAddButton()
+                val newCount = prefs.getInt("button_count", 6)
+                focusRow = newCount - 1
+                focusCol = 1
+                scrollToFocused()
+            }
+            focusRow == count + 1 ->  // Check for Update
+                (context as? android.app.Activity)?.let { UpdateChecker.check(it) }
+        }
+    }
+
+    private fun moveEntryUp(row: Int, count: Int) {
+        if (row <= 0) return
+        if (selectedButtonIndex >= 0) clearDetailEditor()
+        moveButtonPrefs(row, row - 1)
+        callbacks.onReloadAll()
+        focusRow = row - 1
+        rebuildButtonList()
+        scrollToFocused()
+    }
+
+    private fun moveEntryDown(row: Int, count: Int) {
+        if (row >= count - 1) return
+        if (selectedButtonIndex >= 0) clearDetailEditor()
+        moveButtonPrefs(row, row + 1)
+        callbacks.onReloadAll()
+        focusRow = row + 1
+        rebuildButtonList()
+        scrollToFocused()
+    }
+
+    private fun scrollToFocused() {
+        val sv = configScrollView ?: return
+        val container = buttonListContainer ?: return
+        val child = container.getChildAt(focusRow) ?: return
+        sv.post { sv.smoothScrollTo(0, (child.top - sv.height / 3).coerceAtLeast(0)) }
+    }
+
+    private fun updateFocusRings() {
+        val count = prefs.getInt("button_count", 6)
+        for (row in rowFocusTargets.indices) {
+            val t = rowFocusTargets[row]
+            applyFocusRing(t.checkbox,  focusRow == row && focusCol == 0)
+            applyFocusRing(t.labelArea, focusRow == row && focusCol == 1)
+            applyFocusRing(t.dragHandle,focusRow == row && focusCol == 2)
+            applyFocusRing(t.deleteBtn, focusRow == row && focusCol == 3)
+        }
+        addButtonFocusView?.let   { applyFocusRing(it, focusRow == count) }
+        checkUpdateFocusView?.let { applyFocusRing(it, focusRow == count + 1) }
+    }
+
+    private fun applyFocusRing(view: View, focused: Boolean) {
+        view.foreground = if (focused) {
+            GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = context.resources.dpToPx(12).toFloat()
+                setStroke(context.resources.dpToPx(6), context.getColor(R.color.colorPrimary))
+                setColor(Color.TRANSPARENT)
+            }
+        } else null
     }
 
     companion object {

@@ -19,6 +19,7 @@ import android.os.SystemClock
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.GestureDetector
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -78,6 +79,9 @@ class MainActivity : Activity() {
 
     /** Non-null while a web pane is displayed in reservedArea. */
     private var activeWebPane: WebPaneContent? = null
+
+    /** Non-null while a URL launcher pane (browser-mode) is displayed in reservedArea. */
+    private var activeUrlLauncherPane: UrlLauncherPaneContent? = null
 
     /** Non-null while a widget pane is displayed in reservedArea. */
     private var activeWidgetPane: WidgetPaneContent? = null
@@ -178,6 +182,23 @@ class MainActivity : Activity() {
         return true
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            // Pass through when a text field owns Android focus (cursor navigation, etc.)
+            if (currentFocus is android.widget.EditText) return super.dispatchKeyEvent(event)
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP,
+                KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_LEFT,
+                KeyEvent.KEYCODE_DPAD_RIGHT -> { handleKey(event.keyCode); return true }
+                KeyEvent.KEYCODE_ENTER,
+                KeyEvent.KEYCODE_NUMPAD_ENTER,
+                KeyEvent.KEYCODE_DPAD_CENTER -> { handleKey(66); return true }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
     override fun onResume() {
         super.onResume()
         widgetRebindAttempted = false
@@ -259,6 +280,8 @@ class MainActivity : Activity() {
             FocusOwner.PANE -> {
                 val handled = activeAppsGridPane?.handleKey(keyCode)
                     ?: activeMusicPlayerPane?.handleKey(keyCode)
+                    ?: activeUrlLauncherPane?.handleKey(keyCode)
+                    ?: activeGlobalConfigPane?.handleKey(keyCode)
                     ?: false
                 if (!handled && keyCode == 22) setFocusOwner(FocusOwner.BUTTONS)
             }
@@ -330,9 +353,13 @@ class MainActivity : Activity() {
         if (owner == FocusOwner.PANE) {
             activeMusicPlayerPane?.setInitialFocus()
             activeAppsGridPane?.setInitialFocus()
+            activeUrlLauncherPane?.setInitialFocus()
+            activeGlobalConfigPane?.setInitialFocus()
         } else {
             activeMusicPlayerPane?.clearFocus()
             activeAppsGridPane?.clearFocus()
+            activeUrlLauncherPane?.clearFocus()
+            activeGlobalConfigPane?.clearFocus()
         }
     }
 
@@ -358,6 +385,7 @@ class MainActivity : Activity() {
 
     private fun dismissCurrentPane() {
         activeWebPane?.unload();            activeWebPane = null
+        activeUrlLauncherPane?.unload();    activeUrlLauncherPane = null
         activeWidgetPane?.unload();         activeWidgetPane = null
         activeAppsGridPane?.unload();       activeAppsGridPane = null
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null
@@ -392,6 +420,15 @@ class MainActivity : Activity() {
         pane.onContentReady = { hideLoading() }
         activeWebPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
+    }
+
+    private fun showUrlLauncherPane(url: String, label: String, icon: UrlIcon, buttonIndex: Int) {
+        val pane = UrlLauncherPaneContent(this, url, label, icon, buttonIndex) {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        }
+        pane.onHoverEnter = { if (focusOwner != FocusOwner.PANE) setFocusOwner(FocusOwner.PANE) }
+        activeUrlLauncherPane = pane
+        pane.load { pane.show(reservedArea) }
     }
 
     private var widgetRebindAttempted = false
@@ -646,10 +683,18 @@ class MainActivity : Activity() {
     // ── Button setup ────────────────────────────────────────────────────────
 
     private fun wireButton(btn: LauncherButton, i: Int) {
-        btn.onUrlActivated         = { url  -> activateToggleButton(i) { showWebPane(url) } }
-        btn.onWidgetActivated      = { id   -> activateToggleButton(i) { showWidgetPane(id) } }
+        btn.onUrlActivated         = { url         -> activateToggleButton(i) { showWebPane(url) } }
+        btn.onUrlLauncherActivated = { url, lbl, ic -> activateToggleButton(i) { showUrlLauncherPane(url, lbl, ic, i) } }
+        btn.onWidgetActivated      = { id          -> activateToggleButton(i) { showWidgetPane(id) } }
         btn.onAppsGridActivated    = { apps -> activateToggleButton(i) { showAppsGridPane(apps) } }
         btn.onMusicPlayerActivated = { pkg  -> activateToggleButton(i) { showMusicPlayerPane(pkg) } }
+        btn.setOnHoverListener { _, event ->
+            if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
+                setFocus(i)
+            }
+            true  // suppress Material state_hovered overlay
+        }
     }
 
     private fun createConfigureButton(): FocusableButton {
@@ -665,6 +710,13 @@ class MainActivity : Activity() {
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
         btn.cornerRadius = resources.dpToPx(FocusableButton.CORNER_RADIUS_DP)
         btn.setOnClickListener { activateConfigureButton() }
+        btn.setOnHoverListener { _, event ->
+            if (event.action == MotionEvent.ACTION_HOVER_ENTER) {
+                if (focusOwner == FocusOwner.PANE) setFocusOwner(FocusOwner.BUTTONS)
+                setFocus(buttons.size)
+            }
+            true
+        }
         return btn
     }
 
@@ -721,7 +773,8 @@ class MainActivity : Activity() {
 
     /** Move focus into the active content pane (if it has interactive elements). */
     private fun enterPane() {
-        if (activeAppsGridPane != null || activeMusicPlayerPane != null) {
+        if (activeAppsGridPane != null || activeMusicPlayerPane != null
+            || activeUrlLauncherPane != null || activeGlobalConfigPane != null) {
             setFocusOwner(FocusOwner.PANE)
         }
     }
@@ -812,6 +865,7 @@ class MainActivity : Activity() {
                 releaseWidgetId(appWidgetId)
             }
         })
+        pane.onHoverEnter = { if (focusOwner != FocusOwner.PANE) setFocusOwner(FocusOwner.PANE) }
         activeGlobalConfigPane = pane
         pane.load { pane.show(reservedArea) }
     }
