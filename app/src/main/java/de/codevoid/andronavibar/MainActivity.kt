@@ -772,7 +772,7 @@ class MainActivity : Activity() {
             scrollSpring = SpringAnimation(holder).apply {
                 setSpring(SpringForce(scrollY).apply {
                     dampingRatio = SpringForce.DAMPING_RATIO_NO_BOUNCY
-                    stiffness    = SpringForce.STIFFNESS_MEDIUM
+                    stiffness    = SpringForce.STIFFNESS_LOW
                 })
                 addUpdateListener { _, value, _ -> buttonScroll.scrollTo(0, value.toInt()) }
                 start()
