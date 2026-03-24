@@ -481,7 +481,18 @@ class MainActivity : Activity() {
     private var widgetRebindAttempted = false
 
     private fun showWidgetPane(appWidgetId: Int) {
-        val hv = widgetViews[appWidgetId] ?: return
+        val hv = widgetViews[appWidgetId] ?: run {
+            // Not pre-created — attempt late creation (handles bindings configured
+            // after onCreate, or a first launch after preCreateWidgetViews skipped a null info).
+            val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId)
+            if (info == null) {
+                // Truly stale binding — system has no record of this ID. Deactivate
+                // cleanly so the button doesn't get stuck in the active state.
+                deactivateActiveButton()
+                return
+            }
+            appWidgetHost.createView(this, appWidgetId, info).also { widgetViews[appWidgetId] = it }
+        }
         val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading() }
         activeWidgetPane = pane
