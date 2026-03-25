@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.location.Location
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -58,8 +59,8 @@ class DashboardPaneContent(
     private val weatherHandler = Handler(Looper.getMainLooper())
     private val weatherRunnable = object : Runnable {
         override fun run() {
-            requestWeather()
-            weatherHandler.postDelayed(this, 30 * 60_000L)
+            checkAndFetch()
+            weatherHandler.postDelayed(this, WEATHER_CHECK_INTERVAL_MS)
         }
     }
 
@@ -116,16 +117,16 @@ class DashboardPaneContent(
         })
 
         // Weather — temperature (large) + condition/high-low (small)
-        // Both start invisible; made visible once data arrives.
+        // Restored immediately from last session within the same app process.
 
         val weatherTemp = TextView(context).apply {
             textSize = 36f
             setTextColor(context.getColor(R.color.text_primary))
             gravity = Gravity.CENTER
-            visibility = View.INVISIBLE
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
                 topMargin = res.dpToPx(16)
             }
+            if (lastTempText.isNotEmpty()) text = lastTempText else visibility = View.INVISIBLE
         }
         weatherTempView = weatherTemp
         column.addView(weatherTemp)
@@ -134,10 +135,10 @@ class DashboardPaneContent(
             textSize = 16f
             setTextColor(context.getColor(R.color.text_secondary))
             gravity = Gravity.CENTER
-            visibility = View.INVISIBLE
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
                 topMargin = res.dpToPx(4)
             }
+            if (lastCondText.isNotEmpty()) text = lastCondText else visibility = View.INVISIBLE
         }
         weatherCondView = weatherCond
         column.addView(weatherCond)
@@ -197,8 +198,13 @@ class DashboardPaneContent(
 
     // ── Weather ───────────────────────────────────────────────────────────────
 
+    /**
+     * Called every [WEATHER_CHECK_INTERVAL_MS]. Fetches from the API only when:
+     * - at least [WEATHER_MIN_AGE_MS] has elapsed since the last fetch, OR
+     * - the device has moved more than [WEATHER_MIN_DISTANCE_M] since the last fetch.
+     */
     @SuppressLint("MissingPermission")
-    private fun requestWeather() {
+    private fun checkAndFetch() {
         if (BuildConfig.METEOBLUE_KEY.isEmpty()) return
         if (context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) return
@@ -207,6 +213,21 @@ class DashboardPaneContent(
             .lastLocation
             .addOnSuccessListener { location ->
                 location ?: return@addOnSuccessListener
+
+                val now = System.currentTimeMillis()
+                val ageExpired = (now - lastFetchTime) >= WEATHER_MIN_AGE_MS
+                val movedFar = lastFetchLoc?.let { prev ->
+                    val results = FloatArray(1)
+                    Location.distanceBetween(prev.latitude, prev.longitude,
+                        location.latitude, location.longitude, results)
+                    results[0] >= WEATHER_MIN_DISTANCE_M
+                } ?: true  // no previous location → always fetch
+
+                if (!ageExpired && !movedFar) return@addOnSuccessListener
+
+                lastFetchTime = now
+                lastFetchLoc  = location
+
                 scope.launch {
                     val data = fetchWeather(location.latitude, location.longitude)
                         ?: return@launch
@@ -216,14 +237,12 @@ class DashboardPaneContent(
     }
 
     private fun applyWeather(data: WeatherData) {
-        weatherTempView?.apply {
-            text = "${data.tempC.toInt()}°C"
-            visibility = View.VISIBLE
-        }
-        weatherCondView?.apply {
-            text = "${pictocodeEmoji(data.pictocode)}  ↑${data.maxC.toInt()}°  ↓${data.minC.toInt()}°"
-            visibility = View.VISIBLE
-        }
+        val tempText = "${data.tempC.toInt()}°C"
+        val condText = "${pictocodeEmoji(data.pictocode)}  ↑${data.maxC.toInt()}°  ↓${data.minC.toInt()}°"
+        lastTempText = tempText
+        lastCondText = condText
+        weatherTempView?.apply { text = tempText; visibility = View.VISIBLE }
+        weatherCondView?.apply { text = condText; visibility = View.VISIBLE }
     }
 
     private suspend fun fetchWeather(lat: Double, lon: Double): WeatherData? =
@@ -272,5 +291,17 @@ class DashboardPaneContent(
         14, 15, 16 -> "❄"
         17         -> "🌧"
         else       -> "—"
+    }
+
+    companion object {
+        private const val WEATHER_CHECK_INTERVAL_MS = 60_000L          // check every minute
+        private const val WEATHER_MIN_AGE_MS        = 15 * 60 * 1000L  // 15 minutes
+        private const val WEATHER_MIN_DISTANCE_M    = 500f              // 500 metres
+
+        /** Persists across pane re-creation within the same app session. */
+        private var lastFetchTime: Long      = 0L
+        private var lastFetchLoc:  Location? = null
+        private var lastTempText:  String    = ""
+        private var lastCondText:  String    = ""
     }
 }
