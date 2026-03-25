@@ -37,6 +37,7 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Dashboard pane — shown when the fixed Dashboard button at the top of the
@@ -266,8 +267,11 @@ class DashboardPaneContent(
             }
 
             val rainspotView = RainspotView(context).apply {
+                val m = res.dpToPx(16)
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                    topMargin = res.dpToPx(8)
+                    topMargin    = res.dpToPx(8)
+                    marginStart  = m
+                    marginEnd    = m
                 }
                 if (p != null) setData(p.rainspot) else visibility = View.INVISIBLE
             }
@@ -527,7 +531,21 @@ class DashboardPaneContent(
         lastLocationName = null
         return try {
             val root   = JSONObject(json)
+            val meta   = root.optJSONObject("metadata")
             val data1h = root.getJSONObject("data_1h")
+            val times  = data1h.getJSONArray("time")
+
+            // The time[] entries are local times; utc_timeoffset converts them to UTC.
+            // Parse time[0] as if it were UTC then subtract the offset to get the true
+            // UTC start, then find which index corresponds to the current hour.
+            val utcOffsetMs = ((meta?.optDouble("utc_timeoffset", 0.0) ?: 0.0) * 3_600_000L).toLong()
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val startUtcMs = (sdf.parse(times.getString(0))?.time ?: return null) - utcOffsetMs
+            val nowIdx = ((System.currentTimeMillis() - startUtcMs) / 3_600_000L)
+                .toInt().coerceIn(0, times.length() - 7)
+
             val temps  = data1h.getJSONArray("temperature")
             val pictos = data1h.getJSONArray("pictocode")
             // All sub-arrays are optional — gracefully absent in some API response variants.
@@ -555,8 +573,8 @@ class DashboardPaneContent(
                 rainspot    = rainspots?.optString(idx, "") ?: ""
             )
 
-            lastLocationName = root.optJSONObject("metadata")?.optString("name")?.takeIf { it.isNotBlank() }
-            WeatherData(now = makePanel(0), plus3h = makePanel(3), plus6h = makePanel(6))
+            lastLocationName = meta?.optString("name")?.takeIf { it.isNotBlank() }
+            WeatherData(now = makePanel(nowIdx), plus3h = makePanel(nowIdx + 3), plus6h = makePanel(nowIdx + 6))
         } catch (_: Exception) { null }
     }
 
