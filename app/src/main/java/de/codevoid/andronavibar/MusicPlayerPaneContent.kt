@@ -64,7 +64,15 @@ class MusicPlayerPaneContent(
     override fun hide() { rootView?.visibility = View.GONE }
 
     override fun show(container: ViewGroup) {
-        rootView?.let { it.visibility = View.VISIBLE; return }
+        rootView?.let {
+            it.visibility = View.VISIBLE
+            // Reconnect if the session was suspended or destroyed while hidden.
+            if (mediaController == null) {
+                disconnectFromMediaSession()
+                connectToMediaSession()
+            }
+            return
+        }
 
         val root = buildLayout()
         rootView = root

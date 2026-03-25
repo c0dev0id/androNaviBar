@@ -2,9 +2,12 @@ package de.codevoid.andronavibar
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -18,6 +21,9 @@ object UpdateChecker {
     private const val RELEASE_URL =
         "https://api.github.com/repos/c0dev0id/aR2Launcher/releases/tags/dev"
 
+    private val scope = CoroutineScope(Dispatchers.Main)
+    private var currentJob: Job? = null
+
     /**
      * Run the full check → download → install flow, reporting state changes
      * through [onStatus] (button label) and [onProgress] (0–1 fill).
@@ -27,15 +33,18 @@ object UpdateChecker {
      *   → "Already on <hash>" (3 s) → "Check for Update"
      *   → "Downloading <hash>…" (with progress) → install → "Check for Update"
      *   → "Check for Update"  (on any error, silently)
+     *
+     * Any previous in-flight check is cancelled before a new one starts.
      */
     fun check(
         activity: Activity,
         onStatus: (String) -> Unit,
         onProgress: (Float) -> Unit
     ) {
+        currentJob?.cancel()
         onStatus("Checking\u2026")
 
-        CoroutineScope(Dispatchers.Main).launch {
+        currentJob = scope.launch {
             val result = withContext(Dispatchers.IO) { fetchRelease() }
             if (activity.isFinishing) return@launch
 
@@ -111,7 +120,7 @@ object UpdateChecker {
             val file = File(activity.cacheDir, name)
             val totalBytes = conn.contentLengthLong
             var bytesRead = 0L
-            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            val handler = Handler(Looper.getMainLooper())
             conn.inputStream.use { input ->
                 file.outputStream().use { output ->
                     val buffer = ByteArray(8192)

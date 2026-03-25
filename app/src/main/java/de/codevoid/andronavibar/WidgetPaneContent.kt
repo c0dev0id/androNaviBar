@@ -3,6 +3,7 @@ package de.codevoid.andronavibar
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -38,7 +39,7 @@ class WidgetPaneContent(
 
     override fun refresh() {
         val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(appWidgetId) ?: return
-        val intent = android.content.Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
+        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
             component = info.provider
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
         }

@@ -84,7 +84,6 @@ class GlobalConfigPaneContent(
     )
     private val rowFocusTargets = mutableListOf<RowFocusTargets>()
     private var addButtonFocusView: View? = null
-    private var checkUpdateFocusView: View? = null
     private var updateButton: FocusableButton? = null
     private var configScrollView: ScrollView? = null
 
@@ -131,7 +130,6 @@ class GlobalConfigPaneContent(
         focusRow = -1
         rowFocusTargets.clear()
         addButtonFocusView = null
-        checkUpdateFocusView = null
         updateButton = null
         configScrollView = null
     }
@@ -986,7 +984,6 @@ class GlobalConfigPaneContent(
             setOnClickListener { triggerUpdateCheck() }
         }
         updateButton = updateBtn
-        checkUpdateFocusView = updateBtn
         wrapper.addView(updateBtn)
 
         return wrapper
@@ -1291,8 +1288,8 @@ class GlobalConfigPaneContent(
             applyFocusRing(t.dragHandle,focusRow == row && focusCol == 2)
             applyFocusRing(t.deleteBtn, focusRow == row && focusCol == 3)
         }
-        addButtonFocusView?.let   { applyFocusRing(it, focusRow == count) }
-        checkUpdateFocusView?.let { applyFocusRing(it, focusRow == count + 1) }
+        addButtonFocusView?.let { applyFocusRing(it, focusRow == count) }
+        updateButton?.let       { applyFocusRing(it, focusRow == count + 1) }
     }
 
     private fun applyFocusRing(view: View, focused: Boolean) {
