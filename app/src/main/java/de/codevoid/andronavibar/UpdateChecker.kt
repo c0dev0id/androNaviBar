@@ -3,6 +3,8 @@ package de.codevoid.andronavibar
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CoroutineScope
@@ -19,7 +21,7 @@ object UpdateChecker {
     private const val RELEASE_URL =
         "https://api.github.com/repos/c0dev0id/aR2Launcher/releases/tags/dev"
 
-    fun check(activity: Activity) {
+    fun check(activity: Activity, onProgress: ((Float) -> Unit)? = null) {
         Toast.makeText(activity, "Checking for updates\u2026", Toast.LENGTH_SHORT).show()
 
         CoroutineScope(Dispatchers.Main).launch {
@@ -41,7 +43,7 @@ object UpdateChecker {
             AlertDialog.Builder(activity)
                 .setTitle("Update available")
                 .setMessage("Current: ${BuildConfig.GIT_SHA}\nLatest:  $remoteSha\n\nDownload and install?")
-                .setPositiveButton("Install") { _, _ -> downloadAndInstall(activity, apkUrl, apkName) }
+                .setPositiveButton("Install") { _, _ -> downloadAndInstall(activity, apkUrl, apkName, onProgress) }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
@@ -70,11 +72,12 @@ object UpdateChecker {
         }
     } catch (_: Exception) { null }
 
-    private fun downloadAndInstall(activity: Activity, url: String, name: String) {
+    private fun downloadAndInstall(activity: Activity, url: String, name: String, onProgress: ((Float) -> Unit)? = null) {
         Toast.makeText(activity, "Downloading\u2026", Toast.LENGTH_SHORT).show()
 
         CoroutineScope(Dispatchers.Main).launch {
-            val file = withContext(Dispatchers.IO) { downloadApk(activity, url, name) }
+            val file = withContext(Dispatchers.IO) { downloadApk(activity, url, name, onProgress) }
+            onProgress?.invoke(0f)   // reset progress bar on main thread
             if (activity.isFinishing) return@launch
 
             if (file == null) {
@@ -94,14 +97,30 @@ object UpdateChecker {
         }
     }
 
-    private fun downloadApk(activity: Activity, url: String, name: String): File? = try {
+    private fun downloadApk(activity: Activity, url: String, name: String, onProgress: ((Float) -> Unit)?): File? = try {
+        val handler = Handler(Looper.getMainLooper())
         val conn = URL(url).openConnection() as HttpURLConnection
         try {
             conn.instanceFollowRedirects = true
             conn.connectTimeout = 30_000
             conn.readTimeout = 30_000
             val file = File(activity.cacheDir, name)
-            conn.inputStream.use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+            val totalBytes = conn.contentLengthLong
+            var bytesRead = 0L
+            conn.inputStream.use { input ->
+                file.outputStream().use { output ->
+                    val buffer = ByteArray(8192)
+                    var n: Int
+                    while (input.read(buffer).also { n = it } != -1) {
+                        output.write(buffer, 0, n)
+                        bytesRead += n
+                        if (totalBytes > 0 && onProgress != null) {
+                            val progress = bytesRead.toFloat() / totalBytes
+                            handler.post { onProgress(progress) }
+                        }
+                    }
+                }
+            }
             file
         } finally {
             conn.disconnect()

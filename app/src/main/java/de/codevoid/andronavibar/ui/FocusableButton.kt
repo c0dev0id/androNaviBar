@@ -40,6 +40,10 @@ open class FocusableButton @JvmOverloads constructor(
     open var isActiveButton: Boolean = false
         set(value) { field = value; invalidate() }
 
+    /** 0f–1f fill drawn left-to-right using colorPrimary. Used to show download progress. */
+    var downloadProgress: Float = 0f
+        set(value) { field = value.coerceIn(0f, 1f); invalidate() }
+
     // ── Icon ─────────────────────────────────────────────────────────────────
 
     private val iconBackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -65,11 +69,12 @@ open class FocusableButton @JvmOverloads constructor(
     protected val barW      = resources.dpToPx(BAR_WIDTH_DP).toFloat()
     protected val drawPath  = Path()
 
-    private val fillPaint  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val fillPaint     = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.button_active_body)
     }
-    private val barPaint   = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val depthPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val barPaint      = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val depthPaint    = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val progressPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     init {
         cornerRadius = resources.dpToPx(CORNER_RADIUS_DP)
@@ -102,7 +107,17 @@ open class FocusableButton @JvmOverloads constructor(
         canvas.drawRect(0f, 0f, w, h, depthPaint)
         canvas.restore()
 
-        // 2. Active body fill — drawn before super so it sits behind text/icon.
+        // 2. Download progress fill — grows left to right using colorPrimary.
+        if (downloadProgress > 0f) {
+            progressPaint.color = context.getColor(R.color.colorPrimary)
+            progressPaint.alpha = 70
+            canvas.save()
+            canvas.clipPath(drawPath)
+            canvas.drawRect(0f, 0f, w * downloadProgress, h, progressPaint)
+            canvas.restore()
+        }
+
+        // 3. Active body fill — drawn before super so it sits behind text/icon.
         if (isActiveButton) {
             canvas.save()
             canvas.clipPath(drawPath)
@@ -110,13 +125,13 @@ open class FocusableButton @JvmOverloads constructor(
             canvas.restore()
         }
 
-        // 3. Icon slot and icon drawable (if set).
+        // 4. Icon slot and icon drawable (if set).
         onDrawContent(canvas)
 
-        // 4. Text, ripple, etc. from MaterialButton.
+        // 5. Text, ripple, etc. from MaterialButton.
         super.onDraw(canvas)
 
-        // 5. Bar — white when focused (cursor), orange when active-only.
+        // 6. Bar — white when focused (cursor), orange when active-only.
         if (isFocusedButton || isActiveButton) {
             barPaint.color = context.getColor(
                 if (isFocusedButton) R.color.focus_ring else R.color.colorPrimary

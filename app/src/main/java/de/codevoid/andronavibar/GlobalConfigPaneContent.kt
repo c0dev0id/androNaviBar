@@ -32,6 +32,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
+import de.codevoid.andronavibar.ui.FocusableButton
 import java.io.File
 
 /**
@@ -961,11 +962,19 @@ class GlobalConfigPaneContent(
         row.addView(addBtn)
         wrapper.addView(row)
 
-        val updateBtn = makeActionButton("Check for Update") {
-            (context as? android.app.Activity)?.let { UpdateChecker.check(it) }
-        }.apply {
+        val updateBtn = FocusableButton(context).apply {
+            text = "Check for Update"
+            textSize = 18f
+            cornerRadius = context.resources.dpToPx(12)
+            backgroundTintList = ColorStateList.valueOf(context.getColor(R.color.button_inactive))
+            setTextColor(context.getColor(R.color.text_primary))
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
                 topMargin = context.resources.dpToPx(16)
+            }
+            setOnClickListener {
+                (context as? android.app.Activity)?.let { activity ->
+                    UpdateChecker.check(activity) { progress -> downloadProgress = progress }
+                }
             }
         }
         checkUpdateFocusView = updateBtn
