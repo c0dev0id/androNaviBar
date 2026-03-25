@@ -91,10 +91,11 @@ class DashboardPaneContent(
 
     private fun updateArrowRotations() {
         val data = lastWeather ?: return
-        val panelData = listOf(data.now, data.plus3h, data.plus6h)
-        panels?.forEachIndexed { i, pv ->
-            pv.arrow.rotation = (panelData[i].windDir - deviceAzimuth + 360) % 360
-        }
+        val ps   = panels ?: return
+        if (ps.size < 3) return
+        ps[0].arrow.rotation = (data.now.windDir    - deviceAzimuth + 360) % 360
+        ps[1].arrow.rotation = (data.plus3h.windDir - deviceAzimuth + 360) % 360
+        ps[2].arrow.rotation = (data.plus6h.windDir - deviceAzimuth + 360) % 360
     }
 
     // ── Timers ────────────────────────────────────────────────────────────────
@@ -178,7 +179,6 @@ class DashboardPaneContent(
 
         val emojiSize  = res.dpToPx(88)
         val arrowSize  = res.dpToPx(40)
-        val panelLabels = listOf("Now", "+3h", "+6h")
         val cachedPanels = lastWeather?.let { listOf(it.now, it.plus3h, it.plus6h) }
 
         val weatherRow = LinearLayout(context).apply {
@@ -268,7 +268,7 @@ class DashboardPaneContent(
             panel.addView(windRow)
             panel.addView(precip)
             panel.addView(TextView(context).apply {
-                text = panelLabels[i]
+                text = PANEL_LABELS[i]
                 textSize = 22f
                 setTextColor(context.getColor(R.color.text_secondary))
                 gravity = Gravity.CENTER
@@ -281,8 +281,8 @@ class DashboardPaneContent(
             panel.isClickable = true
             panel.setOnClickListener {
                 val data = lastWeather ?: return@setOnClickListener
-                val panelData = listOf(data.now, data.plus3h, data.plus6h)
-                showWeatherDetail(panelData[panelIndex], panelLabels[panelIndex])
+                val wp = when (panelIndex) { 0 -> data.now; 1 -> data.plus3h; else -> data.plus6h }
+                showWeatherDetail(wp, PANEL_LABELS[panelIndex])
             }
 
             weatherRow.addView(panel)
@@ -372,11 +372,8 @@ class DashboardPaneContent(
                 22 -> if (focusedPanelIndex < 2) { movePanelFocus(focusedPanelIndex + 1); true } else false
                 66 -> {
                     val data = lastWeather ?: return false
-                    val labels = listOf("Now", "+3h", "+6h")
-                    showWeatherDetail(
-                        listOf(data.now, data.plus3h, data.plus6h)[focusedPanelIndex],
-                        labels[focusedPanelIndex]
-                    )
+                    val wp = when (focusedPanelIndex) { 0 -> data.now; 1 -> data.plus3h; else -> data.plus6h }
+                    showWeatherDetail(wp, PANEL_LABELS[focusedPanelIndex])
                     true
                 }
                 else -> false
@@ -513,62 +510,59 @@ class DashboardPaneContent(
         val plus6h: WeatherPanel
     )
 
-    private fun parseWeather(json: String): WeatherData? = try {
-        val root    = JSONObject(json)
-        val current = root.getJSONObject("data_current")
-        val data1h  = root.getJSONObject("data_1h")
-        val temps   = data1h.getJSONArray("temperature")
-        val pictos  = data1h.getJSONArray("pictocode")
-        // All sub-arrays are optional — gracefully absent in some API response variants.
-        val wdirs   = data1h.optJSONArray("winddirection")
-        val wspds   = data1h.optJSONArray("windspeed")
-        val pprobs  = data1h.optJSONArray("precipitationprobability")
-        val felts   = data1h.optJSONArray("felttemperature")
-        val humids  = data1h.optJSONArray("relativehumidity")
-        val uvs     = data1h.optJSONArray("uvindex")
-        val precips = data1h.optJSONArray("precipitation")
-        val press   = data1h.optJSONArray("sealevelpressure")
+    private fun parseWeather(json: String): WeatherData? {
+        lastLocationName = null
+        return try {
+            val root    = JSONObject(json)
+            val current = root.getJSONObject("data_current")
+            val data1h  = root.getJSONObject("data_1h")
+            val temps   = data1h.getJSONArray("temperature")
+            val pictos  = data1h.getJSONArray("pictocode")
+            // All sub-arrays are optional — gracefully absent in some API response variants.
+            val wdirs   = data1h.optJSONArray("winddirection")
+            val wspds   = data1h.optJSONArray("windspeed")
+            val pprobs  = data1h.optJSONArray("precipitationprobability")
+            val felts   = data1h.optJSONArray("felttemperature")
+            val humids  = data1h.optJSONArray("relativehumidity")
+            val uvs     = data1h.optJSONArray("uvindex")
+            val precips = data1h.optJSONArray("precipitation")
+            val press   = data1h.optJSONArray("sealevelpressure")
 
-        fun extras(idx: Int, fallbackTemp: Double) = WeatherPanel(
-            pictocode   = 0, tempC = 0.0, windDir = 0, windSpeed = 0.0, precipProb = 0,
-            feltTempC   = felts?.optDouble(idx, fallbackTemp) ?: fallbackTemp,
-            humidity    = humids?.optInt(idx, 0) ?: 0,
-            uvIndex     = uvs?.optInt(idx, 0) ?: 0,
-            precipMm    = precips?.optDouble(idx, 0.0) ?: 0.0,
-            pressureHpa = press?.optDouble(idx, 0.0) ?: 0.0
-        )
-        lastLocationName = root.optJSONObject("metadata")?.optString("name")?.takeIf { it.isNotBlank() }
-        val nowTemp = current.getDouble("temperature")
-        val nowExtras = extras(0, nowTemp)
-        WeatherData(
-            now    = WeatherPanel(
-                pictocode   = current.getInt("pictocode"),
-                tempC       = nowTemp,
-                windDir     = current.optInt("winddirection", 0),
-                windSpeed   = current.optDouble("windspeed", 0.0),
-                precipProb  = current.optInt("precipitationprobability", 0),
-                feltTempC   = nowExtras.feltTempC,
-                humidity    = nowExtras.humidity,
-                uvIndex     = nowExtras.uvIndex,
-                precipMm    = nowExtras.precipMm,
-                pressureHpa = nowExtras.pressureHpa
-            ),
-            plus3h = extras(3, temps.getDouble(3)).copy(
-                pictocode  = pictos.getInt(3),
-                tempC      = temps.getDouble(3),
-                windDir    = wdirs?.optInt(3, 0) ?: 0,
-                windSpeed  = wspds?.optDouble(3, 0.0) ?: 0.0,
-                precipProb = pprobs?.optInt(3, 0) ?: 0
-            ),
-            plus6h = extras(6, temps.getDouble(6)).copy(
-                pictocode  = pictos.getInt(6),
-                tempC      = temps.getDouble(6),
-                windDir    = wdirs?.optInt(6, 0) ?: 0,
-                windSpeed  = wspds?.optDouble(6, 0.0) ?: 0.0,
-                precipProb = pprobs?.optInt(6, 0) ?: 0
+            fun makePanel(idx: Int, pictocode: Int, tempC: Double, windDir: Int,
+                          windSpeed: Double, precipProb: Int) = WeatherPanel(
+                pictocode   = pictocode,
+                tempC       = tempC,
+                windDir     = windDir,
+                windSpeed   = windSpeed,
+                precipProb  = precipProb,
+                feltTempC   = felts?.optDouble(idx, tempC) ?: tempC,
+                humidity    = humids?.optInt(idx, 0) ?: 0,
+                uvIndex     = uvs?.optInt(idx, 0) ?: 0,
+                precipMm    = precips?.optDouble(idx, 0.0) ?: 0.0,
+                pressureHpa = press?.optDouble(idx, 0.0) ?: 0.0
             )
-        )
-    } catch (_: Exception) { null }
+
+            lastLocationName = root.optJSONObject("metadata")?.optString("name")?.takeIf { it.isNotBlank() }
+            val nowTemp = current.getDouble("temperature")
+            WeatherData(
+                now    = makePanel(0,
+                    current.getInt("pictocode"), nowTemp,
+                    current.optInt("winddirection", 0), current.optDouble("windspeed", 0.0),
+                    current.optInt("precipitationprobability", 0)
+                ),
+                plus3h = makePanel(3,
+                    pictos.getInt(3), temps.getDouble(3),
+                    wdirs?.optInt(3, 0) ?: 0, wspds?.optDouble(3, 0.0) ?: 0.0,
+                    pprobs?.optInt(3, 0) ?: 0
+                ),
+                plus6h = makePanel(6,
+                    pictos.getInt(6), temps.getDouble(6),
+                    wdirs?.optInt(6, 0) ?: 0, wspds?.optDouble(6, 0.0) ?: 0.0,
+                    pprobs?.optInt(6, 0) ?: 0
+                )
+            )
+        } catch (_: Exception) { null }
+    }
 
     private fun windCardinal(deg: Int): String = when ((deg + 22) / 45 % 8) {
         0 -> "N"; 1 -> "NE"; 2 -> "E"; 3 -> "SE"
@@ -733,6 +727,8 @@ class DashboardPaneContent(
     }
 
     companion object {
+        private val PANEL_LABELS = arrayOf("Now", "+3h", "+6h")
+
         private const val WEATHER_CHECK_INTERVAL_MS = 60_000L
         private const val WEATHER_MIN_AGE_MS        = 15 * 60 * 1000L
         private const val WEATHER_MIN_DISTANCE_M    = 500f

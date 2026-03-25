@@ -444,7 +444,10 @@ class MainActivity : Activity() {
             activeGlobalConfigPane?.setInitialFocus()
         } else {
             // Snap cursor to the active button so it's immediately highlighted on return.
-            if (activeButtonIndex >= 0) focusedIndex = activeButtonIndex
+            if (activeButtonIndex >= 0) {
+                focusedIndex = activeButtonIndex
+                prefs.edit().putInt("focused_index", focusedIndex).apply()
+            }
             updateFocus()
             scrollToFocused()
             activeDashboardPane?.clearFocus()

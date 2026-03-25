@@ -449,9 +449,10 @@ class AppsGridPaneContent(
 
         fun handleKey(keyCode: Int): Boolean {
             when (keyCode) {
-                21 -> setFocus(onCancel = false)   // LEFT → action
-                22 -> setFocus(onCancel = true)    // RIGHT → cancel
-                66 -> if (focusOnCancel) dismissQuietly() else performAndDismiss()
+                21  -> setFocus(onCancel = false)   // LEFT → action
+                22  -> setFocus(onCancel = true)    // RIGHT → cancel
+                66  -> if (focusOnCancel) dismissQuietly() else performAndDismiss()
+                111 -> dismissQuietly()
             }
             return true  // consume all keys while dialog is open
         }
