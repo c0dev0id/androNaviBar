@@ -85,6 +85,7 @@ class GlobalConfigPaneContent(
     private val rowFocusTargets = mutableListOf<RowFocusTargets>()
     private var addButtonFocusView: View? = null
     private var checkUpdateFocusView: View? = null
+    private var updateButton: FocusableButton? = null
     private var configScrollView: ScrollView? = null
 
     private var cachedApps: List<ResolveInfo>? = null
@@ -131,7 +132,18 @@ class GlobalConfigPaneContent(
         rowFocusTargets.clear()
         addButtonFocusView = null
         checkUpdateFocusView = null
+        updateButton = null
         configScrollView = null
+    }
+
+    private fun triggerUpdateCheck() {
+        val btn = updateButton ?: return
+        val activity = context as? android.app.Activity ?: return
+        UpdateChecker.check(
+            activity,
+            onStatus   = { text     -> btn.text             = text },
+            onProgress = { progress -> btn.downloadProgress = progress }
+        )
     }
 
     /** Refresh the detail editor (e.g. after type change or image pick). */
@@ -971,12 +983,9 @@ class GlobalConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
                 topMargin = context.resources.dpToPx(16)
             }
-            setOnClickListener {
-                (this@GlobalConfigPaneContent.context as? android.app.Activity)?.let { activity ->
-                    UpdateChecker.check(activity) { progress -> downloadProgress = progress }
-                }
-            }
+            setOnClickListener { triggerUpdateCheck() }
         }
+        updateButton = updateBtn
         checkUpdateFocusView = updateBtn
         wrapper.addView(updateBtn)
 
@@ -1242,8 +1251,7 @@ class GlobalConfigPaneContent(
                 focusCol = 1
                 scrollToFocused()
             }
-            focusRow == count + 1 ->  // Check for Update
-                (context as? android.app.Activity)?.let { UpdateChecker.check(it) }
+            focusRow == count + 1 -> triggerUpdateCheck()  // Check for Update
         }
     }
 
