@@ -3,7 +3,6 @@ package de.codevoid.andronavibar
 import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -38,12 +37,12 @@ class WidgetPaneContent(
     override fun hide() { hostView.visibility = View.GONE }
 
     override fun refresh() {
-        val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(appWidgetId) ?: return
-        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
-            component = info.provider
-            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
+        // ACTION_APPWIDGET_UPDATE is a protected broadcast; only the system can send it.
+        // The best a launcher can do is notify collection views of changed data.
+        val mgr = AppWidgetManager.getInstance(context)
+        for (id in findCollectionViewIds(hostView)) {
+            mgr.notifyAppWidgetViewDataChanged(appWidgetId, id)
         }
-        context.sendBroadcast(intent)
     }
 
     override fun show(container: ViewGroup) {
