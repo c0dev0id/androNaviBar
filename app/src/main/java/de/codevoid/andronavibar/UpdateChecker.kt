@@ -41,7 +41,7 @@ object UpdateChecker {
         onStatus: (String) -> Unit,
         onProgress: (Float) -> Unit
     ) {
-        currentJob?.cancel()
+        if (currentJob?.isActive == true) return
         onStatus("Checking\u2026")
 
         currentJob = scope.launch {
