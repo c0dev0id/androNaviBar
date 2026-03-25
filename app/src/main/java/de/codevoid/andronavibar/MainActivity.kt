@@ -363,7 +363,10 @@ class MainActivity : Activity() {
             FocusOwner.BUTTONS -> when (keyCode) {
                 19 -> moveFocus(-1)
                 20 -> moveFocus(+1)
-                21 -> enterPane()
+                21 -> {
+                    if (focusedIndex == activeButtonIndex) refreshCurrentPane()
+                    enterPane()
+                }
                 66 -> when {
                     focusedIndex == 0              -> activateDashboardButton()
                     focusedIndex in 1..buttons.size -> buttons[focusedIndex - 1].activate()
@@ -486,6 +489,13 @@ class MainActivity : Activity() {
             activeButtonIndex == buttons.size + 1 -> appsButton.isActiveButton = false
         }
         activeButtonIndex = -1
+    }
+
+    /** Trigger a data reload on whichever pane is currently active. */
+    private fun refreshCurrentPane() {
+        activeDashboardPane?.refresh()
+        activeWidgetPane?.refresh()
+        activeMusicPlayerPane?.refresh()
     }
 
     /**

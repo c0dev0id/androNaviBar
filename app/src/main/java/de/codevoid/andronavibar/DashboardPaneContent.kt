@@ -131,6 +131,11 @@ class DashboardPaneContent(
         panels?.forEach { it.icon.pauseAnimation() }
     }
 
+    override fun refresh() {
+        lastFetchTime = 0L   // bypass age gate so next checkAndFetch() fetches unconditionally
+        checkAndFetch()
+    }
+
     override fun show(container: ViewGroup) {
         rootView?.let { root ->
             root.visibility = View.VISIBLE

@@ -36,6 +36,15 @@ class WidgetPaneContent(
 
     override fun hide() { hostView.visibility = View.GONE }
 
+    override fun refresh() {
+        val info = AppWidgetManager.getInstance(context).getAppWidgetInfo(appWidgetId) ?: return
+        val intent = android.content.Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
+            component = info.provider
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(appWidgetId))
+        }
+        context.sendBroadcast(intent)
+    }
+
     override fun show(container: ViewGroup) {
         if (hostView.parent != null) { hostView.visibility = View.VISIBLE; return }
 
