@@ -53,6 +53,10 @@ class AppsGridPaneContent(
     private var marginPx = 0
 
     private var activeDialog: AppContextDialog? = null
+
+    /** True while an app context dialog is visible; used by MainActivity to bypass
+     *  the isWindowFocused guard so remote keys still reach handleKey. */
+    val hasModalDialog: Boolean get() = activeDialog != null
     private var pendingScrollY: Int? = null
 
     var onContentReady: (() -> Unit)? = null

@@ -329,7 +329,16 @@ class MainActivity : Activity() {
      * 19=UP, 20=DOWN, 21=LEFT, 22=RIGHT, 66=CONFIRM.
      */
     private fun handleKey(keyCode: Int) {
-        if (!isWindowFocused) return
+        // When a pane shows a modal Dialog the Activity loses window focus, but remote
+        // keys must still reach the pane so the user can dismiss the popup.
+        if (!isWindowFocused) {
+            if (activeDashboardPane?.hasModalDialog == true) {
+                activeDashboardPane?.handleKey(keyCode)
+            } else if (activeAppsGridPane?.hasModalDialog == true) {
+                activeAppsGridPane?.handleKey(keyCode)
+            }
+            return
+        }
         when (focusOwner) {
             FocusOwner.PANE -> {
                 val handled = activeDashboardPane?.handleKey(keyCode)

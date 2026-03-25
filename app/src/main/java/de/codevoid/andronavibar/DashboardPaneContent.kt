@@ -66,6 +66,10 @@ class DashboardPaneContent(
     private var focusedPanelIndex = -1   // -1 = no panel focused
     private var detailDialog: Dialog? = null
 
+    /** True while a weather detail dialog is visible; used by MainActivity to bypass
+     *  the isWindowFocused guard so remote keys still reach handleKey. */
+    val hasModalDialog: Boolean get() = detailDialog != null
+
     // ── Compass ───────────────────────────────────────────────────────────────
 
     /** Last device azimuth in degrees (0=N, 90=E, 180=S, 270=W), updated by sensor. */
@@ -495,7 +499,12 @@ class DashboardPaneContent(
         val tempC: Double,
         val windDir: Int,
         val windSpeed: Double,
-        val precipProb: Int
+        val precipProb: Int,
+        val feltTempC: Double,
+        val humidity: Int,
+        val uvIndex: Int,
+        val precipMm: Double,
+        val pressureHpa: Double
     )
 
     private data class WeatherData(
@@ -510,27 +519,52 @@ class DashboardPaneContent(
         val data1h  = root.getJSONObject("data_1h")
         val temps   = data1h.getJSONArray("temperature")
         val pictos  = data1h.getJSONArray("pictocode")
-        // Wind and precip arrays are optional — gracefully absent in some API response variants.
+        // All sub-arrays are optional — gracefully absent in some API response variants.
         val wdirs   = data1h.optJSONArray("winddirection")
         val wspds   = data1h.optJSONArray("windspeed")
         val pprobs  = data1h.optJSONArray("precipitationprobability")
+        val felts   = data1h.optJSONArray("felttemperature")
+        val humids  = data1h.optJSONArray("relativehumidity")
+        val uvs     = data1h.optJSONArray("uvindex")
+        val precips = data1h.optJSONArray("precipitation")
+        val press   = data1h.optJSONArray("sealevelpressure")
+
+        fun extras(idx: Int, fallbackTemp: Double) = WeatherPanel(
+            pictocode   = 0, tempC = 0.0, windDir = 0, windSpeed = 0.0, precipProb = 0,
+            feltTempC   = felts?.optDouble(idx, fallbackTemp) ?: fallbackTemp,
+            humidity    = humids?.optInt(idx, 0) ?: 0,
+            uvIndex     = uvs?.optInt(idx, 0) ?: 0,
+            precipMm    = precips?.optDouble(idx, 0.0) ?: 0.0,
+            pressureHpa = press?.optDouble(idx, 0.0) ?: 0.0
+        )
+        val nowTemp = current.getDouble("temperature")
+        val nowExtras = extras(0, nowTemp)
         WeatherData(
             now    = WeatherPanel(
-                pictocode = current.getInt("pictocode"),
-                tempC     = current.getDouble("temperature"),
-                windDir   = current.optInt("winddirection", 0),
-                windSpeed = current.optDouble("windspeed", 0.0),
-                precipProb = current.optInt("precipitationprobability", 0)
+                pictocode   = current.getInt("pictocode"),
+                tempC       = nowTemp,
+                windDir     = current.optInt("winddirection", 0),
+                windSpeed   = current.optDouble("windspeed", 0.0),
+                precipProb  = current.optInt("precipitationprobability", 0),
+                feltTempC   = nowExtras.feltTempC,
+                humidity    = nowExtras.humidity,
+                uvIndex     = nowExtras.uvIndex,
+                precipMm    = nowExtras.precipMm,
+                pressureHpa = nowExtras.pressureHpa
             ),
-            plus3h = WeatherPanel(
-                pictos.getInt(3), temps.getDouble(3),
-                wdirs?.optInt(3, 0) ?: 0, wspds?.optDouble(3, 0.0) ?: 0.0,
-                pprobs?.optInt(3, 0) ?: 0
+            plus3h = extras(3, temps.getDouble(3)).copy(
+                pictocode  = pictos.getInt(3),
+                tempC      = temps.getDouble(3),
+                windDir    = wdirs?.optInt(3, 0) ?: 0,
+                windSpeed  = wspds?.optDouble(3, 0.0) ?: 0.0,
+                precipProb = pprobs?.optInt(3, 0) ?: 0
             ),
-            plus6h = WeatherPanel(
-                pictos.getInt(6), temps.getDouble(6),
-                wdirs?.optInt(6, 0) ?: 0, wspds?.optDouble(6, 0.0) ?: 0.0,
-                pprobs?.optInt(6, 0) ?: 0
+            plus6h = extras(6, temps.getDouble(6)).copy(
+                pictocode  = pictos.getInt(6),
+                tempC      = temps.getDouble(6),
+                windDir    = wdirs?.optInt(6, 0) ?: 0,
+                windSpeed  = wspds?.optDouble(6, 0.0) ?: 0.0,
+                precipProb = pprobs?.optInt(6, 0) ?: 0
             )
         )
     } catch (_: Exception) { null }
@@ -619,16 +653,40 @@ class DashboardPaneContent(
             })
         })
 
-        // Precipitation
-        content.addView(TextView(context).apply {
-            text = "${panel.precipProb}% rain probability"
-            textSize = 32f
-            setTextColor(context.getColor(R.color.text_secondary))
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = res.dpToPx(8)
-            }
-        })
+        fun detailRow(text: String, topGap: Int = 8) {
+            content.addView(TextView(context).apply {
+                this.text = text
+                textSize = 28f
+                setTextColor(context.getColor(R.color.text_secondary))
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = res.dpToPx(topGap)
+                }
+            })
+        }
+
+        // Precipitation probability + actual mm
+        detailRow("${panel.precipProb}% rain  ·  ${panel.precipMm} mm", topGap = 8)
+
+        // Feels like + humidity
+        detailRow("Feels ${panel.feltTempC.toInt()}°  ·  Humidity ${panel.humidity}%", topGap = 4)
+
+        // UV index + pressure
+        detailRow("UV ${panel.uvIndex}  ·  ${panel.pressureHpa.toInt()} hPa", topGap = 4)
+
+        // Last refresh time
+        if (lastFetchTime > 0L) {
+            content.addView(TextView(context).apply {
+                text = "Updated ${SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(lastFetchTime))}"
+                textSize = 22f
+                setTextColor(context.getColor(R.color.text_secondary))
+                gravity = Gravity.CENTER
+                alpha = 0.6f
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = res.dpToPx(12)
+                }
+            })
+        }
 
         // Close button
         content.addView(FocusableButton(context).apply {
@@ -636,7 +694,7 @@ class DashboardPaneContent(
             textSize = 28f
             isFocusedButton = true
             layoutParams = LinearLayout.LayoutParams(MATCH, res.dpToPx(80)).apply {
-                topMargin = res.dpToPx(32)
+                topMargin = res.dpToPx(24)
             }
             setOnClickListener { dialog.dismiss() }
         })
