@@ -1,0 +1,36 @@
+id,description,lottie
+1,Clear sky,clear-day.json
+2,Clear sky with few cirrus,clear-day.json
+3,Partly cloudy,partly-cloudy-day.json
+4,Mostly cloudy,overcast-day.json
+5,Fog,fog-day.json
+6,Freezing fog,fog.json
+7,Light rain with sun,partly-cloudy-day-rain.json
+8,Light rain,overcast-day-rain.json
+9,Rain,rain.json
+10,Heavy rain,overcast-rain.json
+11,Freezing rain,sleet.json
+12,Sleet,sleet.json
+13,Light snow showers,partly-cloudy-day-snow.json
+14,Light snowfall,overcast-day-snow.json
+15,Snowfall,snow.json
+16,Heavy snowfall,extreme-snow.json
+17,Rain and thunder,thunderstorms-rain.json
+18,Sleet and thunder,thunderstorms-overcast-rain.json
+19,Snow and thunder,thunderstorms-snow.json
+20,Heavy rain / violent showers,extreme-rain.json
+21,Partly cloudy with light rain,partly-cloudy-day-rain.json
+22,Partly cloudy with moderate rain,overcast-day-rain.json
+23,Partly cloudy with heavy rain,extreme-day-rain.json
+24,Partly cloudy with sleet,partly-cloudy-day-sleet.json
+25,Partly cloudy with light snow,partly-cloudy-day-snow.json
+26,Partly cloudy with moderate snow,overcast-day-snow.json
+27,Partly cloudy with heavy snow,overcast-snow.json
+28,Partly cloudy with thunder,thunderstorms-day.json
+29,Heavy thunderstorm with rain,thunderstorms-overcast-rain.json
+30,Light fog,fog-day.json
+31,Dense fog,fog.json
+32,Fog with drizzle,overcast-day-drizzle.json
+33,Overcast with rain,overcast-rain.json
+34,Overcast with heavy rain,extreme-rain.json
+35,Violent storm / sandstorm,extreme.json

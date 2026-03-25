@@ -19,9 +19,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieDrawable
 import com.google.android.gms.location.LocationServices
 import de.codevoid.andronavibar.ui.FocusableButton
 import de.codevoid.andronavibar.ui.RainspotView
@@ -57,7 +58,7 @@ class DashboardPaneContent(
 
     /** Holds the live views for each weather panel. */
     private data class PanelViews(
-        val emoji: ImageView,
+        val icon: LottieAnimationView,
         val temp: TextView,
         val arrow: TextView,
         val speed: TextView,
@@ -203,12 +204,12 @@ class DashboardPaneContent(
                 layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
             }
 
-            val emoji = ImageView(context).apply {
-                scaleType = ImageView.ScaleType.FIT_CENTER
+            val icon = LottieAnimationView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(emojiSize, emojiSize).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
                 }
-                if (p != null) setImageDrawable(context.loadWeatherSvg(pictocodeIcon(p.pictocode), emojiSize))
+                repeatCount = LottieDrawable.INFINITE
+                if (p != null) { setAnimation("lottie/${pictocodeAsset(p.pictocode)}"); playAnimation() }
                 else visibility = View.INVISIBLE
             }
 
@@ -276,7 +277,7 @@ class DashboardPaneContent(
                 if (p != null) setData(p.rainspot) else visibility = View.INVISIBLE
             }
 
-            panel.addView(emoji)
+            panel.addView(icon)
             panel.addView(temp)
             panel.addView(windRow)
             panel.addView(precip)
@@ -300,7 +301,7 @@ class DashboardPaneContent(
             }
 
             weatherRow.addView(panel)
-            builtPanels.add(PanelViews(emoji, temp, arrow, speed, precip, rainspotView))
+            builtPanels.add(PanelViews(icon, temp, arrow, speed, precip, rainspotView))
             builtLayouts.add(panel)
         }
 
@@ -360,6 +361,7 @@ class DashboardPaneContent(
         rootView = null
         gearButton = null
         clockView = null
+        panels?.forEach { it.icon.cancelAnimation() }
         panels = null
         panelLayouts = null
         focusedPanelIndex = -1
@@ -474,12 +476,13 @@ class DashboardPaneContent(
 
     private fun applyWeather(data: WeatherData) {
         lastWeather = data
-        val sizePx = context.resources.dpToPx(88)
         val panelData = listOf(data.now, data.plus3h, data.plus6h)
         panels?.forEachIndexed { i, pv ->
             val p = panelData[i]
-            pv.emoji.setImageDrawable(context.loadWeatherSvg(pictocodeIcon(p.pictocode), sizePx))
-            pv.emoji.visibility = View.VISIBLE
+            pv.icon.setAnimation("lottie/${pictocodeAsset(p.pictocode)}")
+            pv.icon.repeatCount = LottieDrawable.INFINITE
+            pv.icon.playAnimation()
+            pv.icon.visibility = View.VISIBLE
             pv.temp.text = "${p.tempC.toInt()}°"
             pv.temp.visibility = View.VISIBLE
             pv.arrow.rotation = (p.windDir - deviceAzimuth + 360) % 360
@@ -610,13 +613,14 @@ class DashboardPaneContent(
         }
 
         // Icon
-        content.addView(ImageView(context).apply {
-            scaleType = ImageView.ScaleType.FIT_CENTER
+        content.addView(LottieAnimationView(context).apply {
             layoutParams = LinearLayout.LayoutParams(iconSz, iconSz).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 bottomMargin = res.dpToPx(8)
             }
-            setImageDrawable(context.loadWeatherSvg(pictocodeIcon(panel.pictocode), iconSz))
+            repeatCount = LottieDrawable.INFINITE
+            setAnimation("lottie/${pictocodeAsset(panel.pictocode)}")
+            playAnimation()
         })
 
         // Time label
@@ -730,19 +734,32 @@ class DashboardPaneContent(
         detailDialog = dialog
     }
 
-    private fun pictocodeIcon(code: Int): String = when (code) {
-        1          -> "sun-svgrepo-com.svg"
-        2          -> "lightcloud-svgrepo-com.svg"
-        3          -> "partlycloud-svgrepo-com.svg"
-        4          -> "cloud-svgrepo-com.svg"
-        5, 6       -> "fog-svgrepo-com.svg"
-        7          -> "lightrainsun-svgrepo-com.svg"
-        8, 9       -> "lightrain-svgrepo-com.svg"
-        10, 11     -> "rain-svgrepo-com.svg"
-        12, 13     -> "sleet-svgrepo-com.svg"
-        14, 15, 16 -> "snow-svgrepo-com.svg"
-        17         -> "rainthunder-svgrepo-com.svg"
-        else       -> "sun-svgrepo-com.svg"
+    private fun pictocodeAsset(code: Int): String = when (code) {
+        1, 2       -> "clear-day.json"
+        3          -> "partly-cloudy-day.json"
+        4          -> "overcast-day.json"
+        5, 30      -> "fog-day.json"
+        6, 31      -> "fog.json"
+        7, 21      -> "partly-cloudy-day-rain.json"
+        8, 22      -> "overcast-day-rain.json"
+        9          -> "rain.json"
+        10, 33     -> "overcast-rain.json"
+        11, 12     -> "sleet.json"
+        13, 25     -> "partly-cloudy-day-snow.json"
+        14, 26     -> "overcast-day-snow.json"
+        15         -> "snow.json"
+        16         -> "extreme-snow.json"
+        17         -> "thunderstorms-rain.json"
+        18, 29     -> "thunderstorms-overcast-rain.json"
+        19         -> "thunderstorms-snow.json"
+        20, 34     -> "extreme-rain.json"
+        23         -> "extreme-day-rain.json"
+        24         -> "partly-cloudy-day-sleet.json"
+        27         -> "overcast-snow.json"
+        28         -> "thunderstorms-day.json"
+        32         -> "overcast-day-drizzle.json"
+        35         -> "extreme.json"
+        else       -> "clear-day.json"
     }
 
     companion object {
