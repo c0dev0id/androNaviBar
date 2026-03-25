@@ -164,8 +164,8 @@ class DashboardPaneContent(
         // Each panel: emoji + temp + wind arrow (compass-relative) + wind speed + label.
         // All data views start invisible; made visible when weather arrives.
 
-        val emojiSize  = res.dpToPx(56)
-        val arrowSize  = res.dpToPx(28)
+        val emojiSize  = res.dpToPx(88)
+        val arrowSize  = res.dpToPx(40)
         val panelLabels = listOf("Now", "+3h", "+6h")
         val cachedPanels = lastWeather?.let { listOf(it.now, it.plus3h, it.plus6h) }
 
@@ -197,11 +197,11 @@ class DashboardPaneContent(
             }
 
             val temp = TextView(context).apply {
-                textSize = 36f
+                textSize = 56f
                 setTextColor(context.getColor(R.color.text_primary))
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                    topMargin = res.dpToPx(6)
+                    topMargin = res.dpToPx(8)
                 }
                 if (p != null) text = "${p.tempC.toInt()}°" else visibility = View.INVISIBLE
             }
@@ -217,7 +217,7 @@ class DashboardPaneContent(
 
             val arrow = TextView(context).apply {
                 text = "↑"
-                textSize = 20f
+                textSize = 26f
                 includeFontPadding = false
                 setTextColor(context.getColor(R.color.text_primary))
                 gravity = Gravity.CENTER
@@ -227,11 +227,11 @@ class DashboardPaneContent(
             }
 
             val speed = TextView(context).apply {
-                textSize = 14f
+                textSize = 22f
                 setTextColor(context.getColor(R.color.text_secondary))
                 gravity = Gravity.CENTER_VERTICAL
                 layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
-                    marginStart = res.dpToPx(4)
+                    marginStart = res.dpToPx(6)
                 }
                 if (p != null) text = "${p.windSpeed.toInt()} km/h" else visibility = View.INVISIBLE
             }
@@ -244,11 +244,11 @@ class DashboardPaneContent(
             panel.addView(windRow)
             panel.addView(TextView(context).apply {
                 text = panelLabels[i]
-                textSize = 16f
+                textSize = 22f
                 setTextColor(context.getColor(R.color.text_secondary))
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                    topMargin = res.dpToPx(4)
+                    topMargin = res.dpToPx(6)
                 }
             })
 
