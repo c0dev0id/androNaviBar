@@ -295,12 +295,13 @@ class DashboardPaneContent(
     private fun parseWeather(json: String): WeatherData? = try {
         val root    = JSONObject(json)
         val current = root.getJSONObject("data_current")
-        val day     = root.getJSONObject("data_day")
+        val temps1h = root.getJSONObject("data_1h").getJSONArray("temperature")
+        val hourlyTemps = (0 until minOf(24, temps1h.length())).map { temps1h.getDouble(it) }
         WeatherData(
             tempC     = current.getDouble("temperature"),
             pictocode = current.getInt("pictocode"),
-            minC      = day.getJSONArray("temperature_min").getDouble(0),
-            maxC      = day.getJSONArray("temperature_max").getDouble(0)
+            minC      = hourlyTemps.minOrNull() ?: current.getDouble("temperature"),
+            maxC      = hourlyTemps.maxOrNull() ?: current.getDouble("temperature")
         )
     } catch (_: Exception) { null }
 
