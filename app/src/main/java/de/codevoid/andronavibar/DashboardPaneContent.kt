@@ -537,6 +537,7 @@ class DashboardPaneContent(
             precipMm    = precips?.optDouble(idx, 0.0) ?: 0.0,
             pressureHpa = press?.optDouble(idx, 0.0) ?: 0.0
         )
+        lastLocationName = root.optJSONObject("metadata")?.optString("name")?.takeIf { it.isNotBlank() }
         val nowTemp = current.getDouble("temperature")
         val nowExtras = extras(0, nowTemp)
         WeatherData(
@@ -674,10 +675,15 @@ class DashboardPaneContent(
         // UV index + pressure
         detailRow("UV ${panel.uvIndex}  ·  ${panel.pressureHpa.toInt()} hPa", topGap = 4)
 
-        // Last refresh time
-        if (lastFetchTime > 0L) {
+        // Location name + last refresh time
+        val footerParts = buildList {
+            lastLocationName?.let { add(it) }
+            if (lastFetchTime > 0L)
+                add("Updated ${SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(lastFetchTime))}")
+        }
+        if (footerParts.isNotEmpty()) {
             content.addView(TextView(context).apply {
-                text = "Updated ${SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(lastFetchTime))}"
+                text = footerParts.joinToString("  ·  ")
                 textSize = 22f
                 setTextColor(context.getColor(R.color.text_secondary))
                 gravity = Gravity.CENTER
@@ -735,5 +741,6 @@ class DashboardPaneContent(
         private var lastFetchTime: Long      = 0L
         private var lastFetchLoc:  Location? = null
         private var lastWeather:   WeatherData? = null
+        private var lastLocationName: String? = null
     }
 }
