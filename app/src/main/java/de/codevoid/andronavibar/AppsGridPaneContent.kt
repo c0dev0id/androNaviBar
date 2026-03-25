@@ -63,6 +63,7 @@ class AppsGridPaneContent(
     private var marginPx = 0
 
     private var activeDialog: AppContextDialog? = null
+    private var pendingScrollY: Int? = null
 
     var onContentReady: (() -> Unit)? = null
 
@@ -229,8 +230,9 @@ class AppsGridPaneContent(
         focusIndex = focusIndex.coerceIn(0, (displayedApps.size - 1).coerceAtLeast(0))
     }
 
-    private fun rebuildGrid() {
+    private fun rebuildGrid(preserveScroll: Boolean = false) {
         val gc = gridContainer ?: return
+        if (preserveScroll) pendingScrollY = scrollView?.scrollY
         gc.removeAllViews()
         scrollView = null
         cells = emptyList()
@@ -277,7 +279,10 @@ class AppsGridPaneContent(
         cells = built
         scroll.addView(col)
         gc.addView(scroll)
-        scrollToFocused()
+        val targetY = pendingScrollY
+        pendingScrollY = null
+        if (targetY != null) scroll.post { scroll.scrollTo(0, targetY) }
+        else scrollToFocused()
     }
 
     private fun buildCell(app: AppEntry, index: Int, parent: ViewGroup): LauncherButton {
@@ -335,13 +340,13 @@ class AppsGridPaneContent(
     private fun hideApp(pkg: String) {
         hiddenPkgs.add(pkg)
         prefs.edit().putStringSet(PREF_HIDDEN, hiddenPkgs.toSet()).apply()
-        rebuildGrid()
+        rebuildGrid(preserveScroll = true)
     }
 
     private fun showApp(pkg: String) {
         hiddenPkgs.remove(pkg)
         prefs.edit().putStringSet(PREF_HIDDEN, hiddenPkgs.toSet()).apply()
-        rebuildGrid()
+        rebuildGrid(preserveScroll = true)
     }
 
     // ── Last used ─────────────────────────────────────────────────────────────
