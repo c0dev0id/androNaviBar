@@ -44,9 +44,10 @@ class DashboardPaneContent(
     private var rootView: FrameLayout? = null
     private var gearButton: FocusableButton? = null
     private var clockView: TextView? = null
-    private var weatherEmojiView: ImageView? = null
-    private var weatherTempView: TextView? = null
-    private var weatherCondView: TextView? = null
+
+    /** Holds the three ImageView/TextView pairs for the weather panels. */
+    private data class PanelViews(val emoji: ImageView, val temp: TextView)
+    private var panels: Array<PanelViews>? = null
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -118,50 +119,70 @@ class DashboardPaneContent(
             letterSpacing = 0.04f
         })
 
-        // ── Weather ───────────────────────────────────────────────────────────
-        // Emoji is rendered via renderEmojiDrawable (bitmap path) to avoid the
-        // text-presentation fallback that shows as a white square on some devices.
-        // All three views start invisible; made visible when data arrives.
+        // ── Weather — 3-panel row: Now / +3h / +6h ────────────────────────────
+        //
+        // Each panel: emoji (bitmap path, avoids white-square fallback) + temp + label.
+        // All panels start invisible; made visible when data arrives.
 
-        val emojiSize = res.dpToPx(72)
-        val weatherEmoji = ImageView(context).apply {
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            layoutParams = LinearLayout.LayoutParams(emojiSize, emojiSize).apply {
-                topMargin = res.dpToPx(20)
-                gravity   = Gravity.CENTER_HORIZONTAL
-            }
-            if (lastPictocode >= 0) {
-                setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(lastPictocode)))
-            } else {
-                visibility = View.INVISIBLE
-            }
-        }
-        weatherEmojiView = weatherEmoji
-        column.addView(weatherEmoji)
+        val emojiSize = res.dpToPx(56)
+        val panelLabels = listOf("Now", "+3h", "+6h")
+        val cachedPanels = lastWeather?.let { listOf(it.now, it.plus3h, it.plus6h) }
 
-        val weatherTemp = TextView(context).apply {
-            textSize = 48f
-            setTextColor(context.getColor(R.color.text_primary))
+        val weatherRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = res.dpToPx(8)
+                topMargin = res.dpToPx(24)
             }
-            if (lastTempText.isNotEmpty()) text = lastTempText else visibility = View.INVISIBLE
         }
-        weatherTempView = weatherTemp
-        column.addView(weatherTemp)
 
-        val weatherCond = TextView(context).apply {
-            textSize = 28f
-            setTextColor(context.getColor(R.color.text_secondary))
-            gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = res.dpToPx(4)
+        val builtPanels = mutableListOf<PanelViews>()
+        for (i in 0..2) {
+            val panel = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
             }
-            if (lastCondText.isNotEmpty()) text = lastCondText else visibility = View.INVISIBLE
+
+            val emoji = ImageView(context).apply {
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                layoutParams = LinearLayout.LayoutParams(emojiSize, emojiSize).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }
+                val p = cachedPanels?.getOrNull(i)
+                if (p != null) setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(p.pictocode)))
+                else visibility = View.INVISIBLE
+            }
+
+            val temp = TextView(context).apply {
+                textSize = 36f
+                setTextColor(context.getColor(R.color.text_primary))
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = res.dpToPx(6)
+                }
+                val p = cachedPanels?.getOrNull(i)
+                if (p != null) text = "${p.tempC.toInt()}°" else visibility = View.INVISIBLE
+            }
+
+            panel.addView(emoji)
+            panel.addView(temp)
+            panel.addView(TextView(context).apply {
+                text = panelLabels[i]
+                textSize = 16f
+                setTextColor(context.getColor(R.color.text_secondary))
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = res.dpToPx(4)
+                }
+            })
+
+            weatherRow.addView(panel)
+            builtPanels.add(PanelViews(emoji, temp))
         }
-        weatherCondView = weatherCond
-        column.addView(weatherCond)
+
+        panels = builtPanels.toTypedArray()
+        column.addView(weatherRow)
 
         // Bottom spacer — weight 3
         column.addView(View(context).apply {
@@ -202,9 +223,7 @@ class DashboardPaneContent(
         rootView = null
         gearButton = null
         clockView = null
-        weatherEmojiView = null
-        weatherTempView = null
-        weatherCondView = null
+        panels = null
         (root.parent as? ViewGroup)?.removeView(root)
     }
 
@@ -258,17 +277,15 @@ class DashboardPaneContent(
     }
 
     private fun applyWeather(data: WeatherData) {
-        val tempText = "${data.tempC.toInt()}°C"
-        val condText = "↑${data.maxC.toInt()}°  ↓${data.minC.toInt()}°"
-        lastPictocode = data.pictocode
-        lastTempText  = tempText
-        lastCondText  = condText
-        weatherEmojiView?.apply {
-            setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(data.pictocode)))
-            visibility = View.VISIBLE
+        lastWeather = data
+        val panelData = listOf(data.now, data.plus3h, data.plus6h)
+        panels?.forEachIndexed { i, pv ->
+            val p = panelData[i]
+            pv.emoji.setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(p.pictocode)))
+            pv.emoji.visibility = View.VISIBLE
+            pv.temp.text = "${p.tempC.toInt()}°"
+            pv.temp.visibility = View.VISIBLE
         }
-        weatherTempView?.apply { text = tempText; visibility = View.VISIBLE }
-        weatherCondView?.apply { text = condText; visibility = View.VISIBLE }
     }
 
     private suspend fun fetchWeather(lat: Double, lon: Double): WeatherData? =
@@ -285,23 +302,24 @@ class DashboardPaneContent(
             } catch (_: Exception) { null }
         }
 
+    private data class WeatherPanel(val pictocode: Int, val tempC: Double)
+
     private data class WeatherData(
-        val tempC: Double,
-        val pictocode: Int,
-        val minC: Double,
-        val maxC: Double
+        val now:    WeatherPanel,
+        val plus3h: WeatherPanel,
+        val plus6h: WeatherPanel
     )
 
     private fun parseWeather(json: String): WeatherData? = try {
         val root    = JSONObject(json)
         val current = root.getJSONObject("data_current")
-        val temps1h = root.getJSONObject("data_1h").getJSONArray("temperature")
-        val hourlyTemps = (0 until minOf(24, temps1h.length())).map { temps1h.getDouble(it) }
+        val data1h  = root.getJSONObject("data_1h")
+        val temps   = data1h.getJSONArray("temperature")
+        val pictos  = data1h.getJSONArray("pictocode")
         WeatherData(
-            tempC     = current.getDouble("temperature"),
-            pictocode = current.getInt("pictocode"),
-            minC      = hourlyTemps.minOrNull() ?: current.getDouble("temperature"),
-            maxC      = hourlyTemps.maxOrNull() ?: current.getDouble("temperature")
+            now    = WeatherPanel(current.getInt("pictocode"), current.getDouble("temperature")),
+            plus3h = WeatherPanel(pictos.getInt(3), temps.getDouble(3)),
+            plus6h = WeatherPanel(pictos.getInt(6), temps.getDouble(6))
         )
     } catch (_: Exception) { null }
 
@@ -328,8 +346,6 @@ class DashboardPaneContent(
         /** Persists across pane re-creation within the same app session. */
         private var lastFetchTime: Long      = 0L
         private var lastFetchLoc:  Location? = null
-        private var lastPictocode: Int       = -1
-        private var lastTempText:  String    = ""
-        private var lastCondText:  String    = ""
+        private var lastWeather:   WeatherData? = null
     }
 }
