@@ -54,7 +54,8 @@ class DashboardPaneContent(
         val emoji: ImageView,
         val temp: TextView,
         val arrow: TextView,
-        val speed: TextView
+        val speed: TextView,
+        val precip: TextView
     )
     private var panels: Array<PanelViews>? = null
 
@@ -239,9 +240,21 @@ class DashboardPaneContent(
             windRow.addView(arrow)
             windRow.addView(speed)
 
+            val precip = TextView(context).apply {
+                textSize = 22f
+                setTextColor(context.getColor(R.color.text_secondary))
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = res.dpToPx(4)
+                }
+                val p = cachedPanels?.getOrNull(i)
+                if (p != null) text = "${p.precipProb}% rain" else visibility = View.INVISIBLE
+            }
+
             panel.addView(emoji)
             panel.addView(temp)
             panel.addView(windRow)
+            panel.addView(precip)
             panel.addView(TextView(context).apply {
                 text = panelLabels[i]
                 textSize = 22f
@@ -253,7 +266,7 @@ class DashboardPaneContent(
             })
 
             weatherRow.addView(panel)
-            builtPanels.add(PanelViews(emoji, temp, arrow, speed))
+            builtPanels.add(PanelViews(emoji, temp, arrow, speed, precip))
         }
 
         panels = builtPanels.toTypedArray()
@@ -375,6 +388,8 @@ class DashboardPaneContent(
             pv.arrow.visibility = View.VISIBLE
             pv.speed.text = "${p.windSpeed.toInt()} km/h"
             pv.speed.visibility = View.VISIBLE
+            pv.precip.text = "${p.precipProb}% rain"
+            pv.precip.visibility = View.VISIBLE
         }
     }
 
@@ -396,7 +411,8 @@ class DashboardPaneContent(
         val pictocode: Int,
         val tempC: Double,
         val windDir: Int,
-        val windSpeed: Double
+        val windSpeed: Double,
+        val precipProb: Int
     )
 
     private data class WeatherData(
@@ -411,23 +427,27 @@ class DashboardPaneContent(
         val data1h  = root.getJSONObject("data_1h")
         val temps   = data1h.getJSONArray("temperature")
         val pictos  = data1h.getJSONArray("pictocode")
-        // Wind arrays are optional — gracefully absent in some API response variants.
+        // Wind and precip arrays are optional — gracefully absent in some API response variants.
         val wdirs   = data1h.optJSONArray("winddirection")
         val wspds   = data1h.optJSONArray("windspeed")
+        val pprobs  = data1h.optJSONArray("precipitationprobability")
         WeatherData(
             now    = WeatherPanel(
                 pictocode = current.getInt("pictocode"),
                 tempC     = current.getDouble("temperature"),
                 windDir   = current.optInt("winddirection", 0),
-                windSpeed = current.optDouble("windspeed", 0.0)
+                windSpeed = current.optDouble("windspeed", 0.0),
+                precipProb = current.optInt("precipitationprobability", 0)
             ),
             plus3h = WeatherPanel(
                 pictos.getInt(3), temps.getDouble(3),
-                wdirs?.optInt(3, 0) ?: 0, wspds?.optDouble(3, 0.0) ?: 0.0
+                wdirs?.optInt(3, 0) ?: 0, wspds?.optDouble(3, 0.0) ?: 0.0,
+                pprobs?.optInt(3, 0) ?: 0
             ),
             plus6h = WeatherPanel(
                 pictos.getInt(6), temps.getDouble(6),
-                wdirs?.optInt(6, 0) ?: 0, wspds?.optDouble(6, 0.0) ?: 0.0
+                wdirs?.optInt(6, 0) ?: 0, wspds?.optDouble(6, 0.0) ?: 0.0,
+                pprobs?.optInt(6, 0) ?: 0
             )
         )
     } catch (_: Exception) { null }

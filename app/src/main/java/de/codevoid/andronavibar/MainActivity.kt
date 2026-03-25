@@ -157,8 +157,8 @@ class MainActivity : Activity() {
         preCreateWidgetViews()
 
         // focusedIndex is a panel position: 0=Dashboard, 1..N=configurable, N+1=Apps.
-        // Default to 1 (first configurable button). Clamp saved values to valid range.
-        focusedIndex = prefs.getInt("focused_index", 1).coerceIn(0, buttons.size + 1)
+        // Default to 0 (Dashboard). Clamp saved values to valid range.
+        focusedIndex = prefs.getInt("focused_index", 0).coerceIn(0, buttons.size + 1)
         if (focusedIndex in 1..buttons.size && buttons[focusedIndex - 1].visibility == View.GONE) {
             focusedIndex = nearestVisibleButton(focusedIndex - 1) + 1
         }
@@ -169,6 +169,7 @@ class MainActivity : Activity() {
         }
 
         updateFocus()
+        activateDashboardButton()
 
         if (checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
