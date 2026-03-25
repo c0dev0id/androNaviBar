@@ -24,6 +24,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.android.gms.location.LocationServices
 import de.codevoid.andronavibar.ui.FocusableButton
+import de.codevoid.andronavibar.ui.RainspotView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,7 +60,8 @@ class DashboardPaneContent(
         val temp: TextView,
         val arrow: TextView,
         val speed: TextView,
-        val precip: TextView
+        val precip: TextView,
+        val rainspot: RainspotView
     )
     private var panels: Array<PanelViews>? = null
     private var panelLayouts: Array<LinearLayout>? = null
@@ -263,10 +265,18 @@ class DashboardPaneContent(
                 if (p != null) text = precipText(p.precipProb, p.precipMm) else visibility = View.INVISIBLE
             }
 
+            val rainspotView = RainspotView(context).apply {
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = res.dpToPx(8)
+                }
+                if (p != null) setData(p.rainspot) else visibility = View.INVISIBLE
+            }
+
             panel.addView(emoji)
             panel.addView(temp)
             panel.addView(windRow)
             panel.addView(precip)
+            panel.addView(rainspotView)
             panel.addView(TextView(context).apply {
                 text = PANEL_LABELS[i]
                 textSize = 22f
@@ -286,7 +296,7 @@ class DashboardPaneContent(
             }
 
             weatherRow.addView(panel)
-            builtPanels.add(PanelViews(emoji, temp, arrow, speed, precip))
+            builtPanels.add(PanelViews(emoji, temp, arrow, speed, precip, rainspotView))
             builtLayouts.add(panel)
         }
 
@@ -474,6 +484,8 @@ class DashboardPaneContent(
             pv.speed.visibility = View.VISIBLE
             pv.precip.text = precipText(p.precipProb, p.precipMm)
             pv.precip.visibility = View.VISIBLE
+            pv.rainspot.setData(p.rainspot)
+            pv.rainspot.visibility = View.VISIBLE
         }
     }
 
@@ -501,7 +513,8 @@ class DashboardPaneContent(
         val humidity: Int,
         val uvIndex: Int,
         val precipMm: Double,
-        val pressureHpa: Double
+        val pressureHpa: Double,
+        val rainspot: String
     )
 
     private data class WeatherData(
@@ -524,8 +537,9 @@ class DashboardPaneContent(
             val felts  = data1h.optJSONArray("felttemperature")
             val humids = data1h.optJSONArray("relativehumidity")
             val uvs    = data1h.optJSONArray("uvindex")
-            val precips = data1h.optJSONArray("precipitation")
-            val press  = data1h.optJSONArray("sealevelpressure")
+            val precips   = data1h.optJSONArray("precipitation")
+            val press     = data1h.optJSONArray("sealevelpressure")
+            val rainspots = data1h.optJSONArray("rainspot")
 
             fun makePanel(idx: Int) = WeatherPanel(
                 pictocode   = pictos.getInt(idx),
@@ -537,7 +551,8 @@ class DashboardPaneContent(
                 humidity    = humids?.optInt(idx, 0) ?: 0,
                 uvIndex     = uvs?.optInt(idx, 0) ?: 0,
                 precipMm    = precips?.optDouble(idx, 0.0) ?: 0.0,
-                pressureHpa = press?.optDouble(idx, 0.0) ?: 0.0
+                pressureHpa = press?.optDouble(idx, 0.0) ?: 0.0,
+                rainspot    = rainspots?.optString(idx, "") ?: ""
             )
 
             lastLocationName = root.optJSONObject("metadata")?.optString("name")?.takeIf { it.isNotBlank() }
