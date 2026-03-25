@@ -284,6 +284,7 @@ class AppsGridPaneContent(
         cell.onFocusRequested = { moveFocus(index) }
         cell.setOnClickListener { launchApp(app) }
         if (!filterOn && app.packageName in hiddenPkgs) cell.alpha = 0.3f
+        parent.addView(cell)
         return cell
     }
 

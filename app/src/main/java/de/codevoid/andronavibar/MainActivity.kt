@@ -167,6 +167,12 @@ class MainActivity : Activity() {
         }
 
         updateFocus()
+
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.ACCESS_COARSE_LOCATION),
+                LOCATION_PERMISSION_REQUEST)
+        }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -802,10 +808,6 @@ class MainActivity : Activity() {
             val p = buttons.indexOf(btn) + 1
             activateToggleButton(p) { showWidgetPane(id) }
         }
-        btn.onAppsGridActivated = { _ ->
-            val p = buttons.indexOf(btn) + 1
-            activateToggleButton(p) { showAllAppsPane() }
-        }
         btn.onMusicPlayerActivated = { pkg ->
             val p = buttons.indexOf(btn) + 1
             activateToggleButton(p) { showMusicPlayerPane(pkg) }
@@ -999,5 +1001,6 @@ class MainActivity : Activity() {
         private const val BIND_WIDGET_REQUEST_CODE        = 1002
         private const val CONFIGURE_WIDGET_REQUEST_CODE   = 1003
         private const val APP_WIDGET_HOST_ID              = 1536
+        private const val LOCATION_PERMISSION_REQUEST     = 1004
     }
 }
