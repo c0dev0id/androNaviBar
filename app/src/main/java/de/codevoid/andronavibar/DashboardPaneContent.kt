@@ -24,6 +24,7 @@ import android.widget.TextView
 import com.airbnb.lottie.LottieAnimationView
 import com.airbnb.lottie.LottieDrawable
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import de.codevoid.andronavibar.ui.FocusableButton
 import de.codevoid.andronavibar.ui.RainspotView
 import kotlinx.coroutines.CoroutineScope
@@ -456,31 +457,39 @@ class DashboardPaneContent(
         if (context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) return
 
-        LocationServices.getFusedLocationProviderClient(context)
-            .lastLocation
-            .addOnSuccessListener { location ->
-                location ?: return@addOnSuccessListener
-
-                val now = System.currentTimeMillis()
-                val ageExpired = (now - lastFetchTime) >= WEATHER_MIN_AGE_MS
-                val movedFar = lastFetchLoc?.let { prev ->
-                    val results = FloatArray(1)
-                    Location.distanceBetween(prev.latitude, prev.longitude,
-                        location.latitude, location.longitude, results)
-                    results[0] >= WEATHER_MIN_DISTANCE_M
-                } ?: true
-
-                if (!ageExpired && !movedFar) return@addOnSuccessListener
-
-                lastFetchTime = now
-                lastFetchLoc  = location
-
-                scope.launch {
-                    val data = fetchWeather(location.latitude, location.longitude)
-                        ?: return@launch
-                    withContext(Dispatchers.Main) { applyWeather(data) }
-                }
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        client.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                fetchWeatherForLocation(location)
+            } else {
+                // No cached location (common on WiFi-only devices with no GPS).
+                // Request a fresh fix using network/WiFi positioning.
+                client.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                    .addOnSuccessListener { fresh -> fresh?.let { fetchWeatherForLocation(it) } }
             }
+        }
+    }
+
+    private fun fetchWeatherForLocation(location: Location) {
+        val now = System.currentTimeMillis()
+        val ageExpired = (now - lastFetchTime) >= WEATHER_MIN_AGE_MS
+        val movedFar = lastFetchLoc?.let { prev ->
+            val results = FloatArray(1)
+            Location.distanceBetween(prev.latitude, prev.longitude,
+                location.latitude, location.longitude, results)
+            results[0] >= WEATHER_MIN_DISTANCE_M
+        } ?: true
+
+        if (!ageExpired && !movedFar) return
+
+        lastFetchTime = now
+        lastFetchLoc  = location
+
+        scope.launch {
+            val data = fetchWeather(location.latitude, location.longitude)
+                ?: return@launch
+            withContext(Dispatchers.Main) { applyWeather(data) }
+        }
     }
 
     private fun applyWeather(data: WeatherData) {
