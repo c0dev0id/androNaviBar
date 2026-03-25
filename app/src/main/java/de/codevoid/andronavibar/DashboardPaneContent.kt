@@ -671,7 +671,9 @@ class DashboardPaneContent(
 
         // Location name + last refresh time
         val footerParts = buildList {
-            lastLocationName?.let { add(it) }
+            val loc = lastLocationName
+                ?: lastFetchLoc?.let { "%.4f, %.4f".format(it.latitude, it.longitude) }
+            loc?.let { add(it) }
             if (lastFetchTime > 0L)
                 add("Updated ${SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(lastFetchTime))}")
         }
