@@ -491,11 +491,9 @@ class MainActivity : Activity() {
         activeButtonIndex = -1
     }
 
-    /** Trigger a data reload on whichever pane is currently active. */
+    /** Send ACTION_APPWIDGET_UPDATE to the active widget pane, if any. */
     private fun refreshCurrentPane() {
-        activeDashboardPane?.refresh()
         activeWidgetPane?.refresh()
-        activeMusicPlayerPane?.refresh()
     }
 
     /**
