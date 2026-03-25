@@ -590,9 +590,9 @@ class DashboardPaneContent(
         detailDialog?.dismiss()
 
         val res    = context.resources
-        val p      = res.dpToPx(40)
-        val iconSz = res.dpToPx(128)
-        val arrSz  = res.dpToPx(64)
+        val p      = res.dpToPx(24)
+        val iconSz = res.dpToPx(100)
+        val arrSz  = res.dpToPx(52)
 
         val dialog = Dialog(context)
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
@@ -631,7 +631,7 @@ class DashboardPaneContent(
         // Temperature
         content.addView(TextView(context).apply {
             text = "${panel.tempC.toInt()}°C"
-            textSize = 96f
+            textSize = 70f
             setTextColor(context.getColor(R.color.text_primary))
             gravity = Gravity.CENTER
             letterSpacing = -0.02f
@@ -712,16 +712,24 @@ class DashboardPaneContent(
             text = "Close"
             textSize = 28f
             isFocusedButton = true
-            layoutParams = LinearLayout.LayoutParams(MATCH, res.dpToPx(80)).apply {
-                topMargin = res.dpToPx(24)
+            layoutParams = LinearLayout.LayoutParams(MATCH, res.dpToPx(52)).apply {
+                topMargin = res.dpToPx(12)
             }
             setOnClickListener { dialog.dismiss() }
         })
 
-        dialog.setContentView(content)
+        // Wrap in a FrameLayout so the content card centers vertically inside the
+        // bounded window height, keeping it clear of the screen edges.
+        val wrapper = FrameLayout(context)
+        wrapper.addView(content, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER_VERTICAL))
+        dialog.setContentView(wrapper)
         dialog.window?.apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            setLayout(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            val edgeMargin = res.dpToPx(40)
+            setLayout(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                context.resources.displayMetrics.heightPixels - edgeMargin * 2
+            )
             addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             setDimAmount(0.7f)
         }
