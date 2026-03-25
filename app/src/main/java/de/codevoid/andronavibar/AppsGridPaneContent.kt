@@ -1,15 +1,12 @@
 package de.codevoid.andronavibar
 
-import android.app.AppOpsManager
 import android.app.Dialog
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
-import android.os.Process
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -28,21 +25,14 @@ class AppsGridPaneContent(
     private var allApps: List<AppEntry>
 ) : PaneContent {
 
-    // ── Sort / filter state ──────────────────────────────────────────────────
+    // ── Filter state ─────────────────────────────────────────────────────────
 
-    private enum class SortMode(val label: String) {
-        NAME_ASC("Name ↑"), NAME_DESC("Name ↓"),
-        AUTHOR_ASC("Author ↑"), AUTHOR_DESC("Author ↓"),
-        USED_ASC("Used ↑"), USED_DESC("Used ↓");
-        fun next() = values()[(ordinal + 1) % values().size]
-    }
-
-    private var sortMode = SortMode.valueOf(
-        prefs.getString(PREF_SORT, SortMode.NAME_ASC.name) ?: SortMode.NAME_ASC.name
-    )
     private var filterOn = prefs.getBoolean(PREF_FILTER, true)
     private val hiddenPkgs: MutableSet<String> =
         prefs.getStringSet(PREF_HIDDEN, emptySet())!!.toMutableSet()
+
+    /** Active letter-range label, e.g. "ABC"; null = show all. */
+    private var activeRange: String? = null
 
     private var displayedApps: List<AppEntry> = emptyList()
     private val iconCache = mutableMapOf<String, android.graphics.drawable.Drawable?>()
@@ -53,7 +43,7 @@ class AppsGridPaneContent(
     private var gridContainer: FrameLayout? = null
     private var scrollView: ScrollView? = null
     private var cells: List<LauncherButton> = emptyList()
-    private var sortBtn: FocusableButton? = null
+    private var rangeBtns: List<FocusableButton> = emptyList()
     private var filterBtn: FocusableButton? = null
     private var focusIndex = 0
 
@@ -79,7 +69,7 @@ class AppsGridPaneContent(
         outerView = outer
         container.addView(outer)
 
-        outer.addView(buildSortBar())
+        outer.addView(buildFilterBar())
 
         val gc = FrameLayout(context).apply {
             layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
@@ -107,7 +97,7 @@ class AppsGridPaneContent(
         gridContainer  = null
         scrollView     = null
         cells          = emptyList()
-        sortBtn        = null
+        rangeBtns      = emptyList()
         filterBtn      = null
     }
 
@@ -154,14 +144,14 @@ class AppsGridPaneContent(
         cells.getOrNull(focusIndex)?.isFocusedButton = false
     }
 
-    // ── Sort bar ─────────────────────────────────────────────────────────────
+    // ── Filter bar ───────────────────────────────────────────────────────────
 
-    private fun buildSortBar(): LinearLayout {
-        val res = context.resources
-        val barH  = res.dpToPx(BAR_HEIGHT_DP)
-        val hPad  = res.dpToPx(12)
-        val vPad  = res.dpToPx(8)
-        val btnH  = barH - vPad * 2
+    private fun buildFilterBar(): LinearLayout {
+        val res  = context.resources
+        val barH = res.dpToPx(BAR_HEIGHT_DP)
+        val vPad = res.dpToPx(8)
+        val hPad = res.dpToPx(6)
+        val btnH = barH - vPad * 2
 
         val bar = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -171,26 +161,41 @@ class AppsGridPaneContent(
             setBackgroundColor(context.getColor(R.color.surface_dark))
         }
 
-        val sort = FocusableButton(context).apply {
-            text = sortMode.label
-            textSize = 18f
-            layoutParams = LinearLayout.LayoutParams(WRAP, btnH)
-            setOnClickListener { cycleSortMode() }
+        // Letter-range buttons — equal weight, tap once to activate, tap again to clear
+        val built = mutableListOf<FocusableButton>()
+        for (range in RANGES) {
+            val btn = FocusableButton(context).apply {
+                text = range
+                textSize = 13f
+                layoutParams = LinearLayout.LayoutParams(0, btnH, 1f)
+                backgroundTintList = rangeTint(range)
+                setOnClickListener { selectRange(if (activeRange == range) null else range) }
+            }
+            bar.addView(btn)
+            built.add(btn)
         }
-        sortBtn = sort
+        rangeBtns = built
 
+        // Divider
+        bar.addView(View(context).apply {
+            layoutParams = LinearLayout.LayoutParams(res.dpToPx(1), MATCH).apply {
+                setMargins(res.dpToPx(6), 0, res.dpToPx(6), 0)
+            }
+            setBackgroundColor(context.getColor(R.color.text_secondary))
+            alpha = 0.2f
+        })
+
+        // Hide/show filter toggle
         val filter = FocusableButton(context).apply {
             text = filterLabel()
-            textSize = 18f
-            layoutParams = LinearLayout.LayoutParams(WRAP, btnH)
+            textSize = 15f
+            layoutParams = LinearLayout.LayoutParams(res.dpToPx(110), btnH)
             backgroundTintList = filterTint()
             setOnClickListener { toggleFilter() }
         }
         filterBtn = filter
-
-        bar.addView(sort)
-        bar.addView(View(context).apply { layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f) })
         bar.addView(filter)
+
         return bar
     }
 
@@ -198,11 +203,14 @@ class AppsGridPaneContent(
     private fun filterTint() = ColorStateList.valueOf(
         context.getColor(if (filterOn) R.color.button_active else R.color.button_inactive)
     )
+    private fun rangeTint(range: String) = ColorStateList.valueOf(
+        context.getColor(if (activeRange == range) R.color.button_active else R.color.button_inactive)
+    )
 
-    private fun cycleSortMode() {
-        sortMode = sortMode.next()
-        prefs.edit().putString(PREF_SORT, sortMode.name).apply()
-        sortBtn?.text = sortMode.label
+    private fun selectRange(range: String?) {
+        activeRange = range
+        focusIndex = 0
+        rangeBtns.forEachIndexed { i, btn -> btn.backgroundTintList = rangeTint(RANGES[i]) }
         rebuildGrid()
     }
 
@@ -217,17 +225,19 @@ class AppsGridPaneContent(
     // ── Grid ─────────────────────────────────────────────────────────────────
 
     private fun buildDisplayList() {
-        val lastUsed = getLastUsedMap()
-        val base = if (filterOn) allApps.filter { it.packageName !in hiddenPkgs } else allApps
-        displayedApps = when (sortMode) {
-            SortMode.NAME_ASC    -> base.sortedBy { it.label.lowercase() }
-            SortMode.NAME_DESC   -> base.sortedByDescending { it.label.lowercase() }
-            SortMode.AUTHOR_ASC  -> base.sortedBy { authorKey(it.packageName) }
-            SortMode.AUTHOR_DESC -> base.sortedByDescending { authorKey(it.packageName) }
-            SortMode.USED_ASC    -> base.sortedBy { lastUsed[it.packageName] ?: 0L }
-            SortMode.USED_DESC   -> base.sortedByDescending { lastUsed[it.packageName] ?: 0L }
-        }
+        val base   = if (filterOn) allApps.filter { it.packageName !in hiddenPkgs } else allApps
+        val ranged = activeRange?.let { r -> base.filter { matchesRange(it.label, r) } } ?: base
+        displayedApps = ranged.sortedBy { it.label.lowercase() }
         focusIndex = focusIndex.coerceIn(0, (displayedApps.size - 1).coerceAtLeast(0))
+    }
+
+    /**
+     * Returns true if [label]'s first character falls within [range].
+     * "YZ*" also matches digits, symbols, and any non-A-to-X character.
+     */
+    private fun matchesRange(label: String, range: String): Boolean {
+        val first = label.firstOrNull()?.uppercaseChar() ?: return range == "YZ*"
+        return if (range == "YZ*") first !in 'A'..'X' else range.indexOf(first) >= 0
     }
 
     private fun rebuildGrid(preserveScroll: Boolean = false) {
@@ -349,27 +359,6 @@ class AppsGridPaneContent(
         rebuildGrid(preserveScroll = true)
     }
 
-    // ── Last used ─────────────────────────────────────────────────────────────
-
-    private fun getLastUsedMap(): Map<String, Long> {
-        if (!sortMode.name.startsWith("USED")) return emptyMap()
-        val appOps = context.getSystemService(AppOpsManager::class.java) ?: return emptyMap()
-        val granted = appOps.unsafeCheckOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName
-        ) == AppOpsManager.MODE_ALLOWED
-        if (!granted) return emptyMap()
-        return try {
-            val usm = context.getSystemService(UsageStatsManager::class.java) ?: return emptyMap()
-            val now = System.currentTimeMillis()
-            usm.queryUsageStats(UsageStatsManager.INTERVAL_BEST,
-                now - 365L * 24 * 3600_000, now)
-                ?.associate { it.packageName to it.lastTimeUsed } ?: emptyMap()
-        } catch (_: Exception) { emptyMap() }
-    }
-
-    /** Second segment of a package name (e.g. "google" from "com.google.maps"). */
-    private fun authorKey(pkg: String) = pkg.split(".").getOrElse(1) { pkg }.lowercase()
-
     // ── Context dialog ────────────────────────────────────────────────────────
 
     private inner class AppContextDialog(
@@ -476,12 +465,13 @@ class AppsGridPaneContent(
     // ── Constants ─────────────────────────────────────────────────────────────
 
     companion object {
-        private const val PREF_SORT   = "apps_sort_mode"
         private const val PREF_FILTER = "apps_filter_on"
         private const val PREF_HIDDEN = "apps_hidden_pkgs"
         private const val VISIBLE_ROWS  = 6
         private const val MARGIN_DP     = 4
         private const val COLUMNS       = 2
         private const val BAR_HEIGHT_DP = 60
+
+        val RANGES = listOf("ABC", "DEF", "GHI", "JKL", "MNO", "PQR", "STU", "VWX", "YZ*")
     }
 }

@@ -411,17 +411,24 @@ class DashboardPaneContent(
         val data1h  = root.getJSONObject("data_1h")
         val temps   = data1h.getJSONArray("temperature")
         val pictos  = data1h.getJSONArray("pictocode")
-        val wdirs   = data1h.getJSONArray("winddirection")
-        val wspds   = data1h.getJSONArray("windspeed")
+        // Wind arrays are optional — gracefully absent in some API response variants.
+        val wdirs   = data1h.optJSONArray("winddirection")
+        val wspds   = data1h.optJSONArray("windspeed")
         WeatherData(
             now    = WeatherPanel(
                 pictocode = current.getInt("pictocode"),
                 tempC     = current.getDouble("temperature"),
-                windDir   = current.getInt("winddirection"),
-                windSpeed = current.getDouble("windspeed")
+                windDir   = current.optInt("winddirection", 0),
+                windSpeed = current.optDouble("windspeed", 0.0)
             ),
-            plus3h = WeatherPanel(pictos.getInt(3), temps.getDouble(3), wdirs.getInt(3), wspds.getDouble(3)),
-            plus6h = WeatherPanel(pictos.getInt(6), temps.getDouble(6), wdirs.getInt(6), wspds.getDouble(6))
+            plus3h = WeatherPanel(
+                pictos.getInt(3), temps.getDouble(3),
+                wdirs?.optInt(3, 0) ?: 0, wspds?.optDouble(3, 0.0) ?: 0.0
+            ),
+            plus6h = WeatherPanel(
+                pictos.getInt(6), temps.getDouble(6),
+                wdirs?.optInt(6, 0) ?: 0, wspds?.optDouble(6, 0.0) ?: 0.0
+            )
         )
     } catch (_: Exception) { null }
 
