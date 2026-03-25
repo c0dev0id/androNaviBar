@@ -972,7 +972,7 @@ class GlobalConfigPaneContent(
                 topMargin = context.resources.dpToPx(16)
             }
             setOnClickListener {
-                (context as? android.app.Activity)?.let { activity ->
+                (this@GlobalConfigPaneContent.context as? android.app.Activity)?.let { activity ->
                     UpdateChecker.check(activity) { progress -> downloadProgress = progress }
                 }
             }
