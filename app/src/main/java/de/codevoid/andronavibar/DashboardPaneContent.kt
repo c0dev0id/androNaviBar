@@ -134,19 +134,15 @@ class DashboardPaneContent(
         }
         rootView = root
 
-        // ── Clock + date + weather group — optically centred at ~40% from top ──
-        //
-        // Weighted spacers (top:2 / bottom:3) lift the group to the optical centre.
-
         val column = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             layoutParams = FrameLayout.LayoutParams(MATCH, MATCH)
         }
 
-        // Top spacer — weight 2
+        // Top spacer — equal weight with bottom spacer for symmetric margins
         column.addView(View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 2f)
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
         })
 
         val clock = TextView(context).apply {
@@ -268,7 +264,7 @@ class DashboardPaneContent(
             }
 
             val rainspotView = RainspotView(context).apply {
-                val m = res.dpToPx(16)
+                val m = res.dpToPx(28)
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
                     topMargin    = res.dpToPx(8)
                     marginStart  = m
@@ -309,9 +305,9 @@ class DashboardPaneContent(
         panelLayouts = builtLayouts.toTypedArray()
         column.addView(weatherRow)
 
-        // Bottom spacer — weight 3
+        // Bottom spacer — equal weight with top spacer for symmetric margins
         column.addView(View(context).apply {
-            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 3f)
+            layoutParams = LinearLayout.LayoutParams(MATCH, 0, 1f)
         })
 
         root.addView(column)
