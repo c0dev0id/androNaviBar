@@ -712,8 +712,8 @@ class DashboardPaneContent(
             text = "Close"
             textSize = 28f
             isFocusedButton = true
-            layoutParams = LinearLayout.LayoutParams(MATCH, res.dpToPx(52)).apply {
-                topMargin = res.dpToPx(12)
+            layoutParams = LinearLayout.LayoutParams(MATCH, res.dpToPx(80)).apply {
+                topMargin = res.dpToPx(24)
             }
             setOnClickListener { dialog.dismiss() }
         })
