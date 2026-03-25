@@ -4,6 +4,10 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.location.Location
 import android.os.Handler
 import android.os.Looper
@@ -45,9 +49,43 @@ class DashboardPaneContent(
     private var gearButton: FocusableButton? = null
     private var clockView: TextView? = null
 
-    /** Holds the three ImageView/TextView pairs for the weather panels. */
-    private data class PanelViews(val emoji: ImageView, val temp: TextView)
+    /** Holds the live views for each weather panel. */
+    private data class PanelViews(
+        val emoji: ImageView,
+        val temp: TextView,
+        val arrow: TextView,
+        val speed: TextView
+    )
     private var panels: Array<PanelViews>? = null
+
+    // ── Compass ───────────────────────────────────────────────────────────────
+
+    /** Last device azimuth in degrees (0=N, 90=E, 180=S, 270=W), updated by sensor. */
+    private var deviceAzimuth = 0f
+    private var sensorManager: SensorManager? = null
+
+    private val rotMatrix  = FloatArray(9)
+    private val orientation = FloatArray(3)
+
+    private val compassListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            SensorManager.getRotationMatrixFromVector(rotMatrix, event.values)
+            SensorManager.getOrientation(rotMatrix, orientation)
+            deviceAzimuth = ((Math.toDegrees(orientation[0].toDouble()).toFloat() + 360) % 360)
+            updateArrowRotations()
+        }
+        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
+    }
+
+    private fun updateArrowRotations() {
+        val data = lastWeather ?: return
+        val panelData = listOf(data.now, data.plus3h, data.plus6h)
+        panels?.forEachIndexed { i, pv ->
+            pv.arrow.rotation = (panelData[i].windDir - deviceAzimuth + 360) % 360
+        }
+    }
+
+    // ── Timers ────────────────────────────────────────────────────────────────
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -66,6 +104,8 @@ class DashboardPaneContent(
             weatherHandler.postDelayed(this, WEATHER_CHECK_INTERVAL_MS)
         }
     }
+
+    // ── PaneContent ───────────────────────────────────────────────────────────
 
     override fun load(onReady: () -> Unit) { onReady() }
 
@@ -121,10 +161,11 @@ class DashboardPaneContent(
 
         // ── Weather — 3-panel row: Now / +3h / +6h ────────────────────────────
         //
-        // Each panel: emoji (bitmap path, avoids white-square fallback) + temp + label.
-        // All panels start invisible; made visible when data arrives.
+        // Each panel: emoji + temp + wind arrow (compass-relative) + wind speed + label.
+        // All data views start invisible; made visible when weather arrives.
 
-        val emojiSize = res.dpToPx(56)
+        val emojiSize  = res.dpToPx(56)
+        val arrowSize  = res.dpToPx(28)
         val panelLabels = listOf("Now", "+3h", "+6h")
         val cachedPanels = lastWeather?.let { listOf(it.now, it.plus3h, it.plus6h) }
 
@@ -138,6 +179,8 @@ class DashboardPaneContent(
 
         val builtPanels = mutableListOf<PanelViews>()
         for (i in 0..2) {
+            val p = cachedPanels?.getOrNull(i)
+
             val panel = LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
@@ -149,7 +192,6 @@ class DashboardPaneContent(
                 layoutParams = LinearLayout.LayoutParams(emojiSize, emojiSize).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
                 }
-                val p = cachedPanels?.getOrNull(i)
                 if (p != null) setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(p.pictocode)))
                 else visibility = View.INVISIBLE
             }
@@ -161,12 +203,45 @@ class DashboardPaneContent(
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
                     topMargin = res.dpToPx(6)
                 }
-                val p = cachedPanels?.getOrNull(i)
                 if (p != null) text = "${p.tempC.toInt()}°" else visibility = View.INVISIBLE
             }
 
+            // Wind row: rotating arrow + speed label side by side
+            val windRow = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    topMargin = res.dpToPx(8)
+                }
+            }
+
+            val arrow = TextView(context).apply {
+                text = "↑"
+                textSize = 20f
+                includeFontPadding = false
+                setTextColor(context.getColor(R.color.text_primary))
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(arrowSize, arrowSize)
+                if (p != null) rotation = (p.windDir - deviceAzimuth + 360) % 360
+                else visibility = View.INVISIBLE
+            }
+
+            val speed = TextView(context).apply {
+                textSize = 14f
+                setTextColor(context.getColor(R.color.text_secondary))
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
+                    marginStart = res.dpToPx(4)
+                }
+                if (p != null) text = "${p.windSpeed.toInt()} km/h" else visibility = View.INVISIBLE
+            }
+
+            windRow.addView(arrow)
+            windRow.addView(speed)
+
             panel.addView(emoji)
             panel.addView(temp)
+            panel.addView(windRow)
             panel.addView(TextView(context).apply {
                 text = panelLabels[i]
                 textSize = 16f
@@ -178,7 +253,7 @@ class DashboardPaneContent(
             })
 
             weatherRow.addView(panel)
-            builtPanels.add(PanelViews(emoji, temp))
+            builtPanels.add(PanelViews(emoji, temp, arrow, speed))
         }
 
         panels = builtPanels.toTypedArray()
@@ -210,12 +285,23 @@ class DashboardPaneContent(
         gearButton = gear
         root.addView(gear)
 
+        // ── Compass sensor ────────────────────────────────────────────────────
+
+        val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val rotSensor = sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        if (rotSensor != null) {
+            sensorManager = sm
+            sm.registerListener(compassListener, rotSensor, SensorManager.SENSOR_DELAY_UI)
+        }
+
         clockHandler.post(clockRunnable)
         weatherHandler.post(weatherRunnable)
         container.addView(root)
     }
 
     override fun unload() {
+        sensorManager?.unregisterListener(compassListener)
+        sensorManager = null
         clockHandler.removeCallbacks(clockRunnable)
         weatherHandler.removeCallbacks(weatherRunnable)
         scope.coroutineContext.cancelChildren()
@@ -285,6 +371,10 @@ class DashboardPaneContent(
             pv.emoji.visibility = View.VISIBLE
             pv.temp.text = "${p.tempC.toInt()}°"
             pv.temp.visibility = View.VISIBLE
+            pv.arrow.rotation = (p.windDir - deviceAzimuth + 360) % 360
+            pv.arrow.visibility = View.VISIBLE
+            pv.speed.text = "${p.windSpeed.toInt()} km/h"
+            pv.speed.visibility = View.VISIBLE
         }
     }
 
@@ -302,7 +392,12 @@ class DashboardPaneContent(
             } catch (_: Exception) { null }
         }
 
-    private data class WeatherPanel(val pictocode: Int, val tempC: Double)
+    private data class WeatherPanel(
+        val pictocode: Int,
+        val tempC: Double,
+        val windDir: Int,
+        val windSpeed: Double
+    )
 
     private data class WeatherData(
         val now:    WeatherPanel,
@@ -316,10 +411,17 @@ class DashboardPaneContent(
         val data1h  = root.getJSONObject("data_1h")
         val temps   = data1h.getJSONArray("temperature")
         val pictos  = data1h.getJSONArray("pictocode")
+        val wdirs   = data1h.getJSONArray("winddirection")
+        val wspds   = data1h.getJSONArray("windspeed")
         WeatherData(
-            now    = WeatherPanel(current.getInt("pictocode"), current.getDouble("temperature")),
-            plus3h = WeatherPanel(pictos.getInt(3), temps.getDouble(3)),
-            plus6h = WeatherPanel(pictos.getInt(6), temps.getDouble(6))
+            now    = WeatherPanel(
+                pictocode = current.getInt("pictocode"),
+                tempC     = current.getDouble("temperature"),
+                windDir   = current.getInt("winddirection"),
+                windSpeed = current.getDouble("windspeed")
+            ),
+            plus3h = WeatherPanel(pictos.getInt(3), temps.getDouble(3), wdirs.getInt(3), wspds.getDouble(3)),
+            plus6h = WeatherPanel(pictos.getInt(6), temps.getDouble(6), wdirs.getInt(6), wspds.getDouble(6))
         )
     } catch (_: Exception) { null }
 
