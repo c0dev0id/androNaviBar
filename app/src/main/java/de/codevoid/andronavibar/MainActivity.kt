@@ -89,8 +89,9 @@ class MainActivity : Activity() {
     /** Non-null while a URL launcher pane (browser-mode) is displayed in reservedArea. */
     private var activeUrlLauncherPane: UrlLauncherPaneContent? = null
 
-    /** Non-null while a widget pane is displayed in reservedArea. */
-    private var activeWidgetPane: WidgetPaneContent? = null
+    /** One persistent pane per widget ID — created on first show, kept in reservedArea (GONE). */
+    private val widgetPanes = mutableMapOf<Int, WidgetPaneContent>()
+    private var visibleWidgetId: Int = -1
 
     /** Non-null while an apps grid pane is displayed in reservedArea. */
     private var activeAppsGridPane: AppsGridPaneContent? = null
@@ -108,7 +109,6 @@ class MainActivity : Activity() {
     private var cachedWebUrl:         String? = null
     private var cachedAppLauncherPkg: String? = null
     private var cachedUrlLauncherUrl: String? = null
-    private var cachedWidgetId:       Int     = -1
     private var cachedMusicPkg:       String? = null
 
     /** Holds a partially-bound widget config while waiting for the system bind dialog result. */
@@ -493,7 +493,7 @@ class MainActivity : Activity() {
 
     /** Send ACTION_APPWIDGET_UPDATE to the active widget pane, if any. */
     private fun refreshCurrentPane() {
-        activeWidgetPane?.refresh()
+        widgetPanes[visibleWidgetId]?.refresh()
     }
 
     /**
@@ -506,7 +506,7 @@ class MainActivity : Activity() {
         activeWebPane?.hide()
         activeAppLauncherPane?.hide()
         activeUrlLauncherPane?.hide()
-        activeWidgetPane?.hide()
+        widgetPanes.values.forEach { it.hide() }
         activeAppsGridPane?.hide()
         activeMusicPlayerPane?.hide()
         activeGlobalConfigPane?.unload(); activeGlobalConfigPane = null
@@ -519,7 +519,7 @@ class MainActivity : Activity() {
         activeWebPane?.unload();            activeWebPane = null;            cachedWebUrl = null
         activeAppLauncherPane?.unload();    activeAppLauncherPane = null;    cachedAppLauncherPkg = null
         activeUrlLauncherPane?.unload();    activeUrlLauncherPane = null;    cachedUrlLauncherUrl = null
-        activeWidgetPane?.unload();         activeWidgetPane = null;         cachedWidgetId = -1
+        widgetPanes.values.forEach { it.unload() }; widgetPanes.clear()
         activeAppsGridPane?.unload();       activeAppsGridPane = null
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null;    cachedMusicPkg = null
         activeGlobalConfigPane?.unload();   activeGlobalConfigPane = null
@@ -638,9 +638,10 @@ class MainActivity : Activity() {
     private var widgetRebindAttempted = false
 
     private fun showWidgetPane(appWidgetId: Int) {
-        activeWidgetPane?.let { pane ->
-            if (cachedWidgetId == appWidgetId) { pane.show(reservedArea); return }
-            pane.unload(); activeWidgetPane = null; cachedWidgetId = -1
+        widgetPanes[appWidgetId]?.let { pane ->
+            pane.show(reservedArea)
+            visibleWidgetId = appWidgetId
+            return
         }
         val hv = widgetViews[appWidgetId] ?: run {
             // Not pre-created — attempt late creation (handles bindings configured
@@ -656,8 +657,8 @@ class MainActivity : Activity() {
         }
         val pane = WidgetPaneContent(this, hv, appWidgetId)
         pane.onContentReady = { hideLoading() }
-        activeWidgetPane = pane
-        cachedWidgetId = appWidgetId
+        widgetPanes[appWidgetId] = pane
+        visibleWidgetId = appWidgetId
         pane.load { pane.show(reservedArea); showLoading() }
         // After the first layout pass, check whether the widget hit a
         // SecurityException (stale content:// URI permissions on API 34).
