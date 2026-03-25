@@ -45,6 +45,7 @@ class AppsGridPaneContent(
         prefs.getStringSet(PREF_HIDDEN, emptySet())!!.toMutableSet()
 
     private var displayedApps: List<AppEntry> = emptyList()
+    private val iconCache = mutableMapOf<String, android.graphics.drawable.Drawable?>()
 
     // ── Views ────────────────────────────────────────────────────────────────
 
@@ -278,8 +279,10 @@ class AppsGridPaneContent(
         cell.layoutParams = LinearLayout.LayoutParams(tileW, tileH).apply {
             setMargins(marginPx, marginPx, marginPx, marginPx)
         }
-        cell.buttonIcon = try { context.packageManager.getApplicationIcon(app.packageName) }
-                          catch (_: Exception) { null }
+        cell.buttonIcon = iconCache.getOrPut(app.packageName) {
+            try { context.packageManager.getApplicationIcon(app.packageName) }
+            catch (_: Exception) { null }
+        }
         cell.text = app.label
         cell.onFocusRequested = { moveFocus(index) }
         cell.setOnClickListener { launchApp(app) }

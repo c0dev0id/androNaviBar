@@ -486,13 +486,18 @@ class MainActivity : Activity() {
         pane.load { pane.show(reservedArea) }
     }
 
+    private var cachedAllApps: List<AppEntry>? = null
+
     private fun showAllAppsPane() {
-        val intent = android.content.Intent(android.content.Intent.ACTION_MAIN)
-            .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-        @Suppress("DEPRECATION")
-        val apps = packageManager.queryIntentActivities(intent, 0)
-            .map { AppEntry(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
-            .sortedBy { it.label.lowercase() }
+        val apps = cachedAllApps ?: run {
+            val intent = android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(intent, 0)
+                .map { AppEntry(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
+                .sortedBy { it.label.lowercase() }
+                .also { cachedAllApps = it }
+        }
         showAppsGridPane(apps)
     }
 
