@@ -544,7 +544,6 @@ class GlobalConfigPaneContent(
             "app"    to "App",
             "url"    to "URL",
             "widget" to "Widget",
-            "apps"   to "Apps Grid",
             "music"  to "Music Player"
         )
 
@@ -608,7 +607,6 @@ class GlobalConfigPaneContent(
             "app"    -> buildAppConfig(index)
             "url"    -> buildUrlConfig(index)
             "widget" -> buildWidgetConfig(index)
-            "apps"   -> null
             "music"  -> buildMusicConfig(index)
             else     -> null
         }
@@ -1007,7 +1005,6 @@ class GlobalConfigPaneContent(
                 }
                 "url" -> pendingEdits["btn_${index}_label"] = ""
                 "widget" -> pendingEdits["btn_${index}_label"] = ""
-                "apps" -> pendingEdits["btn_${index}_label"] = "Apps"
                 "music" -> {
                     val first = installedApps.firstOrNull()
                     if (first != null) {
@@ -1295,7 +1292,7 @@ class GlobalConfigPaneContent(
     companion object {
         private val BUTTON_PREF_SUFFIXES = listOf(
             "_type", "_value", "_label", "_icon_type", "_icon_data",
-            "_widget_id", "_open_browser", "_apps"
+            "_widget_id", "_open_browser"
         )
     }
 }

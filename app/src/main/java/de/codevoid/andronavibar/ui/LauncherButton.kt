@@ -10,7 +10,6 @@ import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
-import de.codevoid.andronavibar.AppEntry
 import de.codevoid.andronavibar.ButtonConfig
 import de.codevoid.andronavibar.R
 import de.codevoid.andronavibar.UrlIcon
@@ -46,9 +45,6 @@ class LauncherButton @JvmOverloads constructor(
 
     /** Fired when a Widget button is activated; MainActivity shows the widget pane. */
     var onWidgetActivated: ((Int) -> Unit)? = null
-
-    /** Fired when an Apps Grid button is activated; MainActivity shows the apps grid pane. */
-    var onAppsGridActivated: ((List<AppEntry>) -> Unit)? = null
 
     /** Fired when a Music Player button is activated; MainActivity shows the music pane. */
     var onMusicPlayerActivated: ((String) -> Unit)? = null
@@ -130,19 +126,6 @@ class LauncherButton @JvmOverloads constructor(
                 val openInBrowser = prefs.getString("btn_${index}_open_browser", null) == "true"
                 ButtonConfig.UrlLauncher(value, label, UrlIcon.fromPrefs(prefs, index), openInBrowser)
             }
-            type == "apps" -> {
-                val label   = prefs.getString("btn_${index}_label", "") ?: ""
-                val appsRaw = prefs.getString("btn_${index}_apps", "") ?: ""
-                val entries = appsRaw.split("|").filter { it.isNotEmpty() }.mapNotNull { pkg ->
-                    val appLabel = try {
-                        context.packageManager.getApplicationLabel(
-                            context.packageManager.getApplicationInfo(pkg, 0)
-                        ).toString()
-                    } catch (_: Exception) { return@mapNotNull null }
-                    AppEntry(pkg, appLabel)
-                }
-                ButtonConfig.AppsGrid(entries, label, UrlIcon.fromPrefs(prefs, index))
-            }
             type == "music" -> {
                 val label     = prefs.getString("btn_${index}_label", "") ?: ""
                 val playerPkg = prefs.getString("btn_${index}_value", "") ?: ""
@@ -188,17 +171,6 @@ class LauncherButton @JvmOverloads constructor(
                 cleanStaleIconFile(newConfig.icon)
             }
 
-            is ButtonConfig.AppsGrid -> {
-                val edit = prefs.edit()
-                    .putString("btn_${index}_type",  "apps")
-                    .putString("btn_${index}_value", "")
-                    .putString("btn_${index}_label", newConfig.label)
-                    .putString("btn_${index}_apps",  newConfig.apps.joinToString("|") { it.packageName })
-                UrlIcon.writeTo(edit, index, newConfig.icon)
-                edit.apply()
-                cleanStaleIconFile(newConfig.icon)
-            }
-
             is ButtonConfig.MusicPlayer -> {
                 val edit = prefs.edit()
                     .putString("btn_${index}_type",  "music")
@@ -223,7 +195,6 @@ class LauncherButton @JvmOverloads constructor(
             .remove("btn_${index}_label")
             .remove("btn_${index}_widget_id")
             .remove("btn_${index}_open_browser")
-            .remove("btn_${index}_apps")
         UrlIcon.writeTo(edit, index, UrlIcon.None)
         edit.apply()
         applyConfig()
@@ -252,10 +223,6 @@ class LauncherButton @JvmOverloads constructor(
             }
             is ButtonConfig.WidgetLauncher -> {
                 text = cfg.label.ifEmpty { cfg.provider.packageName }
-                buttonIcon = resolveIcon(cfg.icon)
-            }
-            is ButtonConfig.AppsGrid -> {
-                text = cfg.label.ifEmpty { context.getString(R.string.tab_apps) }
                 buttonIcon = resolveIcon(cfg.icon)
             }
             is ButtonConfig.MusicPlayer -> {
@@ -290,9 +257,6 @@ class LauncherButton @JvmOverloads constructor(
             }
             is ButtonConfig.WidgetLauncher -> {
                 if (cfg.appWidgetId != -1) onWidgetActivated?.invoke(cfg.appWidgetId)
-            }
-            is ButtonConfig.AppsGrid -> {
-                onAppsGridActivated?.invoke(cfg.apps)
             }
             is ButtonConfig.MusicPlayer -> {
                 onMusicPlayerActivated?.invoke(cfg.playerPackage)

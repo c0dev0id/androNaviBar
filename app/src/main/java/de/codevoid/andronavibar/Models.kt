@@ -61,12 +61,6 @@ sealed class ButtonConfig {
         val icon: UrlIcon = UrlIcon.None
     ) : ButtonConfig()
 
-    data class AppsGrid(
-        val apps: List<AppEntry>,
-        val label: String,
-        val icon: UrlIcon = UrlIcon.None
-    ) : ButtonConfig()
-
     data class MusicPlayer(
         val playerPackage: String,      // fallback app to launch when nothing is playing
         val label: String,
