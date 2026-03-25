@@ -1,9 +1,12 @@
 package de.codevoid.andronavibar
 
 import android.annotation.SuppressLint
+import android.app.Dialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -14,6 +17,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -58,6 +62,7 @@ class DashboardPaneContent(
         val precip: TextView
     )
     private var panels: Array<PanelViews>? = null
+    private var detailDialog: Dialog? = null
 
     // ── Compass ───────────────────────────────────────────────────────────────
 
@@ -265,6 +270,14 @@ class DashboardPaneContent(
                 }
             })
 
+            val panelIndex = i
+            panel.isClickable = true
+            panel.setOnClickListener {
+                val data = lastWeather ?: return@setOnClickListener
+                val panelData = listOf(data.now, data.plus3h, data.plus6h)
+                showWeatherDetail(panelData[panelIndex], panelLabels[panelIndex])
+            }
+
             weatherRow.addView(panel)
             builtPanels.add(PanelViews(emoji, temp, arrow, speed, precip))
         }
@@ -313,6 +326,8 @@ class DashboardPaneContent(
     }
 
     override fun unload() {
+        detailDialog?.dismiss()
+        detailDialog = null
         sensorManager?.unregisterListener(compassListener)
         sensorManager = null
         clockHandler.removeCallbacks(clockRunnable)
@@ -326,10 +341,13 @@ class DashboardPaneContent(
         (root.parent as? ViewGroup)?.removeView(root)
     }
 
-    /** CONFIRM activates the gear; all other keys fall through to MainActivity. */
-    fun handleKey(keyCode: Int): Boolean = when (keyCode) {
-        66 -> { onConfigRequested?.invoke(); true }
-        else -> false
+    /** CONFIRM closes an open detail dialog, or activates the gear. Other keys fall through. */
+    fun handleKey(keyCode: Int): Boolean {
+        if (keyCode == 66) {
+            if (detailDialog != null) { detailDialog?.dismiss(); return true }
+            onConfigRequested?.invoke(); return true
+        }
+        return false
     }
 
     fun setInitialFocus() { gearButton?.isFocusedButton = true }
@@ -452,6 +470,124 @@ class DashboardPaneContent(
             )
         )
     } catch (_: Exception) { null }
+
+    private fun windCardinal(deg: Int): String = when ((deg + 22) / 45 % 8) {
+        0 -> "N"; 1 -> "NE"; 2 -> "E"; 3 -> "SE"
+        4 -> "S"; 5 -> "SW"; 6 -> "W"
+        else -> "NW"
+    }
+
+    private fun showWeatherDetail(panel: WeatherPanel, label: String) {
+        detailDialog?.dismiss()
+
+        val res    = context.resources
+        val p      = res.dpToPx(40)
+        val iconSz = res.dpToPx(128)
+        val arrSz  = res.dpToPx(64)
+
+        val dialog = Dialog(context)
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+
+        val content = LinearLayout(context).apply {
+            orientation  = LinearLayout.VERTICAL
+            gravity      = Gravity.CENTER_HORIZONTAL
+            minimumWidth = res.dpToPx(600)
+            setPadding(p, p, p, p)
+            background = GradientDrawable().apply {
+                setColor(context.getColor(R.color.surface_card))
+                cornerRadius = res.dpToPx(20).toFloat()
+            }
+        }
+
+        // Icon
+        content.addView(ImageView(context).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = LinearLayout.LayoutParams(iconSz, iconSz).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = res.dpToPx(8)
+            }
+            setImageDrawable(context.loadWeatherSvg(pictocodeIcon(panel.pictocode), iconSz))
+        })
+
+        // Time label
+        content.addView(TextView(context).apply {
+            text = label
+            textSize = 28f
+            setTextColor(context.getColor(R.color.text_secondary))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+        })
+
+        // Temperature
+        content.addView(TextView(context).apply {
+            text = "${panel.tempC.toInt()}°C"
+            textSize = 96f
+            setTextColor(context.getColor(R.color.text_primary))
+            gravity = Gravity.CENTER
+            letterSpacing = -0.02f
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+        })
+
+        // Wind row: rotating arrow + speed + cardinal
+        content.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                topMargin = res.dpToPx(8)
+            }
+            addView(TextView(context).apply {
+                text = "↑"
+                textSize = 40f
+                includeFontPadding = false
+                setTextColor(context.getColor(R.color.text_primary))
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(arrSz, arrSz)
+                rotation = (panel.windDir - deviceAzimuth + 360) % 360
+            })
+            addView(TextView(context).apply {
+                text = "${panel.windSpeed.toInt()} km/h  ${windCardinal(panel.windDir)}"
+                textSize = 36f
+                setTextColor(context.getColor(R.color.text_primary))
+                gravity = Gravity.CENTER_VERTICAL
+                layoutParams = LinearLayout.LayoutParams(WRAP, WRAP).apply {
+                    marginStart = res.dpToPx(8)
+                }
+            })
+        })
+
+        // Precipitation
+        content.addView(TextView(context).apply {
+            text = "${panel.precipProb}% rain probability"
+            textSize = 32f
+            setTextColor(context.getColor(R.color.text_secondary))
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                topMargin = res.dpToPx(8)
+            }
+        })
+
+        // Close button
+        content.addView(FocusableButton(context).apply {
+            text = "Close"
+            textSize = 28f
+            isFocusedButton = true
+            layoutParams = LinearLayout.LayoutParams(MATCH, res.dpToPx(80)).apply {
+                topMargin = res.dpToPx(32)
+            }
+            setOnClickListener { dialog.dismiss() }
+        })
+
+        dialog.setContentView(content)
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setLayout(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setDimAmount(0.7f)
+        }
+        dialog.setOnDismissListener { detailDialog = null }
+        dialog.show()
+        detailDialog = dialog
+    }
 
     private fun pictocodeIcon(code: Int): String = when (code) {
         1          -> "sun-svgrepo-com.svg"
