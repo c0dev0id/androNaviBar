@@ -94,6 +94,11 @@ class MusicPlayerPaneContent(
         albumView = null
         placeholderView = null
         controlViews = emptyList()
+        if (::playIcon.isInitialized) {
+            playIcon.bitmap.recycle()
+            pauseIcon.bitmap.recycle()
+            shuffleOffIcon.bitmap.recycle()
+        }
     }
 
     // ── Key handling ────────────────────────────────────────────────────────

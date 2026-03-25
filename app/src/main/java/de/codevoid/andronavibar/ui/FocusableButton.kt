@@ -69,12 +69,18 @@ open class FocusableButton @JvmOverloads constructor(
     protected val barW      = resources.dpToPx(BAR_WIDTH_DP).toFloat()
     protected val drawPath  = Path()
 
+    private val barFocusColor   = context.getColor(R.color.focus_ring)
+    private val barActiveColor  = context.getColor(R.color.colorPrimary)
+
     private val fillPaint     = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.button_active_body)
     }
     private val barPaint      = Paint(Paint.ANTI_ALIAS_FLAG)
     private val depthPaint    = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val progressPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val progressPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = context.getColor(R.color.colorPrimary)
+        alpha = 70
+    }
 
     init {
         cornerRadius = resources.dpToPx(CORNER_RADIUS_DP)
@@ -109,8 +115,6 @@ open class FocusableButton @JvmOverloads constructor(
 
         // 2. Download progress fill — grows left to right using colorPrimary.
         if (downloadProgress > 0f) {
-            progressPaint.color = context.getColor(R.color.colorPrimary)
-            progressPaint.alpha = 70
             canvas.save()
             canvas.clipPath(drawPath)
             canvas.drawRect(0f, 0f, w * downloadProgress, h, progressPaint)
@@ -133,9 +137,7 @@ open class FocusableButton @JvmOverloads constructor(
 
         // 6. Bar — white when focused (cursor), orange when active-only.
         if (isFocusedButton || isActiveButton) {
-            barPaint.color = context.getColor(
-                if (isFocusedButton) R.color.focus_ring else R.color.colorPrimary
-            )
+            barPaint.color = if (isFocusedButton) barFocusColor else barActiveColor
             canvas.save()
             canvas.clipPath(drawPath)
             canvas.drawRect(0f, 0f, barW, h, barPaint)

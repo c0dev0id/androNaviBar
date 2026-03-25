@@ -106,10 +106,12 @@ class DashboardPaneContent(
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    private val clockSdf = SimpleDateFormat("HH:mm", Locale.getDefault())
+
     private val clockHandler = Handler(Looper.getMainLooper())
     private val clockRunnable = object : Runnable {
         override fun run() {
-            clockView?.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+            clockView?.text = clockSdf.format(Date())
             clockHandler.postDelayed(this, 30_000)
         }
     }

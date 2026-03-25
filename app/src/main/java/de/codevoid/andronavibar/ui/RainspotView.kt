@@ -34,8 +34,18 @@ class RainspotView(context: Context) : View(context) {
     )
 
     private val cellPaint   = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val centerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val dotColor    = context.getColor(R.color.colorPrimary)
+    private val centerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = dotColor }
     private val cellRect    = RectF()
+
+    // Cached per-size geometry — recomputed only in onSizeChanged().
+    private val gap = 1.5f
+    private var cellW   = 0f
+    private var cellH   = 0f
+    private var cornerR = 0f
+    private var dotCx   = 0f
+    private var dotCy   = 0f
+    private var dotR    = 0f
 
     fun setData(s: String) {
         data = s
@@ -48,13 +58,18 @@ class RainspotView(context: Context) : View(context) {
         setMeasuredDimension(measuredWidth, measuredWidth)
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        cellW   = (w - gap * 8) / 7f
+        cellH   = (h - gap * 8) / 7f
+        cornerR = minOf(cellW, cellH) * 0.22f
+        dotCx   = gap + 3 * (cellW + gap) + cellW / 2f
+        dotCy   = gap + 3 * (cellH + gap) + cellH / 2f
+        dotR    = minOf(cellW, cellH) * 0.22f
+    }
+
     override fun onDraw(canvas: Canvas) {
         if (data.length < 49) return
-
-        val gap   = 1.5f
-        val cellW = (width  - gap * 8) / 7f
-        val cellH = (height - gap * 8) / 7f
-        val cornerR = minOf(cellW, cellH) * 0.22f
 
         for (i in 0 until 49) {
             val row   = i / 7
@@ -72,17 +87,13 @@ class RainspotView(context: Context) : View(context) {
         }
 
         // Center location dot (index 24 = row 3, col 3)
-        val cx = gap + 3 * (cellW + gap) + cellW / 2f
-        val cy = gap + 3 * (cellH + gap) + cellH / 2f
-        val dotR = minOf(cellW, cellH) * 0.22f
-
         centerPaint.style = Paint.Style.FILL
-        centerPaint.color = context.getColor(R.color.colorPrimary)
-        canvas.drawCircle(cx, cy, dotR, centerPaint)
+        canvas.drawCircle(dotCx, dotCy, dotR, centerPaint)
 
         centerPaint.style = Paint.Style.STROKE
         centerPaint.strokeWidth = 1.5f
         centerPaint.color = Color.WHITE
-        canvas.drawCircle(cx, cy, dotR + 1.5f, centerPaint)
+        canvas.drawCircle(dotCx, dotCy, dotR + 1.5f, centerPaint)
+        centerPaint.color = dotColor  // restore for next draw
     }
 }
