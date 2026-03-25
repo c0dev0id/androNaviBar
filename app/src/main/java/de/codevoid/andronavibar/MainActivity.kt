@@ -14,6 +14,8 @@ import android.graphics.Canvas
 import android.graphics.RectF
 import com.caverock.androidsvg.SVG
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.dynamicanimation.animation.SpringAnimation
 import androidx.dynamicanimation.animation.SpringForce
@@ -489,16 +491,32 @@ class MainActivity : Activity() {
     private var cachedAllApps: List<AppEntry>? = null
 
     private fun showAllAppsPane() {
-        val apps = cachedAllApps ?: run {
-            val intent = android.content.Intent(android.content.Intent.ACTION_MAIN)
-                .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-            @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(intent, 0)
-                .map { AppEntry(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
-                .sortedBy { it.label.lowercase() }
-                .also { cachedAllApps = it }
-        }
-        showAppsGridPane(apps)
+        val snapshot = cachedAllApps
+        val pane = AppsGridPaneContent(this, prefs, snapshot ?: emptyList())
+        // If showing from cache, hide the spinner once layout is done.
+        // If no cache yet, keep the spinner until the background query delivers data.
+        if (snapshot != null) pane.onContentReady = { hideLoading() }
+        activeAppsGridPane = pane
+        pane.load { pane.show(reservedArea); showLoading() }
+
+        Thread {
+            val fresh = loadAllApps()
+            Handler(Looper.getMainLooper()).post {
+                if (fresh != cachedAllApps) {
+                    cachedAllApps = fresh
+                    activeAppsGridPane?.updateAppList(fresh)
+                }
+                if (snapshot == null) hideLoading()
+            }
+        }.start()
+    }
+
+    private fun loadAllApps(): List<AppEntry> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        @Suppress("DEPRECATION")
+        return packageManager.queryIntentActivities(intent, 0)
+            .map { AppEntry(it.activityInfo.packageName, it.loadLabel(packageManager).toString()) }
+            .sortedBy { it.label.lowercase() }
     }
 
     private fun showWebPane(url: String) {
@@ -598,13 +616,6 @@ class MainActivity : Activity() {
 
         dismissCurrentPane()
         showWidgetPane(newId)
-    }
-
-    private fun showAppsGridPane(apps: List<AppEntry>) {
-        val pane = AppsGridPaneContent(this, prefs, apps)
-        pane.onContentReady = { hideLoading() }
-        activeAppsGridPane = pane
-        pane.load { pane.show(reservedArea); showLoading() }
     }
 
     private fun showMusicPlayerPane(playerPackage: String) {

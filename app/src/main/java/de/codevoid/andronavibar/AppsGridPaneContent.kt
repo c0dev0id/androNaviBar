@@ -25,7 +25,7 @@ import de.codevoid.andronavibar.ui.LauncherButton
 class AppsGridPaneContent(
     private val context: Context,
     private val prefs: SharedPreferences,
-    private val allApps: List<AppEntry>
+    private var allApps: List<AppEntry>
 ) : PaneContent {
 
     // ── Sort / filter state ──────────────────────────────────────────────────
@@ -133,6 +133,13 @@ class AppsGridPaneContent(
         if (activeDialog != null) return
         val app = displayedApps.getOrNull(focusIndex) ?: return
         activeDialog = AppContextDialog(app, isHidden = app.packageName in hiddenPkgs)
+    }
+
+    /** Replace the app list and rebuild the grid if currently visible. */
+    fun updateAppList(newApps: List<AppEntry>) {
+        allApps = newApps
+        iconCache.clear()
+        if (gridContainer != null) rebuildGrid()
     }
 
     fun setInitialFocus() {
