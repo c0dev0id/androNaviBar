@@ -22,7 +22,7 @@ android {
 
         buildConfigField("String", "GIT_SHA", "\"${gitSha()}\"")
         buildConfigField("String", "METEOBLUE_KEY", "\"${project.findProperty("meteoblue_key") ?: ""}\"")
-        buildConfigField("String", "METEOBLUE_URI", "\"https://my.meteoblue.com/packages/basic-1h_current\"")
+        buildConfigField("String", "METEOBLUE_URI", "\"https://my.meteoblue.com/packages/basic-1h\"")
     }
 
     buildFeatures {
