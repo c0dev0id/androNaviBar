@@ -98,12 +98,12 @@ class DashboardPaneContent(
         val data = lastWeather ?: return
         val ps   = panels ?: return
         if (ps.size < 3) return
-        ps[0].arrow.rotation   = (data.now.windDir    - deviceAzimuth + 360) % 360
-        ps[1].arrow.rotation   = (data.plus3h.windDir - deviceAzimuth + 360) % 360
-        ps[2].arrow.rotation   = (data.plus6h.windDir - deviceAzimuth + 360) % 360
-        ps[0].rainspot.rotation = (-deviceAzimuth + 360) % 360
-        ps[1].rainspot.rotation = (-deviceAzimuth + 360) % 360
-        ps[2].rainspot.rotation = (-deviceAzimuth + 360) % 360
+        ps[0].arrow.rotation = (data.now.windDir    - deviceAzimuth + 360) % 360
+        ps[1].arrow.rotation = (data.plus3h.windDir - deviceAzimuth + 360) % 360
+        ps[2].arrow.rotation = (data.plus6h.windDir - deviceAzimuth + 360) % 360
+        ps[0].rainspot.azimuth = deviceAzimuth
+        ps[1].rainspot.azimuth = deviceAzimuth
+        ps[2].rainspot.azimuth = deviceAzimuth
     }
 
     // ── Timers ────────────────────────────────────────────────────────────────
@@ -513,7 +513,6 @@ class DashboardPaneContent(
             pv.precip.text = precipText(p.precipProb, p.precipMm)
             pv.precip.visibility = View.VISIBLE
             pv.rainspot.setData(p.rainspot)
-            pv.rainspot.rotation = (-deviceAzimuth + 360) % 360
             pv.rainspot.visibility = View.VISIBLE
         }
     }

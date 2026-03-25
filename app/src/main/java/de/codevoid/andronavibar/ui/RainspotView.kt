@@ -7,6 +7,9 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.view.View
 import de.codevoid.andronavibar.R
+import kotlin.math.cos
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * Renders a meteoblue rainSPOT 7×7 grid.
@@ -14,10 +17,19 @@ import de.codevoid.andronavibar.R
  * The 49-character string is row-major, top-left first. Values 0–9 encode
  * precipitation intensity (0 = none, 9 = severe). Center cell (index 24)
  * is the queried location, marked with an orange dot.
+ *
+ * [azimuth] rotates the data so that the device's heading points to the top
+ * of the grid (heading-up), matching the wind direction arrows. The grid
+ * lines stay axis-aligned; only which source cell maps to each output cell
+ * changes. Nearest-neighbour sampling over the 7×7 discrete array.
  */
 class RainspotView(context: Context) : View(context) {
 
     private var data = ""
+
+    /** Device heading in degrees (0 = north, 90 = east). Triggers redraw on change. */
+    var azimuth: Float = 0f
+        set(value) { field = value; invalidate() }
 
     // 0 = no rain (transparent) → 9 = severe (bright cyan)
     private val rainColors = intArrayOf(
@@ -71,22 +83,36 @@ class RainspotView(context: Context) : View(context) {
     override fun onDraw(canvas: Canvas) {
         if (data.length < 49) return
 
-        for (i in 0 until 49) {
-            val row   = i / 7
-            val col   = i % 7
-            val value = (data[i].digitToIntOrNull() ?: 0).coerceIn(0, 9)
-            val left  = gap + col * (cellW + gap)
-            val top   = gap + row * (cellH + gap)
-            cellRect.set(left, top, left + cellW, top + cellH)
+        val rad  = Math.toRadians(azimuth.toDouble())
+        val cosA = cos(rad)
+        val sinA = sin(rad)
 
-            cellPaint.color = if (value == 0)
-                Color.argb(25, 255, 255, 255)   // subtle grid outline when dry
-            else
-                rainColors[value]
-            canvas.drawRoundRect(cellRect, cornerR, cornerR, cellPaint)
+        for (row in 0 until 7) {
+            for (col in 0 until 7) {
+                // Map output cell (row, col) back to source cell in north-up data.
+                // dr/dc are offsets from center (3,3). Rotating by +azimuth clockwise
+                // brings the heading direction to the top of the grid.
+                val dr = row - 3.0
+                val dc = col - 3.0
+                val srcRow = (dc * sinA + dr * cosA).roundToInt().coerceIn(0, 6) + 3
+                val srcCol = (dc * cosA - dr * sinA).roundToInt().coerceIn(0, 6) + 3
+                // coerceIn above is relative; adjust: coerce the final index
+                val si = srcRow.coerceIn(0, 6) * 7 + srcCol.coerceIn(0, 6)
+                val value = (data[si].digitToIntOrNull() ?: 0).coerceIn(0, 9)
+
+                val left = gap + col * (cellW + gap)
+                val top  = gap + row * (cellH + gap)
+                cellRect.set(left, top, left + cellW, top + cellH)
+
+                cellPaint.color = if (value == 0)
+                    Color.argb(25, 255, 255, 255)
+                else
+                    rainColors[value]
+                canvas.drawRoundRect(cellRect, cornerR, cornerR, cellPaint)
+            }
         }
 
-        // Center location dot (index 24 = row 3, col 3)
+        // Center location dot — always at cell (3,3), unaffected by data rotation.
         centerPaint.style = Paint.Style.FILL
         canvas.drawCircle(dotCx, dotCy, dotR, centerPaint)
 
