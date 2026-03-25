@@ -80,8 +80,8 @@ class LauncherButton @JvmOverloads constructor(
     override fun onDrawContent(canvas: Canvas) {
         buttonIcon?.let { drawable ->
             val vInset = resources.dpToPx(STROKE_WIDTH_DP) * 2
-            val hInset = barW.toInt() + resources.dpToPx(4)
             val iconSize = height - vInset * 2
+            val hInset = barW.toInt() + vInset  // centre icon in the slot square
             canvas.save()
             canvas.clipPath(drawPath)
             // Backing rectangle — slightly lighter column that frames the icon slot.
