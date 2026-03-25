@@ -196,16 +196,14 @@ class MainActivity : Activity() {
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_DPAD_CENTER -> {
-                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
-                        focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
-                    key66PressedAt = SystemClock.elapsedRealtime()
-                } else if (event.action == KeyEvent.ACTION_UP && key66PressedAt > 0L) {
-                    val held = SystemClock.elapsedRealtime() - key66PressedAt
-                    key66PressedAt = 0L
-                    if (held >= LONG_PRESS_MS) activeAppsGridPane?.handleLongPress()
-                    else handleKey(66)
-                } else if (event.action == KeyEvent.ACTION_DOWN) {
-                    handleKey(66)
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                    if (focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
+                        armKey66LongPress()
+                    } else {
+                        handleKey(66)
+                    }
+                } else if (event.action == KeyEvent.ACTION_UP) {
+                    if (cancelKey66LongPress()) handleKey(66)
                 }
                 return true
             }
@@ -232,7 +230,7 @@ class MainActivity : Activity() {
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
         pressedKeys.clear()
         key111PressedAt = 0L
-        key66PressedAt  = 0L
+        cancelKey66LongPress()
         scrollSpring?.cancel()
         scrollSpring = null
     }
@@ -249,10 +247,29 @@ class MainActivity : Activity() {
     private var key111PressedAt = 0L
 
     /**
-     * Monotonic timestamp of the most recent key-66 press when the apps grid pane
-     * has focus. Acts on release: short press = launch, long press = context dialog.
+     * Pending long-press runnable for key-66 when the apps grid has focus.
+     * Posted on press; fires after LONG_PRESS_MS. Cancelled on release if not
+     * yet fired (= short press → normal activate). Null when not pending.
      */
-    private var key66PressedAt = 0L
+    private var key66LongPressRunnable: Runnable? = null
+    private val longPressHandler = Handler(Looper.getMainLooper())
+
+    private fun armKey66LongPress() {
+        cancelKey66LongPress()
+        val r = Runnable {
+            key66LongPressRunnable = null
+            activeAppsGridPane?.handleLongPress()
+        }
+        key66LongPressRunnable = r
+        longPressHandler.postDelayed(r, LONG_PRESS_MS)
+    }
+
+    private fun cancelKey66LongPress(): Boolean {
+        val r = key66LongPressRunnable ?: return false
+        longPressHandler.removeCallbacks(r)
+        key66LongPressRunnable = null
+        return true
+    }
 
     private val remoteListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -268,9 +285,10 @@ class MainActivity : Activity() {
                     return
                 }
 
-                // Long-press confirm in the apps grid: wait for release to decide.
+                // Long-press confirm in the apps grid: arm a 500ms timer that fires
+                // immediately on hold, without waiting for key release.
                 if (keyCode == 66 && focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
-                    key66PressedAt = SystemClock.elapsedRealtime()
+                    armKey66LongPress()
                     return
                 }
 
@@ -280,11 +298,11 @@ class MainActivity : Activity() {
                 val keyCode = intent.getIntExtra("key_release", 0)
                 pressedKeys.remove(keyCode)
 
-                if (keyCode == 66 && key66PressedAt > 0L) {
-                    val held = SystemClock.elapsedRealtime() - key66PressedAt
-                    key66PressedAt = 0L
-                    if (held >= LONG_PRESS_MS) activeAppsGridPane?.handleLongPress()
-                    else handleKey(66)
+                if (keyCode == 66) {
+                    // If the runnable hadn't fired yet (released before 500ms) →
+                    // treat as short press. If it already fired, cancelKey66LongPress
+                    // returns false and we do nothing.
+                    if (cancelKey66LongPress()) handleKey(66)
                     return
                 }
 

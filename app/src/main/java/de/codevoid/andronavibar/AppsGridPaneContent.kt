@@ -293,6 +293,12 @@ class AppsGridPaneContent(
         cell.text = app.label
         cell.onFocusRequested = { moveFocus(index) }
         cell.setOnClickListener { launchApp(app) }
+        cell.setOnLongClickListener {
+            if (activeDialog == null) {
+                activeDialog = AppContextDialog(app, isHidden = app.packageName in hiddenPkgs)
+            }
+            true
+        }
         if (!filterOn && app.packageName in hiddenPkgs) cell.alpha = 0.3f
         parent.addView(cell)
         return cell
