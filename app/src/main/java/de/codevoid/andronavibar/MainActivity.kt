@@ -434,8 +434,8 @@ class MainActivity : Activity() {
 
     private fun setFocusOwner(owner: FocusOwner) {
         focusOwner = owner
-        updateFocus()
         if (owner == FocusOwner.PANE) {
+            updateFocus()
             activeDashboardPane?.setInitialFocus()
             activeMusicPlayerPane?.setInitialFocus()
             activeAppsGridPane?.setInitialFocus()
@@ -443,6 +443,10 @@ class MainActivity : Activity() {
             activeUrlLauncherPane?.setInitialFocus()
             activeGlobalConfigPane?.setInitialFocus()
         } else {
+            // Snap cursor to the active button so it's immediately highlighted on return.
+            if (activeButtonIndex >= 0) focusedIndex = activeButtonIndex
+            updateFocus()
+            scrollToFocused()
             activeDashboardPane?.clearFocus()
             activeMusicPlayerPane?.clearFocus()
             activeAppsGridPane?.clearFocus()
