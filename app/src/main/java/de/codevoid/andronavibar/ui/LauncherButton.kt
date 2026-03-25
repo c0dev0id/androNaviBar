@@ -4,9 +4,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
@@ -48,49 +45,6 @@ class LauncherButton @JvmOverloads constructor(
 
     /** Fired when a Music Player button is activated; MainActivity shows the music pane. */
     var onMusicPlayerActivated: ((String) -> Unit)? = null
-
-    // ── Full-height icon ──────────────────────────────────────────────────────
-
-    private val iconBackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(20, 255, 255, 255)  // ~8% white — defines the icon slot
-    }
-
-    /**
-     * Icon drawn as a full-height square on the left edge of the button.
-     * Setting this automatically adjusts paddingStart and triggers a redraw.
-     */
-    var buttonIcon: Drawable? = null
-        set(value) {
-            field = value
-            updateIconPadding()
-            invalidate()
-        }
-
-    private fun updateIconPadding() {
-        val iconWidth = if (buttonIcon != null && height > 0) height else 0
-        setPaddingRelative(barW.toInt() + iconWidth, paddingTop, paddingEnd, paddingBottom)
-    }
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        super.onSizeChanged(w, h, oldw, oldh)
-        updateIconPadding()
-    }
-
-    /** Draw the icon slot backing, then the icon, between the active fill and button text. */
-    override fun onDrawContent(canvas: Canvas) {
-        buttonIcon?.let { drawable ->
-            val vInset = resources.dpToPx(STROKE_WIDTH_DP) * 2
-            val iconSize = height - vInset * 2
-            val hInset = barW.toInt() + vInset  // centre icon in the slot square
-            canvas.save()
-            canvas.clipPath(drawPath)
-            // Backing rectangle — slightly lighter column that frames the icon slot.
-            canvas.drawRect(barW, 0f, barW + height, height.toFloat(), iconBackPaint)
-            drawable.setBounds(hInset, vInset, hInset + iconSize, vInset + iconSize)
-            drawable.draw(canvas)
-            canvas.restore()
-        }
-    }
 
     // ── Internal ─────────────────────────────────────────────────────────────
 

@@ -132,7 +132,7 @@ class MainActivity : Activity() {
         cleanupOrphanedWidgetId()
 
         // Dashboard fixed at top of column (panel position 0).
-        dashboardButton = createFixedButton(getString(R.string.dashboard)) { activateDashboardButton() }
+        dashboardButton = createFixedButton(getString(R.string.dashboard), R.drawable.ic_dashboard) { activateDashboardButton() }
         buttonPanel.addView(dashboardButton)
 
         val count = prefs.getInt("button_count", DEFAULT_BUTTON_COUNT)
@@ -151,7 +151,7 @@ class MainActivity : Activity() {
         }
 
         // Apps fixed at bottom of column (panel position buttons.size + 1).
-        appsButton = createFixedButton(getString(R.string.tab_apps)) { activateAppsButton() }
+        appsButton = createFixedButton(getString(R.string.tab_apps), R.drawable.ic_apps) { activateAppsButton() }
         buttonPanel.addView(appsButton)
 
         preCreateWidgetViews()
@@ -865,7 +865,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun createFixedButton(label: String, onClick: () -> Unit): FocusableButton {
+    private fun createFixedButton(label: String, iconRes: Int? = null, onClick: () -> Unit): FocusableButton {
         val btn = FocusableButton(this)
         val m = resources.dpToPx(4)
         btn.layoutParams = LinearLayout.LayoutParams(MATCH, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -876,6 +876,7 @@ class MainActivity : Activity() {
         btn.gravity = Gravity.CENTER_VERTICAL or Gravity.START
         btn.setTextColor(getColor(R.color.text_primary))
         btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.button_inactive))
+        if (iconRes != null) btn.buttonIcon = getDrawable(iconRes)
         btn.setOnClickListener { onClick() }
         return btn
     }

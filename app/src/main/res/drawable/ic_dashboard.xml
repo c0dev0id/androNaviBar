@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dashboard icon: automotive speedometer gauge.
+    24×24 viewport. Center (12,12), gauge radius 8.5.
+    Arc spans 300° from 7 o'clock to 5 o'clock, clockwise over the top.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Outer gauge arc: M(7 o'clock) A … (5 o'clock), large-arc + clockwise sweep -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_primary"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M7.75,19.36 A8.5,8.5 0 1,1 16.25,19.36" />
+
+    <!-- Tick at 8 o'clock (150°): (4.64,16.25)→(6.6,15.1) -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_primary"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M4.64,16.25 L6.6,15.1" />
+
+    <!-- Tick at 12 o'clock (270°): (12,3.5)→(12,5.5) -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_primary"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M12,3.5 L12,5.5" />
+
+    <!-- Tick at 4 o'clock (30°): (19.36,16.25)→(17.4,15.1) -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_primary"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M19.36,16.25 L17.4,15.1" />
+
+    <!-- Needle: center→10 o'clock (210°, radius 7): (12,12)→(5.94,8.5) -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/colorPrimary"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M12,12 L5.94,8.5" />
+
+    <!-- Centre pivot dot, radius 1.5 -->
+    <path
+        android:fillColor="@color/colorPrimary"
+        android:pathData="M12,10.5 a1.5,1.5 0 1,0 0,3 a1.5,1.5 0 1,0 0,-3" />
+
+</vector>

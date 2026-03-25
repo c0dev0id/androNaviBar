@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import com.google.android.material.button.MaterialButton
 import de.codevoid.andronavibar.R
@@ -18,7 +19,10 @@ import de.codevoid.andronavibar.dpToPx
  *
  * Owns the visual language: depth gradient, active fill, and the left accent
  * bar that doubles as both focus indicator (white) and active indicator (orange).
- * Subclasses can inject content between the fill and the text via [onDrawContent].
+ *
+ * Supports an optional [buttonIcon] drawn as a full-height square on the left
+ * edge (right of the accent bar). Setting it automatically adjusts paddingStart
+ * so the button text doesn't overlap the icon slot.
  */
 open class FocusableButton @JvmOverloads constructor(
     context: Context,
@@ -35,6 +39,25 @@ open class FocusableButton @JvmOverloads constructor(
     /** True when this button's content pane is currently displayed. Bar turns orange + body fill. */
     open var isActiveButton: Boolean = false
         set(value) { field = value; invalidate() }
+
+    // ── Icon ─────────────────────────────────────────────────────────────────
+
+    private val iconBackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(20, 255, 255, 255)  // 8% white — frames the icon slot
+    }
+
+    /** Icon drawn as a full-height square on the left edge. Setting this adjusts paddingStart. */
+    var buttonIcon: Drawable? = null
+        set(value) {
+            field = value
+            if (height > 0) updateIconPadding()
+            invalidate()
+        }
+
+    private fun updateIconPadding() {
+        val iconWidth = if (buttonIcon != null && height > 0) height else 0
+        setPaddingRelative(barW.toInt() + iconWidth, paddingTop, paddingEnd, paddingBottom)
+    }
 
     // ── Pre-allocated drawing objects ─────────────────────────────────────────
 
@@ -66,6 +89,7 @@ open class FocusableButton @JvmOverloads constructor(
             floatArrayOf(0f, 0.45f, 1f),
             Shader.TileMode.CLAMP
         )
+        if (buttonIcon != null) updateIconPadding()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -86,7 +110,7 @@ open class FocusableButton @JvmOverloads constructor(
             canvas.restore()
         }
 
-        // 3. Subclass content (e.g. icon in LauncherButton) — between fill and text.
+        // 3. Icon slot and icon drawable (if set).
         onDrawContent(canvas)
 
         // 4. Text, ripple, etc. from MaterialButton.
@@ -104,11 +128,22 @@ open class FocusableButton @JvmOverloads constructor(
         }
     }
 
-    /** Override to draw content between the active fill and the button text. */
-    open fun onDrawContent(canvas: Canvas) {}
+    /** Draws the icon slot backing rectangle and the [buttonIcon] drawable, if set. */
+    open fun onDrawContent(canvas: Canvas) {
+        buttonIcon?.let { drawable ->
+            val vInset = resources.dpToPx(STROKE_WIDTH_DP) * 2
+            val iconSize = height - vInset * 2
+            val hInset = barW.toInt() + vInset
+            canvas.save()
+            canvas.clipPath(drawPath)
+            canvas.drawRect(barW, 0f, barW + height, height.toFloat(), iconBackPaint)
+            drawable.setBounds(hInset, vInset, hInset + iconSize, vInset + iconSize)
+            drawable.draw(canvas)
+            canvas.restore()
+        }
+    }
 
     companion object {
-        /** Used as vertical inset for icon drawing in LauncherButton. */
         const val STROKE_WIDTH_DP = 6
         const val CORNER_RADIUS_DP = 16
         const val BAR_WIDTH_DP = 12
