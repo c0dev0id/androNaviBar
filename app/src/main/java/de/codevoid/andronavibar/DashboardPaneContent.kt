@@ -193,7 +193,7 @@ class DashboardPaneContent(
                 layoutParams = LinearLayout.LayoutParams(emojiSize, emojiSize).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
                 }
-                if (p != null) setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(p.pictocode)))
+                if (p != null) setImageDrawable(context.loadWeatherSvg(pictocodeIcon(p.pictocode), emojiSize))
                 else visibility = View.INVISIBLE
             }
 
@@ -377,10 +377,11 @@ class DashboardPaneContent(
 
     private fun applyWeather(data: WeatherData) {
         lastWeather = data
+        val sizePx = context.resources.dpToPx(88)
         val panelData = listOf(data.now, data.plus3h, data.plus6h)
         panels?.forEachIndexed { i, pv ->
             val p = panelData[i]
-            pv.emoji.setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(p.pictocode)))
+            pv.emoji.setImageDrawable(context.loadWeatherSvg(pictocodeIcon(p.pictocode), sizePx))
             pv.emoji.visibility = View.VISIBLE
             pv.temp.text = "${p.tempC.toInt()}°"
             pv.temp.visibility = View.VISIBLE
@@ -452,19 +453,19 @@ class DashboardPaneContent(
         )
     } catch (_: Exception) { null }
 
-    private fun pictocodeEmoji(code: Int): String = when (code) {
-        1          -> "☀"
-        2          -> "🌤"
-        3          -> "⛅"
-        4          -> "☁"
-        5, 6       -> "🌫"
-        7          -> "🌦"
-        8, 9       -> "🌧"
-        10, 11     -> "🌧"
-        12, 13     -> "🌨"
-        14, 15, 16 -> "❄"
-        17         -> "🌧"
-        else       -> "—"
+    private fun pictocodeIcon(code: Int): String = when (code) {
+        1          -> "sun-svgrepo-com.svg"
+        2          -> "lightcloud-svgrepo-com.svg"
+        3          -> "partlycloud-svgrepo-com.svg"
+        4          -> "cloud-svgrepo-com.svg"
+        5, 6       -> "fog-svgrepo-com.svg"
+        7          -> "lightrainsun-svgrepo-com.svg"
+        8, 9       -> "lightrain-svgrepo-com.svg"
+        10, 11     -> "rain-svgrepo-com.svg"
+        12, 13     -> "sleet-svgrepo-com.svg"
+        14, 15, 16 -> "snow-svgrepo-com.svg"
+        17         -> "rainthunder-svgrepo-com.svg"
+        else       -> "sun-svgrepo-com.svg"
     }
 
     companion object {
