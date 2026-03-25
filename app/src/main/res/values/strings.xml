@@ -31,4 +31,6 @@
     <string name="no_music_playing">No music playing</string>
     <string name="config_button">Configure</string>
     <string name="dashboard">Dashboard</string>
+    <string name="hide_app">Hide</string>
+    <string name="show_app">Show</string>
 </resources>

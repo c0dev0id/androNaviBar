@@ -608,7 +608,7 @@ class GlobalConfigPaneContent(
             "app"    -> buildAppConfig(index)
             "url"    -> buildUrlConfig(index)
             "widget" -> buildWidgetConfig(index)
-            "apps"   -> buildAppsGridConfig(index)
+            "apps"   -> null
             "music"  -> buildMusicConfig(index)
             else     -> null
         }
@@ -809,55 +809,6 @@ class GlobalConfigPaneContent(
         return wrapper
     }
 
-    private fun buildAppsGridConfig(index: Int): View {
-        val currentApps = getEditValue("btn_${index}_apps") ?: ""
-        val selectedPkgs = currentApps.split("|").filter { it.isNotEmpty() }.toMutableSet()
-
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(12) }
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        row.addView(TextView(context).apply {
-            text = "${selectedPkgs.size} app${if (selectedPkgs.size != 1) "s" else ""} selected"
-            textSize = 18f
-            setTextColor(context.getColor(R.color.text_secondary))
-            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
-        })
-
-        row.addView(makeActionButton("Choose\u2026") {
-            showAppsPickerDialog(index)
-        }.apply {
-            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
-        })
-
-        return row
-    }
-
-    private fun showAppsPickerDialog(index: Int) {
-        val currentApps = getEditValue("btn_${index}_apps") ?: ""
-        val selectedPkgs = currentApps.split("|").filter { it.isNotEmpty() }.toMutableSet()
-
-        val labels = installedApps.map {
-            it.loadLabel(context.packageManager).toString()
-        }.toTypedArray()
-        val packages = installedApps.map { it.activityInfo.packageName }
-        val checked = packages.map { selectedPkgs.contains(it) }.toBooleanArray()
-
-        AlertDialog.Builder(context)
-            .setTitle("Select apps")
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                if (isChecked) selectedPkgs.add(packages[which])
-                else selectedPkgs.remove(packages[which])
-            }
-            .setPositiveButton("Done") { _, _ ->
-                pendingEdits["btn_${index}_apps"] = selectedPkgs.joinToString("|")
-                rebuild()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
-    }
 
     private fun buildMusicConfig(index: Int): View {
         val currentPkg = getEditValue("btn_${index}_value")

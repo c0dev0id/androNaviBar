@@ -170,21 +170,36 @@ class MainActivity : Activity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            // Pass through when a text field owns Android focus (cursor navigation, etc.)
-            if (currentFocus is android.widget.EditText) return super.dispatchKeyEvent(event)
-            // Only handle keyboard-sourced events here. Physical remote buttons arrive via
-            // the broadcast receiver; intercepting their injected KeyEvents too would double-fire.
-            if (event.source and android.view.InputDevice.SOURCE_KEYBOARD == 0)
-                return super.dispatchKeyEvent(event)
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_DPAD_UP,
-                KeyEvent.KEYCODE_DPAD_DOWN,
-                KeyEvent.KEYCODE_DPAD_LEFT,
-                KeyEvent.KEYCODE_DPAD_RIGHT -> { handleKey(event.keyCode); return true }
-                KeyEvent.KEYCODE_ENTER,
-                KeyEvent.KEYCODE_NUMPAD_ENTER,
-                KeyEvent.KEYCODE_DPAD_CENTER -> { handleKey(66); return true }
+        // Pass through when a text field owns Android focus (cursor navigation, etc.)
+        if (currentFocus is android.widget.EditText) return super.dispatchKeyEvent(event)
+        // Only handle keyboard-sourced events here. Physical remote buttons arrive via
+        // the broadcast receiver; intercepting their injected KeyEvents too would double-fire.
+        if (event.source and android.view.InputDevice.SOURCE_KEYBOARD == 0)
+            return super.dispatchKeyEvent(event)
+
+        when (event.keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_LEFT,
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (event.action == KeyEvent.ACTION_DOWN) handleKey(event.keyCode)
+                return true
+            }
+            KeyEvent.KEYCODE_ENTER,
+            KeyEvent.KEYCODE_NUMPAD_ENTER,
+            KeyEvent.KEYCODE_DPAD_CENTER -> {
+                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+                        focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
+                    key66PressedAt = SystemClock.elapsedRealtime()
+                } else if (event.action == KeyEvent.ACTION_UP && key66PressedAt > 0L) {
+                    val held = SystemClock.elapsedRealtime() - key66PressedAt
+                    key66PressedAt = 0L
+                    if (held >= LONG_PRESS_MS) activeAppsGridPane?.handleLongPress()
+                    else handleKey(66)
+                } else if (event.action == KeyEvent.ACTION_DOWN) {
+                    handleKey(66)
+                }
+                return true
             }
         }
         return super.dispatchKeyEvent(event)
@@ -209,6 +224,7 @@ class MainActivity : Activity() {
         try { unregisterReceiver(remoteListener) } catch (_: Exception) {}
         pressedKeys.clear()
         key111PressedAt = 0L
+        key66PressedAt  = 0L
         scrollSpring?.cancel()
         scrollSpring = null
     }
@@ -224,6 +240,12 @@ class MainActivity : Activity() {
      */
     private var key111PressedAt = 0L
 
+    /**
+     * Monotonic timestamp of the most recent key-66 press when the apps grid pane
+     * has focus. Acts on release: short press = launch, long press = context dialog.
+     */
+    private var key66PressedAt = 0L
+
     private val remoteListener = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != LauncherApplication.REMOTE_ACTION) return
@@ -238,11 +260,25 @@ class MainActivity : Activity() {
                     return
                 }
 
+                // Long-press confirm in the apps grid: wait for release to decide.
+                if (keyCode == 66 && focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
+                    key66PressedAt = SystemClock.elapsedRealtime()
+                    return
+                }
+
                 handleKey(keyCode)
 
             } else if (intent.hasExtra("key_release")) {
                 val keyCode = intent.getIntExtra("key_release", 0)
                 pressedKeys.remove(keyCode)
+
+                if (keyCode == 66 && key66PressedAt > 0L) {
+                    val held = SystemClock.elapsedRealtime() - key66PressedAt
+                    key66PressedAt = 0L
+                    if (held >= LONG_PRESS_MS) activeAppsGridPane?.handleLongPress()
+                    else handleKey(66)
+                    return
+                }
 
                 if (keyCode == LauncherApplication.TOGGLE_KEY && key111PressedAt > 0L) {
                     val held = SystemClock.elapsedRealtime() - key111PressedAt
@@ -554,7 +590,7 @@ class MainActivity : Activity() {
     }
 
     private fun showAppsGridPane(apps: List<AppEntry>) {
-        val pane = AppsGridPaneContent(this, apps)
+        val pane = AppsGridPaneContent(this, prefs, apps)
         pane.onContentReady = { hideLoading() }
         activeAppsGridPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
@@ -766,9 +802,9 @@ class MainActivity : Activity() {
             val p = buttons.indexOf(btn) + 1
             activateToggleButton(p) { showWidgetPane(id) }
         }
-        btn.onAppsGridActivated = { apps ->
+        btn.onAppsGridActivated = { _ ->
             val p = buttons.indexOf(btn) + 1
-            activateToggleButton(p) { showAppsGridPane(apps) }
+            activateToggleButton(p) { showAllAppsPane() }
         }
         btn.onMusicPlayerActivated = { pkg ->
             val p = buttons.indexOf(btn) + 1
@@ -956,6 +992,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val TAG = "aR2Launcher"
+        private const val LONG_PRESS_MS                   = 600L
         private const val MAX_VISIBLE_BUTTONS             = 6
         private const val DEFAULT_BUTTON_COUNT            = 6
         private const val IMAGE_REQUEST_CODE              = 1001
