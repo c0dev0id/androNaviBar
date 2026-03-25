@@ -161,12 +161,18 @@ class AppsGridPaneContent(
             setBackgroundColor(context.getColor(R.color.surface_dark))
         }
 
-        // Letter-range buttons — equal weight, tap once to activate, tap again to clear
+        // Letter-range buttons — equal weight, tap once to activate, tap again to clear.
+        // Strip MaterialButton's default insets and horizontal padding so 3-char labels fit.
         val built = mutableListOf<FocusableButton>()
         for (range in RANGES) {
             val btn = FocusableButton(context).apply {
                 text = range
                 textSize = 13f
+                insetTop    = 0
+                insetBottom = 0
+                minWidth    = 0
+                minimumWidth = 0
+                setPaddingRelative(res.dpToPx(2), 0, res.dpToPx(2), 0)
                 layoutParams = LinearLayout.LayoutParams(0, btnH, 1f)
                 backgroundTintList = rangeTint(range)
                 setOnClickListener { selectRange(if (activeRange == range) null else range) }
@@ -199,9 +205,9 @@ class AppsGridPaneContent(
         return bar
     }
 
-    private fun filterLabel() = if (filterOn) "Filter: On" else "Filter: Off"
+    private fun filterLabel() = "Show All"
     private fun filterTint() = ColorStateList.valueOf(
-        context.getColor(if (filterOn) R.color.button_active else R.color.button_inactive)
+        context.getColor(if (!filterOn) R.color.button_active else R.color.button_inactive)
     )
     private fun rangeTint(range: String) = ColorStateList.valueOf(
         context.getColor(if (activeRange == range) R.color.button_active else R.color.button_inactive)
