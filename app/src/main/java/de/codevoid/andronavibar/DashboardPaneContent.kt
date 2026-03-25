@@ -725,7 +725,7 @@ class DashboardPaneContent(
         dialog.setContentView(wrapper)
         dialog.window?.apply {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            val edgeMargin = res.dpToPx(40)
+            val edgeMargin = res.dpToPx(20)
             setLayout(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 context.resources.displayMetrics.heightPixels - edgeMargin * 2
