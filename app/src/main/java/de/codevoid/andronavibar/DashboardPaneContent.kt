@@ -195,7 +195,7 @@ class DashboardPaneContent(
         // All data views start invisible; made visible when weather arrives.
 
         val emojiSize  = res.dpToPx(88)
-        val arrowSize  = res.dpToPx(40)
+        val arrowSize  = res.dpToPx(64)
         val cachedPanels = lastWeather?.let { listOf(it.now, it.plus3h, it.plus6h) }
 
         val weatherRow = LinearLayout(context).apply {
@@ -247,7 +247,7 @@ class DashboardPaneContent(
 
             val arrow = TextView(context).apply {
                 text = "↑"
-                textSize = 26f
+                textSize = 44f
                 includeFontPadding = false
                 setTextColor(context.getColor(R.color.text_primary))
                 gravity = Gravity.CENTER
