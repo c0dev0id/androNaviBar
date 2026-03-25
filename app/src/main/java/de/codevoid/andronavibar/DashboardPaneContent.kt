@@ -260,7 +260,7 @@ class DashboardPaneContent(
                     topMargin = res.dpToPx(4)
                 }
                 val p = cachedPanels?.getOrNull(i)
-                if (p != null) text = "${p.precipProb}% rain" else visibility = View.INVISIBLE
+                if (p != null) text = precipText(p.precipProb, p.precipMm) else visibility = View.INVISIBLE
             }
 
             panel.addView(emoji)
@@ -472,7 +472,7 @@ class DashboardPaneContent(
             pv.arrow.visibility = View.VISIBLE
             pv.speed.text = "${p.windSpeed.toInt()} km/h"
             pv.speed.visibility = View.VISIBLE
-            pv.precip.text = "${p.precipProb}% rain"
+            pv.precip.text = precipText(p.precipProb, p.precipMm)
             pv.precip.visibility = View.VISIBLE
         }
     }
@@ -544,6 +544,9 @@ class DashboardPaneContent(
             WeatherData(now = makePanel(0), plus3h = makePanel(3), plus6h = makePanel(6))
         } catch (_: Exception) { null }
     }
+
+    private fun precipText(prob: Int, mm: Double) =
+        if (mm > 0) "$prob%  ·  ${"%.1f".format(mm)} mm" else "$prob%"
 
     private fun windCardinal(deg: Int): String = when ((deg + 22) / 45 % 8) {
         0 -> "N"; 1 -> "NE"; 2 -> "E"; 3 -> "SE"
