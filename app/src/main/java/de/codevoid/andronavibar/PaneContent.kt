@@ -26,5 +26,6 @@ interface PaneContent {
     fun show(container: ViewGroup)
     fun hide() {}
     fun refresh() {}
+    fun handleKey(keyCode: Int): Boolean = false
     fun unload()
 }

@@ -102,6 +102,9 @@ class MainActivity : Activity() {
     /** Non-null while the global config pane is displayed in reservedArea. */
     private var activeGlobalConfigPane: GlobalConfigPaneContent? = null
 
+    /** The one pane currently visible and receiving remote key events. */
+    private var keyPane: PaneContent? = null
+
     // ── Pane cache keys ───────────────────────────────────────────────────────
     // Each tracks the identity of the currently-cached pane so we can detect
     // when a button's target has changed and the old pane must be replaced.
@@ -351,13 +354,7 @@ class MainActivity : Activity() {
         }
         when (focusOwner) {
             FocusOwner.PANE -> {
-                val handled = activeDashboardPane?.handleKey(keyCode)
-                    ?: activeAppsGridPane?.handleKey(keyCode)
-                    ?: activeMusicPlayerPane?.handleKey(keyCode)
-                    ?: activeAppLauncherPane?.handleKey(keyCode)
-                    ?: activeUrlLauncherPane?.handleKey(keyCode)
-                    ?: activeGlobalConfigPane?.handleKey(keyCode)
-                    ?: false
+                val handled = keyPane?.handleKey(keyCode) ?: false
                 if (!handled && keyCode == 22) setFocusOwner(FocusOwner.BUTTONS)
             }
             FocusOwner.BUTTONS -> when (keyCode) {
@@ -510,6 +507,7 @@ class MainActivity : Activity() {
         activeAppsGridPane?.hide()
         activeMusicPlayerPane?.hide()
         activeGlobalConfigPane?.unload(); activeGlobalConfigPane = null
+        keyPane = null
         hideLoading()
     }
 
@@ -523,6 +521,7 @@ class MainActivity : Activity() {
         activeAppsGridPane?.unload();       activeAppsGridPane = null
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null;    cachedMusicPkg = null
         activeGlobalConfigPane?.unload();   activeGlobalConfigPane = null
+        keyPane = null
         hideLoading()
     }
 
@@ -550,8 +549,7 @@ class MainActivity : Activity() {
 
     private fun showDashboardPane() {
         activeDashboardPane?.let { pane ->
-            pane.show(reservedArea)
-            return
+            pane.show(reservedArea); keyPane = pane; return
         }
         val pane = DashboardPaneContent(this)
         pane.onConfigRequested = {
@@ -560,20 +558,20 @@ class MainActivity : Activity() {
             setFocusOwner(FocusOwner.PANE)
         }
         activeDashboardPane = pane
-        pane.load { pane.show(reservedArea) }
+        pane.load { pane.show(reservedArea); keyPane = pane }
     }
 
     private var cachedAllApps: List<AppEntry>? = null
 
     private fun showAllAppsPane() {
         activeAppsGridPane?.let { pane ->
-            pane.show(reservedArea)
-            return
+            pane.show(reservedArea); keyPane = pane; return
         }
         val snapshot = cachedAllApps
         val pane = AppsGridPaneContent(this, prefs, snapshot ?: emptyList())
         if (snapshot != null) pane.onContentReady = { hideLoading() }
         activeAppsGridPane = pane
+        keyPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
 
         Thread {
@@ -598,19 +596,20 @@ class MainActivity : Activity() {
 
     private fun showWebPane(url: String) {
         activeWebPane?.let { pane ->
-            if (cachedWebUrl == url) { pane.show(reservedArea); return }
+            if (cachedWebUrl == url) { pane.show(reservedArea); keyPane = pane; return }
             pane.unload(); activeWebPane = null; cachedWebUrl = null
         }
         val pane = WebPaneContent(this, url)
         pane.onContentReady = { hideLoading() }
         activeWebPane = pane
         cachedWebUrl = url
+        keyPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
 
     private fun showAppLauncherPane(packageName: String, label: String) {
         activeAppLauncherPane?.let { pane ->
-            if (cachedAppLauncherPkg == packageName) { pane.show(reservedArea); return }
+            if (cachedAppLauncherPkg == packageName) { pane.show(reservedArea); keyPane = pane; return }
             pane.unload(); activeAppLauncherPane = null; cachedAppLauncherPkg = null
         }
         val pane = AppLauncherPaneContent(this, packageName, label) {
@@ -619,12 +618,13 @@ class MainActivity : Activity() {
         }
         activeAppLauncherPane = pane
         cachedAppLauncherPkg = packageName
+        keyPane = pane
         pane.load { pane.show(reservedArea) }
     }
 
     private fun showUrlLauncherPane(url: String, label: String, icon: UrlIcon, buttonIndex: Int) {
         activeUrlLauncherPane?.let { pane ->
-            if (cachedUrlLauncherUrl == url) { pane.show(reservedArea); return }
+            if (cachedUrlLauncherUrl == url) { pane.show(reservedArea); keyPane = pane; return }
             pane.unload(); activeUrlLauncherPane = null; cachedUrlLauncherUrl = null
         }
         val pane = UrlLauncherPaneContent(this, url, label, icon, buttonIndex) {
@@ -632,6 +632,7 @@ class MainActivity : Activity() {
         }
         activeUrlLauncherPane = pane
         cachedUrlLauncherUrl = url
+        keyPane = pane
         pane.load { pane.show(reservedArea) }
     }
 
@@ -639,7 +640,7 @@ class MainActivity : Activity() {
 
     private fun showWidgetPane(appWidgetId: Int) {
         widgetPanes[appWidgetId]?.let { pane ->
-            pane.show(reservedArea)
+            pane.show(reservedArea); keyPane = pane
             visibleWidgetId = appWidgetId
             return
         }
@@ -659,6 +660,7 @@ class MainActivity : Activity() {
         pane.onContentReady = { hideLoading() }
         widgetPanes[appWidgetId] = pane
         visibleWidgetId = appWidgetId
+        keyPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
         // After the first layout pass, check whether the widget hit a
         // SecurityException (stale content:// URI permissions on API 34).
@@ -711,13 +713,14 @@ class MainActivity : Activity() {
 
     private fun showMusicPlayerPane(playerPackage: String) {
         activeMusicPlayerPane?.let { pane ->
-            if (cachedMusicPkg == playerPackage) { pane.show(reservedArea); return }
+            if (cachedMusicPkg == playerPackage) { pane.show(reservedArea); keyPane = pane; return }
             pane.unload(); activeMusicPlayerPane = null; cachedMusicPkg = null
         }
         val pane = MusicPlayerPaneContent(this, playerPackage)
         pane.onContentReady = { hideLoading() }
         activeMusicPlayerPane = pane
         cachedMusicPkg = playerPackage
+        keyPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
     }
 
@@ -1102,6 +1105,7 @@ class MainActivity : Activity() {
             }
         })
         activeGlobalConfigPane = pane
+        keyPane = pane
         pane.load { pane.show(reservedArea) }
     }
 
