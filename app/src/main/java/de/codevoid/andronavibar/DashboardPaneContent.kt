@@ -520,7 +520,7 @@ class DashboardPaneContent(
             // All sub-arrays are optional — gracefully absent in some API response variants.
             val wdirs  = data1h.optJSONArray("winddirection")
             val wspds  = data1h.optJSONArray("windspeed")
-            val pprobs = data1h.optJSONArray("precipitationprobability")
+            val pprobs = data1h.optJSONArray("precipitation_probability")
             val felts  = data1h.optJSONArray("felttemperature")
             val humids = data1h.optJSONArray("relativehumidity")
             val uvs    = data1h.optJSONArray("uvindex")
@@ -531,7 +531,7 @@ class DashboardPaneContent(
                 pictocode   = pictos.getInt(idx),
                 tempC       = temps.getDouble(idx),
                 windDir     = wdirs?.optInt(idx, 0) ?: 0,
-                windSpeed   = wspds?.optDouble(idx, 0.0) ?: 0.0,
+                windSpeed   = (wspds?.optDouble(idx, 0.0) ?: 0.0) * 3.6,  // API: m/s → km/h
                 precipProb  = pprobs?.optInt(idx, 0) ?: 0,
                 feltTempC   = felts?.optDouble(idx, temps.getDouble(idx)) ?: temps.getDouble(idx),
                 humidity    = humids?.optInt(idx, 0) ?: 0,
