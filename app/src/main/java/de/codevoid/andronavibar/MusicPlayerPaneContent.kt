@@ -103,7 +103,7 @@ class MusicPlayerPaneContent(
 
     // ── Key handling ────────────────────────────────────────────────────────
 
-    fun handleKey(keyCode: Int): Boolean {
+    override fun handleKey(keyCode: Int): Boolean {
         return when (keyCode) {
             21 -> { moveFocus(focusIndex - 1); true }                                 // LEFT
             22 -> {                                                                    // RIGHT

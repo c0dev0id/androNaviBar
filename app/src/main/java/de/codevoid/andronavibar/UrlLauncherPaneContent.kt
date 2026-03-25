@@ -98,7 +98,7 @@ class UrlLauncherPaneContent(
     }
 
     /** Returns true when the key was consumed (CONFIRM opens the browser). */
-    fun handleKey(keyCode: Int): Boolean = when (keyCode) {
+    override fun handleKey(keyCode: Int): Boolean = when (keyCode) {
         66 -> { onOpenInBrowser(); true }
         else -> false
     }

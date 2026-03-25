@@ -90,7 +90,7 @@ class AppLauncherPaneContent(
     }
 
     /** Returns true when the key was consumed (CONFIRM launches the app). */
-    fun handleKey(keyCode: Int): Boolean = when (keyCode) {
+    override fun handleKey(keyCode: Int): Boolean = when (keyCode) {
         66 -> { onStartApp(); true }
         else -> false
     }

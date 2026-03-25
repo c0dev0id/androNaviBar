@@ -111,7 +111,7 @@ class AppsGridPaneContent(
 
     // ── Key handling ─────────────────────────────────────────────────────────
 
-    fun handleKey(keyCode: Int): Boolean {
+    override fun handleKey(keyCode: Int): Boolean {
         activeDialog?.let { return it.handleKey(keyCode) }
         if (displayedApps.isEmpty()) return false
         return when (keyCode) {

@@ -389,7 +389,7 @@ class DashboardPaneContent(
      *   false so MainActivity falls back to the button column); CONFIRM opens the popup.
      * - No panel focused: CONFIRM opens the config pane (gear).
      */
-    fun handleKey(keyCode: Int): Boolean {
+    override fun handleKey(keyCode: Int): Boolean {
         detailDialog?.let {
             if (keyCode == 66 || keyCode == 111) it.dismiss()
             return true

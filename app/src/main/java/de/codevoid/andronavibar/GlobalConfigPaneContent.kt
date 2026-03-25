@@ -1187,7 +1187,7 @@ class GlobalConfigPaneContent(
      * Handle a remote d-pad key. Returns true if consumed.
      * Returns false for RIGHT at the rightmost column so MainActivity exits the pane.
      */
-    fun handleKey(keyCode: Int): Boolean {
+    override fun handleKey(keyCode: Int): Boolean {
         val count = prefs.getInt("button_count", 6)
         return when (keyCode) {
             19 -> {  // UP
