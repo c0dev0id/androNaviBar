@@ -62,6 +62,8 @@ class DashboardPaneContent(
         val precip: TextView
     )
     private var panels: Array<PanelViews>? = null
+    private var panelLayouts: Array<LinearLayout>? = null
+    private var focusedPanelIndex = -1   // -1 = no panel focused
     private var detailDialog: Dialog? = null
 
     // ── Compass ───────────────────────────────────────────────────────────────
@@ -183,7 +185,8 @@ class DashboardPaneContent(
             }
         }
 
-        val builtPanels = mutableListOf<PanelViews>()
+        val builtPanels   = mutableListOf<PanelViews>()
+        val builtLayouts  = mutableListOf<LinearLayout>()
         for (i in 0..2) {
             val p = cachedPanels?.getOrNull(i)
 
@@ -280,9 +283,11 @@ class DashboardPaneContent(
 
             weatherRow.addView(panel)
             builtPanels.add(PanelViews(emoji, temp, arrow, speed, precip))
+            builtLayouts.add(panel)
         }
 
-        panels = builtPanels.toTypedArray()
+        panels      = builtPanels.toTypedArray()
+        panelLayouts = builtLayouts.toTypedArray()
         column.addView(weatherRow)
 
         // Bottom spacer — weight 3
@@ -338,20 +343,79 @@ class DashboardPaneContent(
         gearButton = null
         clockView = null
         panels = null
+        panelLayouts = null
+        focusedPanelIndex = -1
         (root.parent as? ViewGroup)?.removeView(root)
     }
 
-    /** CONFIRM closes an open detail dialog, or activates the gear. Other keys fall through. */
+    /**
+     * Key routing while the dashboard pane owns focus.
+     *
+     * - Detail dialog is modal: swallows all keys; CONFIRM or 111 close it.
+     * - With a panel focused: LEFT/RIGHT move between panels (RIGHT at edge returns
+     *   false so MainActivity falls back to the button column); CONFIRM opens the popup.
+     * - No panel focused: CONFIRM opens the config pane (gear).
+     */
     fun handleKey(keyCode: Int): Boolean {
-        if (keyCode == 66) {
-            if (detailDialog != null) { detailDialog?.dismiss(); return true }
-            onConfigRequested?.invoke(); return true
+        detailDialog?.let {
+            if (keyCode == 66 || keyCode == 111) it.dismiss()
+            return true
         }
+
+        if (focusedPanelIndex >= 0) {
+            return when (keyCode) {
+                21 -> { if (focusedPanelIndex > 0) movePanelFocus(focusedPanelIndex - 1); true }
+                22 -> if (focusedPanelIndex < 2) { movePanelFocus(focusedPanelIndex + 1); true } else false
+                66 -> {
+                    val data = lastWeather ?: return false
+                    val labels = listOf("Now", "+3h", "+6h")
+                    showWeatherDetail(
+                        listOf(data.now, data.plus3h, data.plus6h)[focusedPanelIndex],
+                        labels[focusedPanelIndex]
+                    )
+                    true
+                }
+                else -> false
+            }
+        }
+
+        if (keyCode == 66) { onConfigRequested?.invoke(); return true }
         return false
     }
 
-    fun setInitialFocus() { gearButton?.isFocusedButton = true }
-    fun clearFocus()       { gearButton?.isFocusedButton = false }
+    /** Called by MainActivity when LEFT is pressed on the button column to enter this pane. */
+    fun setInitialFocus() {
+        focusedPanelIndex = 2   // start at +6h (rightmost panel)
+        updatePanelFocus()
+        gearButton?.isFocusedButton = false
+    }
+
+    fun clearFocus() {
+        focusedPanelIndex = -1
+        updatePanelFocus()
+        gearButton?.isFocusedButton = false
+    }
+
+    private fun movePanelFocus(idx: Int) {
+        focusedPanelIndex = idx
+        updatePanelFocus()
+    }
+
+    private fun updatePanelFocus() {
+        val layouts  = panelLayouts ?: return
+        val res      = context.resources
+        val cornerR  = res.dpToPx(16).toFloat()
+        val strokeW  = res.dpToPx(3)
+        for (i in layouts.indices) {
+            layouts[i].background = if (i == focusedPanelIndex) {
+                GradientDrawable().apply {
+                    setColor(Color.argb(20, 255, 255, 255))
+                    setStroke(strokeW, context.getColor(R.color.focus_ring))
+                    cornerRadius = cornerR
+                }
+            } else null
+        }
+    }
 
     // ── Weather ───────────────────────────────────────────────────────────────
 
