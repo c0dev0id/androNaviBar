@@ -11,6 +11,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.google.android.gms.location.LocationServices
@@ -43,6 +44,7 @@ class DashboardPaneContent(
     private var rootView: FrameLayout? = null
     private var gearButton: FocusableButton? = null
     private var clockView: TextView? = null
+    private var weatherEmojiView: ImageView? = null
     private var weatherTempView: TextView? = null
     private var weatherCondView: TextView? = null
 
@@ -93,7 +95,7 @@ class DashboardPaneContent(
             textSize = 88f
             setTextColor(context.getColor(R.color.text_primary))
             gravity = Gravity.CENTER
-            letterSpacing = -0.02f   // tighten the wide numerals slightly
+            letterSpacing = -0.02f
         }
         clockView = clock
         column.addView(clock)
@@ -113,18 +115,36 @@ class DashboardPaneContent(
             textSize = 22f
             setTextColor(context.getColor(R.color.text_secondary))
             gravity = Gravity.CENTER
-            letterSpacing = 0.04f   // slightly open tracking for the date label
+            letterSpacing = 0.04f
         })
 
-        // Weather — temperature (large) + condition/high-low (small)
-        // Restored immediately from last session within the same app process.
+        // ── Weather ───────────────────────────────────────────────────────────
+        // Emoji is rendered via renderEmojiDrawable (bitmap path) to avoid the
+        // text-presentation fallback that shows as a white square on some devices.
+        // All three views start invisible; made visible when data arrives.
+
+        val emojiSize = res.dpToPx(72)
+        val weatherEmoji = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = LinearLayout.LayoutParams(emojiSize, emojiSize).apply {
+                topMargin = res.dpToPx(20)
+                gravity   = Gravity.CENTER_HORIZONTAL
+            }
+            if (lastPictocode >= 0) {
+                setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(lastPictocode)))
+            } else {
+                visibility = View.INVISIBLE
+            }
+        }
+        weatherEmojiView = weatherEmoji
+        column.addView(weatherEmoji)
 
         val weatherTemp = TextView(context).apply {
-            textSize = 36f
+            textSize = 48f
             setTextColor(context.getColor(R.color.text_primary))
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                topMargin = res.dpToPx(16)
+                topMargin = res.dpToPx(8)
             }
             if (lastTempText.isNotEmpty()) text = lastTempText else visibility = View.INVISIBLE
         }
@@ -132,7 +152,7 @@ class DashboardPaneContent(
         column.addView(weatherTemp)
 
         val weatherCond = TextView(context).apply {
-            textSize = 16f
+            textSize = 28f
             setTextColor(context.getColor(R.color.text_secondary))
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
@@ -182,6 +202,7 @@ class DashboardPaneContent(
         rootView = null
         gearButton = null
         clockView = null
+        weatherEmojiView = null
         weatherTempView = null
         weatherCondView = null
         (root.parent as? ViewGroup)?.removeView(root)
@@ -221,7 +242,7 @@ class DashboardPaneContent(
                     Location.distanceBetween(prev.latitude, prev.longitude,
                         location.latitude, location.longitude, results)
                     results[0] >= WEATHER_MIN_DISTANCE_M
-                } ?: true  // no previous location → always fetch
+                } ?: true
 
                 if (!ageExpired && !movedFar) return@addOnSuccessListener
 
@@ -238,9 +259,14 @@ class DashboardPaneContent(
 
     private fun applyWeather(data: WeatherData) {
         val tempText = "${data.tempC.toInt()}°C"
-        val condText = "${pictocodeEmoji(data.pictocode)}  ↑${data.maxC.toInt()}°  ↓${data.minC.toInt()}°"
-        lastTempText = tempText
-        lastCondText = condText
+        val condText = "↑${data.maxC.toInt()}°  ↓${data.minC.toInt()}°"
+        lastPictocode = data.pictocode
+        lastTempText  = tempText
+        lastCondText  = condText
+        weatherEmojiView?.apply {
+            setImageDrawable(context.renderEmojiDrawable(pictocodeEmoji(data.pictocode)))
+            visibility = View.VISIBLE
+        }
         weatherTempView?.apply { text = tempText; visibility = View.VISIBLE }
         weatherCondView?.apply { text = condText; visibility = View.VISIBLE }
     }
@@ -294,13 +320,14 @@ class DashboardPaneContent(
     }
 
     companion object {
-        private const val WEATHER_CHECK_INTERVAL_MS = 60_000L          // check every minute
-        private const val WEATHER_MIN_AGE_MS        = 15 * 60 * 1000L  // 15 minutes
-        private const val WEATHER_MIN_DISTANCE_M    = 500f              // 500 metres
+        private const val WEATHER_CHECK_INTERVAL_MS = 60_000L
+        private const val WEATHER_MIN_AGE_MS        = 15 * 60 * 1000L
+        private const val WEATHER_MIN_DISTANCE_M    = 500f
 
         /** Persists across pane re-creation within the same app session. */
         private var lastFetchTime: Long      = 0L
         private var lastFetchLoc:  Location? = null
+        private var lastPictocode: Int       = -1
         private var lastTempText:  String    = ""
         private var lastCondText:  String    = ""
     }
