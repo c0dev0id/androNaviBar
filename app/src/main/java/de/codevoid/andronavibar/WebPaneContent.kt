@@ -27,7 +27,11 @@ class WebPaneContent(
         onReady()   // WebView is lightweight to create; page loads async after show()
     }
 
+    override fun hide() { webView?.visibility = View.GONE }
+
     override fun show(container: ViewGroup) {
+        webView?.let { it.visibility = View.VISIBLE; return }
+
         val targetUrl = url   // capture before apply{} — inside apply, 'url' resolves to WebView.url (String?)
         val wv = WebView(context).apply {
             layoutParams = ViewGroup.LayoutParams(

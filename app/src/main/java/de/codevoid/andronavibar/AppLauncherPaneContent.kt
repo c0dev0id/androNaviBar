@@ -29,7 +29,11 @@ class AppLauncherPaneContent(
         onReady()
     }
 
+    override fun hide() { rootView?.visibility = View.GONE }
+
     override fun show(container: ViewGroup) {
+        rootView?.let { it.visibility = View.VISIBLE; return }
+
         val res = context.resources
 
         val root = LinearLayout(context).apply {

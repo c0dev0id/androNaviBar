@@ -126,7 +126,18 @@ class DashboardPaneContent(
 
     override fun load(onReady: () -> Unit) { onReady() }
 
+    override fun hide() {
+        rootView?.visibility = View.GONE
+        panels?.forEach { it.icon.pauseAnimation() }
+    }
+
     override fun show(container: ViewGroup) {
+        rootView?.let { root ->
+            root.visibility = View.VISIBLE
+            panels?.forEach { it.icon.resumeAnimation() }
+            return
+        }
+
         val res = context.resources
 
         val root = FrameLayout(context).apply {

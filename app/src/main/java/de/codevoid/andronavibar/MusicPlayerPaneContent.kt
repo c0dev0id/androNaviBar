@@ -61,7 +61,11 @@ class MusicPlayerPaneContent(
 
     override fun load(onReady: () -> Unit) { onReady() }
 
+    override fun hide() { rootView?.visibility = View.GONE }
+
     override fun show(container: ViewGroup) {
+        rootView?.let { it.visibility = View.VISIBLE; return }
+
         val root = buildLayout()
         rootView = root
         container.addView(root)

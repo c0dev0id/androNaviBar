@@ -34,7 +34,11 @@ class WidgetPaneContent(
         onReady()
     }
 
+    override fun hide() { hostView.visibility = View.GONE }
+
     override fun show(container: ViewGroup) {
+        if (hostView.parent != null) { hostView.visibility = View.VISIBLE; return }
+
         this.container = container
 
         // Detach from any previous parent (e.g. a prior show/unload cycle)

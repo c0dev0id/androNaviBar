@@ -65,7 +65,11 @@ class AppsGridPaneContent(
 
     override fun load(onReady: () -> Unit) { onReady() }
 
+    override fun hide() { outerView?.visibility = View.GONE }
+
     override fun show(container: ViewGroup) {
+        outerView?.let { it.visibility = View.VISIBLE; return }
+
         val outer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
