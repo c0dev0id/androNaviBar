@@ -37,12 +37,20 @@ class WidgetPaneContent(
     override fun hide() { hostView.visibility = View.GONE }
 
     override fun refresh() {
-        // ACTION_APPWIDGET_UPDATE is a protected broadcast; only the system can send it.
-        // The best a launcher can do is notify collection views of changed data.
-        val mgr = AppWidgetManager.getInstance(context)
-        for (id in findCollectionViewIds(hostView)) {
-            mgr.notifyAppWidgetViewDataChanged(appWidgetId, id)
+        // Find the first Button in the widget tree and click it.
+        // RemoteViews wires Button clicks via setOnClickPendingIntent(), so
+        // performClick() fires the registered PendingIntent correctly.
+        findFirstButton(hostView)?.performClick()
+    }
+
+    private fun findFirstButton(view: View): View? {
+        if (view is android.widget.Button && view.isClickable) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                findFirstButton(view.getChildAt(i))?.let { return it }
+            }
         }
+        return null
     }
 
     override fun show(container: ViewGroup) {
