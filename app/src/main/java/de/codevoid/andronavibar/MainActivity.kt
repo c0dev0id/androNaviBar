@@ -609,8 +609,7 @@ class MainActivity : Activity() {
     }
 
     private fun showTypePickerPane() {
-        activeButtonConfigPane?.unload(); activeButtonConfigPane = null
-        activeTypePickerPane?.unload();   activeTypePickerPane = null
+        dismissCurrentPane()
         val pane = TypePickerPaneContent(
             activity = this,
             onTypeSelected = { typeKey ->
@@ -1270,7 +1269,7 @@ class MainActivity : Activity() {
     // ── Edit mode pane routing ───────────────────────────────────────────────
 
     private fun showButtonConfigPane(index: Int) {
-        activeButtonConfigPane?.unload()
+        dismissCurrentPane()
         val pane = ButtonConfigPaneContent(
             activity         = this,
             db               = db,
@@ -1324,7 +1323,7 @@ class MainActivity : Activity() {
     // ── Global settings pane ─────────────────────────────────────────────────
 
     private fun showGlobalSettingsPane() {
-        activeGlobalSettingsPane?.unload()
+        dismissCurrentPane()
         val pane = GlobalSettingsPaneContent(this)
         activeGlobalSettingsPane = pane
         pane.load { pane.show(reservedArea) }
