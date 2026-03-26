@@ -1,11 +1,17 @@
 package de.codevoid.andronavibar.ui
 
+import android.content.ClipData
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
+import android.view.GestureDetector
+import android.view.MotionEvent
 import de.codevoid.andronavibar.ButtonConfig
 import de.codevoid.andronavibar.ButtonRow
 import de.codevoid.andronavibar.LauncherDatabase
@@ -51,9 +57,122 @@ class LauncherButton @JvmOverloads constructor(
 
     /** Set by MainActivity when entering/exiting edit mode. */
     var isEditMode: Boolean = false
+        set(value) { field = value; invalidate() }
 
-    /** Called instead of activate() when isEditMode is true. Wired by MainActivity. */
+    /** Called instead of activate() when isEditMode is true and the center is tapped. */
     var onEditTapped: (() -> Unit)? = null
+
+    /** Called when the delete zone (right edge) is tapped in edit mode. */
+    var onDeleteTapped: (() -> Unit)? = null
+
+    // ── Edit overlay drawing ──────────────────────────────────────────────────
+
+    private val overlayBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(210, 26, 26, 26)
+    }
+    private val dragLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(200, 255, 255, 255)
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeWidth = resources.dpToPx(2).toFloat()
+    }
+    private val deleteZonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(210, 180, 40, 40)
+    }
+    private val deleteCrossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        strokeWidth = resources.dpToPx(3).toFloat()
+    }
+
+    override fun onDrawContent(canvas: Canvas) {
+        super.onDrawContent(canvas)
+        if (isEditMode) drawEditOverlay(canvas)
+    }
+
+    private fun drawEditOverlay(canvas: Canvas) {
+        val h = height.toFloat()
+        val w = width.toFloat()
+        val zoneW = h  // each zone is a square matching the button height
+
+        canvas.save()
+        canvas.clipPath(drawPath)
+
+        // ── Drag handle zone (left, over the icon slot) ───────────────────
+        canvas.drawRect(barW, 0f, barW + zoneW, h, overlayBgPaint)
+        val lineW = zoneW * 0.45f
+        val lineX0 = barW + (zoneW - lineW) / 2f
+        val lineX1 = lineX0 + lineW
+        for (i in 0..2) {
+            val y = h * (i + 1) / 4f
+            canvas.drawLine(lineX0, y, lineX1, y, dragLinePaint)
+        }
+
+        // ── Delete zone (right edge) ──────────────────────────────────────
+        canvas.drawRect(w - zoneW, 0f, w, h, deleteZonePaint)
+        val pad = zoneW * 0.28f
+        val dx0 = w - zoneW + pad;  val dx1 = w - pad
+        val dy0 = h * 0.28f;        val dy1 = h * 0.72f
+        canvas.drawLine(dx0, dy0, dx1, dy1, deleteCrossPaint)
+        canvas.drawLine(dx1, dy0, dx0, dy1, deleteCrossPaint)
+
+        canvas.restore()
+    }
+
+    // ── Touch zone handling (edit mode) ───────────────────────────────────────
+
+    private enum class TouchZone { NONE, DRAG, DELETE }
+    private var touchZone = TouchZone.NONE
+
+    /** Long-press on the drag handle initiates system drag-and-drop. */
+    private val dragGestureDetector by lazy {
+        GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: MotionEvent) {
+                val clip = ClipData.newPlainText("btn_drag", index.toString())
+                startDragAndDrop(clip, DragShadowBuilder(this@LauncherButton), index, 0)
+            }
+        })
+    }
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!isEditMode) return super.onTouchEvent(event)
+
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            touchZone = when {
+                event.x < barW + height -> TouchZone.DRAG
+                event.x >= width - height -> TouchZone.DELETE
+                else -> TouchZone.NONE
+            }
+        }
+
+        return when (touchZone) {
+            TouchZone.DRAG -> {
+                dragGestureDetector.onTouchEvent(event)
+                if (event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    touchZone = TouchZone.NONE
+                }
+                true
+            }
+            TouchZone.DELETE -> {
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    touchZone = TouchZone.NONE
+                    onDeleteTapped?.invoke()
+                } else if (event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    touchZone = TouchZone.NONE
+                }
+                true
+            }
+            TouchZone.NONE -> {
+                if (event.actionMasked == MotionEvent.ACTION_UP ||
+                    event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                    touchZone = TouchZone.NONE
+                }
+                super.onTouchEvent(event)
+            }
+        }
+    }
 
     // ── Internal ─────────────────────────────────────────────────────────────
 

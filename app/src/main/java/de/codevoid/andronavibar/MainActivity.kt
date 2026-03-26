@@ -8,7 +8,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import de.codevoid.andronavibar.LauncherDatabase
+import android.content.ClipData
+import android.content.ClipDescription
 import android.content.res.ColorStateList
+import android.view.DragEvent
+import java.io.File
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.RectF
@@ -43,8 +47,9 @@ class MainActivity : Activity() {
     private lateinit var buttonPanel:     LinearLayout
     private lateinit var dashboardButton: FocusableButton
     private lateinit var appsButton:      FocusableButton
-    private lateinit var reservedArea:    FrameLayout
-    private lateinit var appWidgetHost:   SafeAppWidgetHost
+    private lateinit var reservedArea:         FrameLayout
+    private lateinit var editChromeContainer: LinearLayout
+    private lateinit var appWidgetHost:        SafeAppWidgetHost
     private val widgetViews = mutableMapOf<Int, AppWidgetHostView>()
 
     private var focusedIndex = 0
@@ -140,10 +145,11 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         hideSystemBars()
-        db            = LauncherDatabase.getInstance(this)
-        reservedArea  = findViewById(R.id.reservedArea)
-        buttonScroll  = findViewById(R.id.buttonScroll)
-        buttonPanel   = findViewById(R.id.buttonPanel)
+        db                  = LauncherDatabase.getInstance(this)
+        reservedArea        = findViewById(R.id.reservedArea)
+        buttonScroll        = findViewById(R.id.buttonScroll)
+        buttonPanel         = findViewById(R.id.buttonPanel)
+        editChromeContainer = findViewById(R.id.editChromeContainer)
         appWidgetHost = SafeAppWidgetHost(this, APP_WIDGET_HOST_ID)
         cleanupOrphanedWidgetId()
 
@@ -387,6 +393,7 @@ class MainActivity : Activity() {
     }
 
     private fun activateDashboardButton() {
+        if (editMode) return
         if (activeButtonIndex == 0) return
         hideCurrentPane()
         deactivateActiveButton()
@@ -396,6 +403,7 @@ class MainActivity : Activity() {
     }
 
     private fun activateAppsButton() {
+        if (editMode) return
         if (activeButtonIndex == buttons.size + 1) return
         hideCurrentPane()
         deactivateActiveButton()
@@ -502,9 +510,160 @@ class MainActivity : Activity() {
         activateDashboardButton()
     }
 
-    /** Rebuilds the button column chrome for the current mode. Filled in Phase 2. */
     private fun updateEditModeUI() {
-        // Phase 2: show/hide drag handles, delete markers, + row, Done/Settings toolbar
+        if (editMode) {
+            // Propagate edit mode flag to all buttons (delete overlays appear via invalidate).
+            buttons.forEach { it.isEditMode = true }
+
+            // Build and show chrome: [+ Add] row then [Done][Settings] row.
+            editChromeContainer.removeAllViews()
+
+            val addBtn = createFixedButton(getString(R.string.edit_add)) { addNewButton() }
+            editChromeContainer.addView(addBtn)
+
+            val doneRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+            }
+            val m = resources.dpToPx(4)
+            val doneBtn = createFixedButton(getString(R.string.edit_done)) { exitEditMode() }
+            val settingsBtn = createFixedButton(getString(R.string.edit_settings)) { showGlobalSettingsPane() }
+            doneRow.addView(doneBtn, LinearLayout.LayoutParams(0, WRAP, 1f).apply { setMargins(0, 0, m, 0) })
+            doneRow.addView(settingsBtn, LinearLayout.LayoutParams(0, WRAP, 1f))
+            editChromeContainer.addView(doneRow)
+
+            editChromeContainer.visibility = View.VISIBLE
+
+            // Pad the scroll view so the last button isn't hidden behind the chrome.
+            editChromeContainer.post {
+                buttonScroll.setPadding(0, 0, 0, editChromeContainer.height)
+                adjustButtonHeights()
+            }
+
+            buttonPanel.setOnDragListener(buttonDragListener)
+        } else {
+            buttons.forEach { it.isEditMode = false }
+            editChromeContainer.visibility = View.GONE
+            editChromeContainer.removeAllViews()
+            buttonScroll.setPadding(0, 0, 0, 0)
+            buttonPanel.setOnDragListener(null)
+            adjustButtonHeights()
+        }
+    }
+
+    // ── Edit mode: drag-to-reorder ────────────────────────────────────────────
+
+    private val buttonDragListener = View.OnDragListener { _, event ->
+        when (event.action) {
+            DragEvent.ACTION_DRAG_STARTED ->
+                event.clipDescription.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN)
+            DragEvent.ACTION_DROP -> {
+                val fromIndex = event.localState as? Int ?: return@OnDragListener false
+                val toIndex = dropTargetIndex(event.y)
+                if (fromIndex != toIndex) moveButton(fromIndex, toIndex)
+                true
+            }
+            else -> true
+        }
+    }
+
+    /** Map a drag Y coordinate (in buttonPanel space) to a buttons[] index. */
+    private fun dropTargetIndex(dragY: Float): Int {
+        for (i in buttons.indices) {
+            if (buttons[i].visibility == View.GONE) continue
+            if (dragY < buttons[i].top + buttons[i].height / 2f) return i
+        }
+        return buttons.lastIndex.coerceAtLeast(0)
+    }
+
+    private fun moveButton(from: Int, to: Int) {
+        moveButtonIconFiles(from, to)
+        db.moveButton(from, to)
+        val moved = buttons.removeAt(from)
+        buttons.add(to, moved)
+        for (i in buttons.indices) {
+            buttons[i].index = i
+            buttons[i].loadConfig(db)
+        }
+        rebuildButtonPanel()
+    }
+
+    private fun moveButtonIconFiles(from: Int, to: Int) {
+        val tmp = File(filesDir, "icon_tmp.png")
+        tmp.delete()
+        val fromFile = buttonIconFile(filesDir, from)
+        if (fromFile.exists()) fromFile.copyTo(tmp, overwrite = true)
+        val dir = if (from < to) 1 else -1
+        var i = from
+        while (i != to) {
+            val next = i + dir
+            val src = buttonIconFile(filesDir, next)
+            val dst = buttonIconFile(filesDir, i)
+            if (src.exists()) src.copyTo(dst, overwrite = true) else dst.delete()
+            i = next
+        }
+        val dst = buttonIconFile(filesDir, to)
+        if (tmp.exists()) tmp.copyTo(dst, overwrite = true) else dst.delete()
+        tmp.delete()
+    }
+
+    // ── Edit mode: add / remove ───────────────────────────────────────────────
+
+    private fun addNewButton() {
+        val i = db.addButton()
+        val btn = layoutInflater.inflate(
+            R.layout.launcher_button_item, buttonPanel, false
+        ) as LauncherButton
+        btn.index = i
+        btn.isEditMode = true
+        wireButton(btn, i)
+        btn.loadConfig(db)
+        buttons.add(btn)
+        rebuildButtonPanel()
+        // Show type picker (Phase 4); for now show config pane for empty slot.
+        showButtonConfigPane(i)
+    }
+
+    private fun removeButton(index: Int) {
+        if (buttons.size <= 1) return
+        // Shift icon files down to close the gap.
+        buttonIconFile(filesDir, index).delete()
+        for (i in index until buttons.lastIndex) {
+            val src = buttonIconFile(filesDir, i + 1)
+            val dst = buttonIconFile(filesDir, i)
+            if (src.exists()) src.copyTo(dst, overwrite = true) else dst.delete()
+        }
+        buttonIconFile(filesDir, buttons.lastIndex).delete()
+
+        // Release any widget binding before DB remove.
+        val cfg = buttons[index].config
+        if (cfg is ButtonConfig.WidgetLauncher && cfg.appWidgetId != -1) {
+            releaseWidgetId(cfg.appWidgetId)
+        }
+
+        db.removeButton(index)
+        buttons.removeAt(index)
+
+        for (i in buttons.indices) {
+            buttons[i].index = i
+            buttons[i].loadConfig(db)
+        }
+
+        if (focusedIndex > buttons.size) {
+            focusedIndex = buttons.size.coerceAtLeast(1)
+            db.setFocusedIndex(focusedIndex)
+        }
+
+        rebuildButtonPanel()
+    }
+
+    /** Rebuild buttonPanel from scratch, preserving chrome views when in edit mode. */
+    private fun rebuildButtonPanel() {
+        buttonPanel.removeAllViews()
+        buttonPanel.addView(dashboardButton)
+        for (btn in buttons) buttonPanel.addView(btn)
+        buttonPanel.addView(appsButton)
+        adjustButtonHeights()
     }
 
     /** Show a toggle button's content pane (no-op if already active). */
@@ -946,6 +1105,7 @@ class MainActivity : Activity() {
     private fun wireButton(btn: LauncherButton, i: Int) {
         btn.setOnLongClickListener { enterEditMode(); true }
         btn.onEditTapped = { showButtonConfigPane(buttons.indexOf(btn)) }
+        btn.onDeleteTapped = { removeButton(buttons.indexOf(btn)) }
         // Use buttons.indexOf(btn) + 1 for panel position so re-indexing after
         // add/remove always resolves to the correct position at activation time.
         btn.onAppLauncherActivated = { pkg, lbl ->
@@ -988,7 +1148,7 @@ class MainActivity : Activity() {
 
     private fun adjustButtonHeights() {
         val panelPad = resources.dpToPx(8) * 2  // buttonPanel top + bottom padding
-        val totalH = buttonScroll.height - panelPad
+        val totalH = buttonScroll.height - panelPad - buttonScroll.paddingBottom
         val margin = resources.dpToPx(4) * 2  // top + bottom margin per button
         val visibleCount = buttons.count { it.visibility != View.GONE } + 2 // +2 for dashboard + apps
         val slots = visibleCount.coerceIn(1, MAX_VISIBLE_BUTTONS)
@@ -1063,6 +1223,11 @@ class MainActivity : Activity() {
     /** Show the config pane for button at [index] in reservedArea. Phase 3 impl. */
     private fun showButtonConfigPane(index: Int) {
         // TODO Phase 3: load and show the per-button config pane
+    }
+
+    /** Show the global settings pane in reservedArea. Phase 5 impl. */
+    private fun showGlobalSettingsPane() {
+        // TODO Phase 5: global settings (update check, etc.)
     }
 
     // ── Global config pane ──────────────────────────────────────────────────
