@@ -466,7 +466,6 @@ class MainActivity : Activity() {
             activeAppsGridPane?.setInitialFocus()
             activeAppLauncherPane?.setInitialFocus()
             activeUrlLauncherPane?.setInitialFocus()
-            activeGlobalSettingsPane?.setInitialFocus()
         } else {
             // Snap cursor to the active button so it's immediately highlighted on return.
             if (activeButtonIndex >= 0) {
@@ -480,7 +479,6 @@ class MainActivity : Activity() {
             activeAppsGridPane?.clearFocus()
             activeAppLauncherPane?.clearFocus()
             activeUrlLauncherPane?.clearFocus()
-            activeGlobalSettingsPane?.clearFocus()
         }
     }
 
