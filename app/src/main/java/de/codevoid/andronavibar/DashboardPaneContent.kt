@@ -603,7 +603,7 @@ class DashboardPaneContent(
     }
 
     private fun precipText(prob: Int, mm: Double) =
-        "$prob%  ·  ${"%.1f".format(mm)} mm"
+        "$prob%  ·  ${"%.2f".format(mm)} mm"
 
     private fun windCardinal(deg: Int): String = when ((deg + 22) / 45 % 8) {
         0 -> "N"; 1 -> "NE"; 2 -> "E"; 3 -> "SE"
