@@ -290,18 +290,14 @@ class LauncherButton @JvmOverloads constructor(
                 return
             }
         }
-        // Preserve current active state
-        val current = db.loadButton(index)
-        db.saveButton(index, row.copy(active = current?.active ?: true))
+        db.saveButton(index, row)
         applyConfig()
     }
 
     fun clearConfig(db: LauncherDatabase) {
         config = ButtonConfig.Empty
         buttonIconFile(context.filesDir, index).delete()
-        val current = db.loadButton(index)
         db.clearButton(index)
-        if (current != null) db.setButtonActive(index, current.active)
         applyConfig()
     }
 

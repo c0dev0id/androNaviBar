@@ -18,7 +18,6 @@ data class ButtonRow(
     val type: String? = null,
     val value: String? = null,
     val label: String? = null,
-    val active: Boolean = true,
     val widgetId: Int? = null,
     val openBrowser: Boolean = false,
     val iconType: String? = null,
@@ -142,7 +141,7 @@ class LauncherDatabase private constructor(context: Context) :
 
     fun loadButton(position: Int): ButtonRow? {
         return readableDatabase.rawQuery(
-            "SELECT type, value, label, active, widget_id, open_browser, icon_type, icon_data FROM buttons WHERE position = ?",
+            "SELECT type, value, label, widget_id, open_browser, icon_type, icon_data FROM buttons WHERE position = ?",
             arrayOf(position.toString())
         ).use { c ->
             if (!c.moveToFirst()) return@use null
@@ -150,22 +149,20 @@ class LauncherDatabase private constructor(context: Context) :
                 type = c.getString(0),
                 value = c.getString(1),
                 label = c.getString(2),
-                active = c.getInt(3) != 0,
-                widgetId = if (c.isNull(4)) null else c.getInt(4),
-                openBrowser = c.getInt(5) != 0,
-                iconType = c.getString(6),
-                iconData = c.getString(7)
+                widgetId = if (c.isNull(3)) null else c.getInt(3),
+                openBrowser = c.getInt(4) != 0,
+                iconType = c.getString(5),
+                iconData = c.getString(6)
             )
         }
     }
 
     fun saveButton(position: Int, row: ButtonRow) {
-        val cv = ContentValues(9).apply {
+        val cv = ContentValues(8).apply {
             put("position", position)
             put("type", row.type)
             put("value", row.value)
             put("label", row.label)
-            put("active", if (row.active) 1 else 0)
             if (row.widgetId != null) put("widget_id", row.widgetId) else putNull("widget_id")
             put("open_browser", if (row.openBrowser) 1 else 0)
             put("icon_type", row.iconType)
@@ -176,21 +173,6 @@ class LauncherDatabase private constructor(context: Context) :
 
     fun clearButton(position: Int) {
         saveButton(position, ButtonRow())
-    }
-
-    fun isButtonActive(position: Int): Boolean {
-        return readableDatabase.rawQuery(
-            "SELECT active FROM buttons WHERE position = ?",
-            arrayOf(position.toString())
-        ).use { c ->
-            if (c.moveToFirst()) c.getInt(0) != 0 else true
-        }
-    }
-
-    fun setButtonActive(position: Int, active: Boolean) {
-        val cv = ContentValues(1)
-        cv.put("active", if (active) 1 else 0)
-        writableDatabase.update("buttons", cv, "position = ?", arrayOf(position.toString()))
     }
 
     fun getButtonLabel(position: Int): String {

@@ -183,9 +183,6 @@ class MainActivity : Activity() {
             btn.index = i
             wireButton(btn, i)
             btn.loadConfig(db)
-            if (!db.isButtonActive(i)) {
-                btn.visibility = View.GONE
-            }
             buttonPanel.addView(btn)
             buttons.add(btn)
         }
@@ -200,9 +197,6 @@ class MainActivity : Activity() {
         // focusedIndex is a panel position: 0=Dashboard, 1..N=configurable, N+1=Apps.
         // Default to 0 (Dashboard). Clamp saved values to valid range.
         focusedIndex = db.getFocusedIndex().coerceIn(0, buttons.size + 1)
-        if (focusedIndex in 1..buttons.size && buttons[focusedIndex - 1].visibility == View.GONE) {
-            focusedIndex = nearestVisibleButton(focusedIndex - 1) + 1
-        }
 
         buttonPanel.post {
             adjustButtonHeights()
@@ -447,24 +441,12 @@ class MainActivity : Activity() {
     }
 
     private fun moveFocus(delta: Int) {
-        val dir = if (delta > 0) 1 else -1
-        var next = focusedIndex + dir
-        // Skip hidden configurable buttons
-        while (next in 1..buttons.size && buttons[next - 1].visibility == View.GONE) next += dir
+        val next = focusedIndex + (if (delta > 0) 1 else -1)
         if (next in 0..(buttons.size + 1)) setFocus(next)
     }
 
-    /** Find the nearest visible button to [index] (buttons[] index), searching outward. */
-    private fun nearestVisibleButton(index: Int): Int {
-        if (buttons.isEmpty()) return 0
-        val clamped = index.coerceIn(0, buttons.lastIndex)
-        if (buttons[clamped].visibility != View.GONE) return clamped
-        for (d in 1..buttons.lastIndex) {
-            if (clamped + d in buttons.indices && buttons[clamped + d].visibility != View.GONE) return clamped + d
-            if (clamped - d in buttons.indices && buttons[clamped - d].visibility != View.GONE) return clamped - d
-        }
-        return 0
-    }
+    private fun nearestVisibleButton(index: Int): Int =
+        index.coerceIn(0, buttons.lastIndex.coerceAtLeast(0))
 
     private fun updateFocus() {
         val inButtons = focusOwner == FocusOwner.BUTTONS
@@ -582,7 +564,6 @@ class MainActivity : Activity() {
     /** Map a drag Y coordinate (in buttonPanel space) to a buttons[] index. */
     private fun dropTargetIndex(dragY: Float): Int {
         for (i in buttons.indices) {
-            if (buttons[i].visibility == View.GONE) continue
             if (dragY < buttons[i].top + buttons[i].height / 2f) return i
         }
         return buttons.lastIndex.coerceAtLeast(0)
@@ -1221,8 +1202,7 @@ class MainActivity : Activity() {
         val panelPad = resources.dpToPx(8) * 2  // buttonPanel top + bottom padding
         val totalH = buttonScroll.height - panelPad - buttonScroll.paddingBottom
         val margin = resources.dpToPx(4) * 2  // top + bottom margin per button
-        val visibleCount = buttons.count { it.visibility != View.GONE } + 2 // +2 for dashboard + apps
-        val slots = visibleCount.coerceIn(1, MAX_VISIBLE_BUTTONS)
+        val slots = (buttons.size + 2).coerceIn(1, MAX_VISIBLE_BUTTONS)  // +2 for dashboard + apps
         val btnH = totalH / slots - margin
         for (btn in buttons) {
             val lp = btn.layoutParams as LinearLayout.LayoutParams
@@ -1233,17 +1213,6 @@ class MainActivity : Activity() {
             val lp = fixed.layoutParams as LinearLayout.LayoutParams
             lp.height = btnH
             fixed.layoutParams = lp
-        }
-    }
-
-    private fun applyButtonVisibility() {
-        for (i in buttons.indices) {
-            buttons[i].visibility = if (db.isButtonActive(i)) View.VISIBLE else View.GONE
-        }
-        adjustButtonHeights()
-        // focusedIndex is a panel position; check if focused configurable button became hidden.
-        if (focusedIndex in 1..buttons.size && buttons[focusedIndex - 1].visibility == View.GONE) {
-            setFocus(nearestVisibleButton(focusedIndex - 1) + 1)
         }
     }
 

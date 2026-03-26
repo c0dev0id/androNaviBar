@@ -191,7 +191,7 @@ class ButtonConfigPaneContent(
                 if (oldId != null && oldId != -1) onWidgetCleanup(oldId)
                 pendingRow = pendingRow.copy(value = chosen.flattenToString(), widgetId = null)
                 // Save to DB now so the bind flow picks up current label/icon
-                db.saveButton(buttonIndex, pendingRow.copy(active = db.loadButton(buttonIndex)?.active ?: true))
+                db.saveButton(buttonIndex, pendingRow)
                 onWidgetBind(buttonIndex, chosen)
             }
         })
@@ -443,8 +443,7 @@ class ButtonConfigPaneContent(
     }
 
     private fun save() {
-        val active = db.loadButton(buttonIndex)?.active ?: true
-        db.saveButton(buttonIndex, pendingRow.copy(active = active))
+        db.saveButton(buttonIndex, pendingRow)
         onSaved()
     }
 
