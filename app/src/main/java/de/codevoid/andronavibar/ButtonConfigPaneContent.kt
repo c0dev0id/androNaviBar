@@ -93,43 +93,22 @@ class ButtonConfigPaneContent(
         form.addView(makeText(typeTitle, 22f, bold = true))
         form.addView(gap(16))
 
-        if (pendingRow.type == null) {
-            buildTypeSelector(form)
-        } else {
-            buildLabelField(form)
+        buildLabelField(form)
+        form.addView(gap(16))
+        when (pendingRow.type) {
+            "app"       -> buildAppFields(form)
+            "url"       -> buildUrlFields(form)
+            "widget"    -> buildWidgetFields(form)
+            "music"     -> buildMusicFields(form)
+            "bookmark"  -> buildBookmarkFields(form)
+            "navtarget" -> buildNavTargetFields(form)
+        }
+        if (pendingRow.type != "app") {
             form.addView(gap(16))
-            when (pendingRow.type) {
-                "app"       -> buildAppFields(form)
-                "url"       -> buildUrlFields(form)
-                "widget"    -> buildWidgetFields(form)
-                "music"     -> buildMusicFields(form)
-                "bookmark"  -> buildBookmarkFields(form)
-                "navtarget" -> buildNavTargetFields(form)
-            }
-            if (pendingRow.type != "app") {
-                form.addView(gap(16))
-                buildIconSection(form)
-            }
-            form.addView(gap(20))
-            buildActionButtons(form)
+            buildIconSection(form)
         }
-    }
-
-    private fun buildTypeSelector(form: LinearLayout) {
-        form.addView(makeText("Choose type:", 16f))
-        form.addView(gap(12))
-        listOf(
-            "app"    to activity.getString(R.string.tab_app),
-            "url"    to activity.getString(R.string.tab_url),
-            "widget" to activity.getString(R.string.widget_tab),
-            "music"  to activity.getString(R.string.tab_music)
-        ).forEach { (typeKey, typeLabel) ->
-            form.addView(makeButton(typeLabel) {
-                pendingRow = pendingRow.copy(type = typeKey)
-                rebuild()
-            })
-            form.addView(gap(6))
-        }
+        form.addView(gap(20))
+        buildActionButtons(form)
     }
 
     private fun buildLabelField(form: LinearLayout) {
