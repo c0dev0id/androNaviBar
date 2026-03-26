@@ -130,6 +130,9 @@ class MainActivity : Activity() {
     /** Index of the button whose content/config pane is displayed (-1 = none). */
     private var activeButtonIndex = -1
 
+    /** True when the launcher is in edit mode (touch-only; remote is suppressed). */
+    private var editMode = false
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -146,6 +149,7 @@ class MainActivity : Activity() {
 
         // Dashboard fixed at top of column (panel position 0).
         dashboardButton = createFixedButton(getString(R.string.dashboard), R.drawable.ic_dashboard) { activateDashboardButton() }
+        dashboardButton.setOnLongClickListener { enterEditMode(); true }
         buttonPanel.addView(dashboardButton)
 
         var count = db.getButtonCount()
@@ -170,6 +174,7 @@ class MainActivity : Activity() {
 
         // Apps fixed at bottom of column (panel position buttons.size + 1).
         appsButton = createFixedButton(getString(R.string.tab_apps), R.drawable.ic_apps) { activateAppsButton() }
+        appsButton.setOnLongClickListener { enterEditMode(); true }
         buttonPanel.addView(appsButton)
 
         preCreateWidgetViews()
@@ -296,6 +301,7 @@ class MainActivity : Activity() {
 
             if (intent.hasExtra("key_press")) {
                 val keyCode = intent.getIntExtra("key_press", 0)
+                if (editMode) return
                 if (!pressedKeys.add(keyCode)) return  // auto-repeat, ignore
 
                 if (keyCode == LauncherApplication.TOGGLE_KEY) {
@@ -315,6 +321,7 @@ class MainActivity : Activity() {
 
             } else if (intent.hasExtra("key_release")) {
                 val keyCode = intent.getIntExtra("key_release", 0)
+                if (editMode) return
                 pressedKeys.remove(keyCode)
 
                 if (keyCode == 66) {
@@ -347,6 +354,7 @@ class MainActivity : Activity() {
      * 19=UP, 20=DOWN, 21=LEFT, 22=RIGHT, 66=CONFIRM.
      */
     private fun handleKey(keyCode: Int) {
+        if (editMode) return
         // When a pane shows a modal Dialog the Activity loses window focus, but remote
         // keys must still reach the pane so the user can dismiss the popup.
         if (!isWindowFocused) {
@@ -472,6 +480,31 @@ class MainActivity : Activity() {
             activeUrlLauncherPane?.clearFocus()
             activeGlobalConfigPane?.clearFocus()
         }
+    }
+
+    // ── Edit mode ────────────────────────────────────────────────────────────
+
+    fun enterEditMode() {
+        if (editMode) return
+        editMode = true
+        dismissCurrentPane()
+        deactivateActiveButton()
+        setFocusOwner(FocusOwner.BUTTONS)
+        buttons.forEach { it.isEditMode = true }
+        updateEditModeUI()
+    }
+
+    fun exitEditMode() {
+        if (!editMode) return
+        editMode = false
+        buttons.forEach { it.isEditMode = false }
+        updateEditModeUI()
+        activateDashboardButton()
+    }
+
+    /** Rebuilds the button column chrome for the current mode. Filled in Phase 2. */
+    private fun updateEditModeUI() {
+        // Phase 2: show/hide drag handles, delete markers, + row, Done/Settings toolbar
     }
 
     /** Show a toggle button's content pane (no-op if already active). */
@@ -911,6 +944,8 @@ class MainActivity : Activity() {
     // ── Button setup ────────────────────────────────────────────────────────
 
     private fun wireButton(btn: LauncherButton, i: Int) {
+        btn.setOnLongClickListener { enterEditMode(); true }
+        btn.onEditTapped = { showButtonConfigPane(buttons.indexOf(btn)) }
         // Use buttons.indexOf(btn) + 1 for panel position so re-indexing after
         // add/remove always resolves to the correct position at activation time.
         btn.onAppLauncherActivated = { pkg, lbl ->
@@ -1021,6 +1056,13 @@ class MainActivity : Activity() {
             || activeUrlLauncherPane != null || activeGlobalConfigPane != null) {
             setFocusOwner(FocusOwner.PANE)
         }
+    }
+
+    // ── Edit mode pane routing ───────────────────────────────────────────────
+
+    /** Show the config pane for button at [index] in reservedArea. Phase 3 impl. */
+    private fun showButtonConfigPane(index: Int) {
+        // TODO Phase 3: load and show the per-button config pane
     }
 
     // ── Global config pane ──────────────────────────────────────────────────

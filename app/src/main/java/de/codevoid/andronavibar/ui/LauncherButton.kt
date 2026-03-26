@@ -47,10 +47,21 @@ class LauncherButton @JvmOverloads constructor(
     /** Fired when a Music Player button is activated; MainActivity shows the music pane. */
     var onMusicPlayerActivated: ((String) -> Unit)? = null
 
+    // ── Edit mode ─────────────────────────────────────────────────────────────
+
+    /** Set by MainActivity when entering/exiting edit mode. */
+    var isEditMode: Boolean = false
+
+    /** Called instead of activate() when isEditMode is true. Wired by MainActivity. */
+    var onEditTapped: (() -> Unit)? = null
+
     // ── Internal ─────────────────────────────────────────────────────────────
 
     init {
-        setOnClickListener { activate() }
+        setOnClickListener {
+            if (isEditMode) onEditTapped?.invoke()
+            else activate()
+        }
     }
 
     // ── Config persistence ────────────────────────────────────────────────────
