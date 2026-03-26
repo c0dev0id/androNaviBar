@@ -1156,7 +1156,7 @@ class MainActivity : Activity() {
     // ── Button setup ────────────────────────────────────────────────────────
 
     private fun wireButton(btn: LauncherButton, i: Int) {
-        btn.setOnLongClickListener { enterEditMode(); true }
+        btn.setOnLongClickListener { enterEditMode(); showButtonConfigPane(buttons.indexOf(btn)); true }
         btn.onEditTapped = { showButtonConfigPane(buttons.indexOf(btn)) }
         btn.onDeleteTapped = { removeButton(buttons.indexOf(btn)) }
         // Use buttons.indexOf(btn) + 1 for panel position so re-indexing after
