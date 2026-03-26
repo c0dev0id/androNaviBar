@@ -83,13 +83,13 @@ class LauncherButton @JvmOverloads constructor(
         strokeWidth = resources.dpToPx(2).toFloat()
     }
     private val deleteZonePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(210, 180, 40, 40)
+        color = Color.argb(120, 160, 30, 30)
     }
     private val deleteCrossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
-        strokeWidth = resources.dpToPx(3).toFloat()
+        strokeWidth = resources.dpToPx(2).toFloat()
     }
 
     override fun onDrawContent(canvas: Canvas) {
@@ -117,7 +117,7 @@ class LauncherButton @JvmOverloads constructor(
 
         // ── Delete zone (right edge) ──────────────────────────────────────
         canvas.drawRect(w - zoneW, 0f, w, h, deleteZonePaint)
-        val pad = zoneW * 0.28f
+        val pad = zoneW * 0.38f
         val dx0 = w - zoneW + pad;  val dx1 = w - pad
         val dy0 = h * 0.28f;        val dy1 = h * 0.72f
         canvas.drawLine(dx0, dy0, dx1, dy1, deleteCrossPaint)
