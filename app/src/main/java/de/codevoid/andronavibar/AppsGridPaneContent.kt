@@ -2,7 +2,7 @@ package de.codevoid.andronavibar
 
 import android.app.Dialog
 import android.content.Context
-import android.content.SharedPreferences
+import de.codevoid.andronavibar.LauncherDatabase
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -21,15 +21,14 @@ import de.codevoid.andronavibar.ui.LauncherButton
 
 class AppsGridPaneContent(
     private val context: Context,
-    private val prefs: SharedPreferences,
+    private val db: LauncherDatabase,
     private var allApps: List<AppEntry>
 ) : PaneContent {
 
     // ── Filter state ─────────────────────────────────────────────────────────
 
-    private var filterOn = prefs.getBoolean(PREF_FILTER, true)
-    private val hiddenPkgs: MutableSet<String> =
-        prefs.getStringSet(PREF_HIDDEN, emptySet())!!.toMutableSet()
+    private var filterOn = db.getAppsFilterOn()
+    private val hiddenPkgs: MutableSet<String> = db.getHiddenPackages().toMutableSet()
 
     /** Active letter-range label, e.g. "ABC"; null = show all. */
     private var activeRange: String? = null
@@ -230,7 +229,7 @@ class AppsGridPaneContent(
 
     private fun toggleFilter() {
         filterOn = !filterOn
-        prefs.edit().putBoolean(PREF_FILTER, filterOn).apply()
+        db.setAppsFilterOn(filterOn)
         filterBtn?.text = filterLabel()
         filterBtn?.backgroundTintList = filterTint()
         rebuildGrid()
@@ -363,13 +362,13 @@ class AppsGridPaneContent(
 
     private fun hideApp(pkg: String) {
         hiddenPkgs.add(pkg)
-        prefs.edit().putStringSet(PREF_HIDDEN, hiddenPkgs.toSet()).apply()
+        db.setHiddenPackages(hiddenPkgs.toSet())
         rebuildGrid(preserveScroll = true)
     }
 
     private fun showApp(pkg: String) {
         hiddenPkgs.remove(pkg)
-        prefs.edit().putStringSet(PREF_HIDDEN, hiddenPkgs.toSet()).apply()
+        db.setHiddenPackages(hiddenPkgs.toSet())
         rebuildGrid(preserveScroll = true)
     }
 
@@ -480,8 +479,6 @@ class AppsGridPaneContent(
     // ── Constants ─────────────────────────────────────────────────────────────
 
     companion object {
-        private const val PREF_FILTER = "apps_filter_on"
-        private const val PREF_HIDDEN = "apps_hidden_pkgs"
         private const val VISIBLE_ROWS  = 6
         private const val MARGIN_DP     = 4
         private const val COLUMNS       = 2

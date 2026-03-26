@@ -7,7 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
+import de.codevoid.andronavibar.LauncherDatabase
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -37,7 +37,7 @@ import java.lang.ref.WeakReference
 
 class MainActivity : Activity() {
 
-    private lateinit var prefs:           SharedPreferences
+    private lateinit var db:              LauncherDatabase
     private val buttons = mutableListOf<LauncherButton>()
     private lateinit var buttonScroll:    ScrollView
     private lateinit var buttonPanel:     LinearLayout
@@ -137,7 +137,7 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         hideSystemBars()
-        prefs         = getSharedPreferences(LauncherApplication.PREFS_NAME, MODE_PRIVATE)
+        db            = LauncherDatabase.getInstance(this)
         reservedArea  = findViewById(R.id.reservedArea)
         buttonScroll  = findViewById(R.id.buttonScroll)
         buttonPanel   = findViewById(R.id.buttonPanel)
@@ -148,15 +148,20 @@ class MainActivity : Activity() {
         dashboardButton = createFixedButton(getString(R.string.dashboard), R.drawable.ic_dashboard) { activateDashboardButton() }
         buttonPanel.addView(dashboardButton)
 
-        val count = prefs.getInt("button_count", DEFAULT_BUTTON_COUNT)
+        var count = db.getButtonCount()
+        if (count == 0) {
+            // Fresh install: seed default empty button rows
+            repeat(DEFAULT_BUTTON_COUNT) { db.addButton() }
+            count = DEFAULT_BUTTON_COUNT
+        }
         for (i in 0 until count) {
             val btn = layoutInflater.inflate(
                 R.layout.launcher_button_item, buttonPanel, false
             ) as LauncherButton
             btn.index = i
             wireButton(btn, i)
-            btn.loadConfig(prefs)
-            if (!prefs.getBoolean("btn_${i}_active", true)) {
+            btn.loadConfig(db)
+            if (!db.isButtonActive(i)) {
                 btn.visibility = View.GONE
             }
             buttonPanel.addView(btn)
@@ -171,7 +176,7 @@ class MainActivity : Activity() {
 
         // focusedIndex is a panel position: 0=Dashboard, 1..N=configurable, N+1=Apps.
         // Default to 0 (Dashboard). Clamp saved values to valid range.
-        focusedIndex = prefs.getInt("focused_index", 0).coerceIn(0, buttons.size + 1)
+        focusedIndex = db.getFocusedIndex().coerceIn(0, buttons.size + 1)
         if (focusedIndex in 1..buttons.size && buttons[focusedIndex - 1].visibility == View.GONE) {
             focusedIndex = nearestVisibleButton(focusedIndex - 1) + 1
         }
@@ -408,7 +413,7 @@ class MainActivity : Activity() {
                 nearestVisibleButton(btnIdx) + 1
             }
         }
-        prefs.edit().putInt("focused_index", focusedIndex).apply()
+        db.setFocusedIndex(focusedIndex)
         updateFocus()
         scrollToFocused()
     }
@@ -456,7 +461,7 @@ class MainActivity : Activity() {
             // Snap cursor to the active button so it's immediately highlighted on return.
             if (activeButtonIndex >= 0) {
                 focusedIndex = activeButtonIndex
-                prefs.edit().putInt("focused_index", focusedIndex).apply()
+                db.setFocusedIndex(focusedIndex)
             }
             updateFocus()
             scrollToFocused()
@@ -568,7 +573,7 @@ class MainActivity : Activity() {
             pane.show(reservedArea); keyPane = pane; return
         }
         val snapshot = cachedAllApps
-        val pane = AppsGridPaneContent(this, prefs, snapshot ?: emptyList())
+        val pane = AppsGridPaneContent(this, db, snapshot ?: emptyList())
         if (snapshot != null) pane.onContentReady = { hideLoading() }
         activeAppsGridPane = pane
         keyPane = pane
@@ -704,7 +709,7 @@ class MainActivity : Activity() {
         }
 
         val newConfig = oldConfig.copy(appWidgetId = newId)
-        buttons[buttonIndex].saveConfig(prefs, newConfig)
+        buttons[buttonIndex].saveConfig(db, newConfig)
         widgetViews[newId] = appWidgetHost.createView(this, newId, info)
 
         dismissCurrentPane()
@@ -737,19 +742,19 @@ class MainActivity : Activity() {
      * the next launch.
      */
     private fun cleanupOrphanedWidgetId() {
-        val orphan = prefs.getInt("pending_widget_id", -1)
+        val orphan = db.getPendingWidgetId()
         if (orphan != -1) {
             releaseWidgetId(orphan)
-            prefs.edit().remove("pending_widget_id").apply()
+            db.setPendingWidgetId(null)
         }
     }
 
     private fun savePendingWidgetId(id: Int) {
-        prefs.edit().putInt("pending_widget_id", id).apply()
+        db.setPendingWidgetId(id)
     }
 
     private fun clearPendingWidgetId() {
-        prefs.edit().remove("pending_widget_id").apply()
+        db.setPendingWidgetId(null)
     }
 
     private fun completeWidgetBinding(appWidgetId: Int) {
@@ -787,8 +792,9 @@ class MainActivity : Activity() {
         pendingWidgetFromGlobalConfig = false
         clearPendingWidgetId()
         if (fromGlobalConfig) {
-            prefs.edit().remove("btn_${pendingWidgetButtonIndex}_widget_id").apply()
-            buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(prefs)
+            val row = db.loadButton(pendingWidgetButtonIndex)
+            if (row != null) db.saveButton(pendingWidgetButtonIndex, row.copy(widgetId = null))
+            buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(db)
             activeGlobalConfigPane?.rebuild()
         } else {
             deactivateActiveButton()
@@ -802,7 +808,7 @@ class MainActivity : Activity() {
         pendingWidgetConfig = null
         pendingWidgetFromGlobalConfig = false
         clearPendingWidgetId()
-        buttons[pendingWidgetButtonIndex].saveConfig(prefs, cfg)
+        buttons[pendingWidgetButtonIndex].saveConfig(db, cfg)
         if (cfg.appWidgetId != -1) {
             val info = AppWidgetManager.getInstance(this).getAppWidgetInfo(cfg.appWidgetId)
             if (info != null) {
@@ -885,7 +891,7 @@ class MainActivity : Activity() {
                     }
                 }
                 activeGlobalConfigPane?.let {
-                    buttons.getOrNull(pendingIconButtonIndex)?.loadConfig(prefs)
+                    buttons.getOrNull(pendingIconButtonIndex)?.loadConfig(db)
                     it.rebuild()
                 }
             } catch (_: Exception) { /* ignore failed pick */ }
@@ -966,7 +972,7 @@ class MainActivity : Activity() {
 
     private fun applyButtonVisibility() {
         for (i in buttons.indices) {
-            buttons[i].visibility = if (prefs.getBoolean("btn_${i}_active", true)) View.VISIBLE else View.GONE
+            buttons[i].visibility = if (db.isButtonActive(i)) View.VISIBLE else View.GONE
         }
         adjustButtonHeights()
         // focusedIndex is a panel position; check if focused configurable button became hidden.
@@ -1020,28 +1026,27 @@ class MainActivity : Activity() {
     // ── Global config pane ──────────────────────────────────────────────────
 
     private fun showGlobalConfigPane() {
-        val pane = GlobalConfigPaneContent(this, prefs, object : GlobalConfigPaneContent.Callbacks {
+        val pane = GlobalConfigPaneContent(this, db, object : GlobalConfigPaneContent.Callbacks {
             override fun onReloadButton(index: Int) {
-                buttons.getOrNull(index)?.loadConfig(prefs)
+                buttons.getOrNull(index)?.loadConfig(db)
             }
             override fun onReloadAll() {
-                for (btn in buttons) btn.loadConfig(prefs)
+                for (btn in buttons) btn.loadConfig(db)
                 applyButtonVisibility()
                 updateFocus()
             }
             override fun onActiveChanged(index: Int, active: Boolean) {
-                prefs.edit().putBoolean("btn_${index}_active", active).apply()
+                db.setButtonActive(index, active)
                 applyButtonVisibility()
             }
             override fun onAddButton() {
-                val i = buttons.size
-                prefs.edit().putInt("button_count", i + 1).apply()
+                val i = db.addButton()
                 val btn = layoutInflater.inflate(
                     R.layout.launcher_button_item, buttonPanel, false
                 ) as LauncherButton
                 btn.index = i
                 wireButton(btn, i)
-                btn.loadConfig(prefs)
+                btn.loadConfig(db)
                 // Insert before appsButton (always the last child)
                 buttonPanel.addView(btn, buttonPanel.childCount - 1)
                 buttons.add(btn)
@@ -1049,19 +1054,18 @@ class MainActivity : Activity() {
             }
             override fun onRemoveButton(index: Int) {
                 if (buttons.size <= 1) return
-                // Prefs already shifted by GlobalConfigPaneContent.removeButtonAt()
+                // DB already shifted by GlobalConfigPaneContent.removeButtonAt()
                 val removed = buttons.removeAt(index)
                 buttonPanel.removeView(removed)
-                prefs.edit().putInt("button_count", buttons.size).apply()
                 // Re-index and reload remaining buttons
                 for (i in buttons.indices) {
                     buttons[i].index = i
-                    buttons[i].loadConfig(prefs)
+                    buttons[i].loadConfig(db)
                 }
                 // focusedIndex is a panel position; clamp if it now points past the last button
                 if (focusedIndex > buttons.size) {
                     focusedIndex = buttons.size.coerceAtLeast(1)
-                    prefs.edit().putInt("focused_index", focusedIndex).apply()
+                    db.setFocusedIndex(focusedIndex)
                 }
                 adjustButtonHeights()
                 updateFocus()
@@ -1079,8 +1083,9 @@ class MainActivity : Activity() {
                     releaseWidgetId(oldCfg.appWidgetId)
                 }
 
-                val label = prefs.getString("btn_${buttonIndex}_label", "") ?: ""
-                val icon = UrlIcon.fromPrefs(prefs, buttonIndex)
+                val btnData = db.loadButton(buttonIndex)
+                val label = btnData?.label ?: ""
+                val icon = UrlIcon.fromRow(btnData?.iconType, btnData?.iconData)
 
                 val newId = appWidgetHost.allocateAppWidgetId()
                 savePendingWidgetId(newId)
