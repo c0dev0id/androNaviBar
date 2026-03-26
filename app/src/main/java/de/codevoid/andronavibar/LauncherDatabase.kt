@@ -5,6 +5,15 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
+data class CollectionItem(
+    val id: Long = 0,
+    val buttonPosition: Int,
+    val sortOrder: Int,
+    val label: String,
+    val uri: String,
+    val openBrowser: Boolean = false
+)
+
 data class ButtonRow(
     val type: String? = null,
     val value: String? = null,
@@ -21,7 +30,7 @@ class LauncherDatabase private constructor(context: Context) :
 
     companion object {
         private const val DB_NAME = "launcher.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
 
         @Volatile
         private var instance: LauncherDatabase? = null
@@ -52,10 +61,31 @@ class LauncherDatabase private constructor(context: Context) :
                 icon_data    TEXT
             )"""
         )
+        db.execSQL(
+            """CREATE TABLE collection_items (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                button_position INTEGER NOT NULL,
+                sort_order      INTEGER NOT NULL DEFAULT 0,
+                label           TEXT,
+                uri             TEXT,
+                open_browser    INTEGER NOT NULL DEFAULT 0
+            )"""
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Future migrations go here
+        if (oldVersion < 2) {
+            db.execSQL(
+                """CREATE TABLE IF NOT EXISTS collection_items (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    button_position INTEGER NOT NULL,
+                    sort_order      INTEGER NOT NULL DEFAULT 0,
+                    label           TEXT,
+                    uri             TEXT,
+                    open_browser    INTEGER NOT NULL DEFAULT 0
+                )"""
+            )
+        }
     }
 
     // ── Settings ────────────────────────────────────────────────────────────
@@ -185,6 +215,10 @@ class LauncherDatabase private constructor(context: Context) :
             db.delete("buttons", "position = ?", arrayOf(position.toString()))
             db.execSQL("UPDATE buttons SET position = position - 1 WHERE position > ?",
                 arrayOf(position.toString()))
+            // Cascade: delete items for removed button, re-index items for shifted buttons
+            db.delete("collection_items", "button_position = ?", arrayOf(position.toString()))
+            db.execSQL("UPDATE collection_items SET button_position = button_position - 1 WHERE button_position > ?",
+                arrayOf(position.toString()))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -196,29 +230,81 @@ class LauncherDatabase private constructor(context: Context) :
         val db = writableDatabase
         db.beginTransaction()
         try {
-            // Temporarily move `from` to -1
+            // Temporarily park `from` at -1
             db.execSQL("UPDATE buttons SET position = -1 WHERE position = ?",
                 arrayOf(from.toString()))
+            db.execSQL("UPDATE collection_items SET button_position = -1 WHERE button_position = ?",
+                arrayOf(from.toString()))
             if (from < to) {
-                // Shift intermediate rows down
                 db.execSQL(
                     "UPDATE buttons SET position = position - 1 WHERE position > ? AND position <= ?",
-                    arrayOf(from.toString(), to.toString())
-                )
+                    arrayOf(from.toString(), to.toString()))
+                db.execSQL(
+                    "UPDATE collection_items SET button_position = button_position - 1 WHERE button_position > ? AND button_position <= ?",
+                    arrayOf(from.toString(), to.toString()))
             } else {
-                // Shift intermediate rows up
                 db.execSQL(
                     "UPDATE buttons SET position = position + 1 WHERE position >= ? AND position < ?",
-                    arrayOf(to.toString(), from.toString())
-                )
+                    arrayOf(to.toString(), from.toString()))
+                db.execSQL(
+                    "UPDATE collection_items SET button_position = button_position + 1 WHERE button_position >= ? AND button_position < ?",
+                    arrayOf(to.toString(), from.toString()))
             }
-            // Place moved row at destination
             db.execSQL("UPDATE buttons SET position = ? WHERE position = -1",
+                arrayOf(to.toString()))
+            db.execSQL("UPDATE collection_items SET button_position = ? WHERE button_position = -1",
                 arrayOf(to.toString()))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    // ── Collection items ─────────────────────────────────────────────────────
+
+    fun getCollectionItems(buttonPosition: Int): List<CollectionItem> {
+        return readableDatabase.rawQuery(
+            "SELECT id, sort_order, label, uri, open_browser FROM collection_items WHERE button_position = ? ORDER BY sort_order",
+            arrayOf(buttonPosition.toString())
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(CollectionItem(
+                        id             = c.getLong(0),
+                        buttonPosition = buttonPosition,
+                        sortOrder      = c.getInt(1),
+                        label          = c.getString(2) ?: "",
+                        uri            = c.getString(3) ?: "",
+                        openBrowser    = c.getInt(4) != 0
+                    ))
+                }
+            }
+        }
+    }
+
+    fun addCollectionItem(item: CollectionItem): Long {
+        val cv = ContentValues(5).apply {
+            put("button_position", item.buttonPosition)
+            put("sort_order", item.sortOrder)
+            put("label", item.label)
+            put("uri", item.uri)
+            put("open_browser", if (item.openBrowser) 1 else 0)
+        }
+        return writableDatabase.insert("collection_items", null, cv)
+    }
+
+    fun updateCollectionItem(item: CollectionItem) {
+        val cv = ContentValues(4).apply {
+            put("label", item.label)
+            put("uri", item.uri)
+            put("open_browser", if (item.openBrowser) 1 else 0)
+            put("sort_order", item.sortOrder)
+        }
+        writableDatabase.update("collection_items", cv, "id = ?", arrayOf(item.id.toString()))
+    }
+
+    fun deleteCollectionItem(id: Long) {
+        writableDatabase.delete("collection_items", "id = ?", arrayOf(id.toString()))
     }
 
     // ── Migration from SharedPreferences ────────────────────────────────────

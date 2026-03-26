@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import com.google.android.material.button.MaterialButton
+import android.graphics.drawable.GradientDrawable
 
 /**
  * Config pane for a single configurable button, shown in reservedArea during edit mode.
@@ -81,11 +82,13 @@ class ButtonConfigPaneContent(
         container.addView(scroll)
 
         val typeTitle = when (pendingRow.type) {
-            "app"    -> activity.getString(R.string.tab_app)
-            "url"    -> activity.getString(R.string.tab_url)
-            "widget" -> activity.getString(R.string.widget_tab)
-            "music"  -> activity.getString(R.string.tab_music)
-            else     -> activity.getString(R.string.configure)
+            "app"       -> activity.getString(R.string.tab_app)
+            "url"       -> activity.getString(R.string.tab_url)
+            "widget"    -> activity.getString(R.string.widget_tab)
+            "music"     -> activity.getString(R.string.tab_music)
+            "bookmark"  -> activity.getString(R.string.type_bookmark)
+            "navtarget" -> activity.getString(R.string.type_navtarget)
+            else        -> activity.getString(R.string.configure)
         }
         form.addView(makeText(typeTitle, 22f, bold = true))
         form.addView(gap(16))
@@ -96,10 +99,12 @@ class ButtonConfigPaneContent(
             buildLabelField(form)
             form.addView(gap(16))
             when (pendingRow.type) {
-                "app"    -> buildAppFields(form)
-                "url"    -> buildUrlFields(form)
-                "widget" -> buildWidgetFields(form)
-                "music"  -> buildMusicFields(form)
+                "app"       -> buildAppFields(form)
+                "url"       -> buildUrlFields(form)
+                "widget"    -> buildWidgetFields(form)
+                "music"     -> buildMusicFields(form)
+                "bookmark"  -> buildBookmarkFields(form)
+                "navtarget" -> buildNavTargetFields(form)
             }
             if (pendingRow.type != "app") {
                 form.addView(gap(16))
@@ -206,6 +211,173 @@ class ButtonConfigPaneContent(
                 rebuild()
             }
         })
+    }
+
+    private fun buildBookmarkFields(form: LinearLayout) {
+        val items = db.getCollectionItems(buttonIndex)
+        form.addView(makeText(activity.getString(R.string.type_bookmark), 14f, secondary = true))
+        form.addView(gap(4))
+        items.forEach { item ->
+            form.addView(makeCollectionItemRow(
+                label      = item.label,
+                subtitle   = item.uri,
+                onEdit     = { showBookmarkDialog(item) },
+                onDelete   = { db.deleteCollectionItem(item.id); rebuild() }
+            ))
+            form.addView(gap(4))
+        }
+        form.addView(gap(4))
+        form.addView(makeButton(activity.getString(R.string.add_bookmark)) { showBookmarkDialog(null) })
+    }
+
+    private fun showBookmarkDialog(edit: CollectionItem?) {
+        val p = activity.resources.dpToPx(16)
+        val layout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(p, p, p, p)
+        }
+        val labelEdit = EditText(activity).apply {
+            hint = activity.getString(R.string.label_hint)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setText(edit?.label ?: "")
+        }
+        val uriEdit = EditText(activity).apply {
+            hint = activity.getString(R.string.url_hint)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(edit?.uri ?: "")
+        }
+        val openBrowserCheck = CheckBox(activity).apply {
+            text = activity.getString(R.string.open_in_browser)
+            isChecked = edit?.openBrowser ?: false
+        }
+        layout.addView(labelEdit)
+        layout.addView(gap(8))
+        layout.addView(uriEdit)
+        layout.addView(gap(8))
+        layout.addView(openBrowserCheck)
+
+        AlertDialog.Builder(activity)
+            .setTitle(if (edit == null) activity.getString(R.string.add_bookmark) else activity.getString(R.string.edit_item))
+            .setView(layout)
+            .setPositiveButton(activity.getString(R.string.save)) { _, _ ->
+                val sortOrder = edit?.sortOrder ?: db.getCollectionItems(buttonIndex).size
+                val item = CollectionItem(
+                    id             = edit?.id ?: 0,
+                    buttonPosition = buttonIndex,
+                    sortOrder      = sortOrder,
+                    label          = labelEdit.text.toString(),
+                    uri            = uriEdit.text.toString(),
+                    openBrowser    = openBrowserCheck.isChecked
+                )
+                if (edit == null) db.addCollectionItem(item) else db.updateCollectionItem(item)
+                rebuild()
+            }
+            .setNegativeButton(activity.getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun buildNavTargetFields(form: LinearLayout) {
+        val pkg = pendingRow.value ?: ""
+        form.addView(makeText(activity.getString(R.string.tab_app), 14f, secondary = true))
+        form.addView(gap(4))
+        form.addView(makeText(
+            if (pkg.isEmpty()) activity.getString(R.string.choose_app) else pkg, 14f
+        ))
+        form.addView(gap(8))
+        form.addView(makeButton(activity.getString(R.string.choose_app) + "…") {
+            pickApp { chosen ->
+                pendingRow = pendingRow.copy(value = chosen)
+                rebuild()
+            }
+        })
+        form.addView(gap(16))
+
+        val items = db.getCollectionItems(buttonIndex)
+        form.addView(makeText(activity.getString(R.string.type_navtarget), 14f, secondary = true))
+        form.addView(gap(4))
+        items.forEach { item ->
+            form.addView(makeCollectionItemRow(
+                label    = item.label,
+                subtitle = item.uri,
+                onEdit   = { showNavTargetDialog(item) },
+                onDelete = { db.deleteCollectionItem(item.id); rebuild() }
+            ))
+            form.addView(gap(4))
+        }
+        form.addView(gap(4))
+        form.addView(makeButton(activity.getString(R.string.add_target)) { showNavTargetDialog(null) })
+    }
+
+    private fun showNavTargetDialog(edit: CollectionItem?) {
+        val p = activity.resources.dpToPx(16)
+        val layout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(p, p, p, p)
+        }
+        val labelEdit = EditText(activity).apply {
+            hint = activity.getString(R.string.label_hint)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setText(edit?.label ?: "")
+        }
+        val uriEdit = EditText(activity).apply {
+            hint = "geo:0,0?q=..."
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(edit?.uri ?: "")
+        }
+        layout.addView(labelEdit)
+        layout.addView(gap(8))
+        layout.addView(uriEdit)
+
+        AlertDialog.Builder(activity)
+            .setTitle(if (edit == null) activity.getString(R.string.add_target) else activity.getString(R.string.edit_item))
+            .setView(layout)
+            .setPositiveButton(activity.getString(R.string.save)) { _, _ ->
+                val sortOrder = edit?.sortOrder ?: db.getCollectionItems(buttonIndex).size
+                val item = CollectionItem(
+                    id             = edit?.id ?: 0,
+                    buttonPosition = buttonIndex,
+                    sortOrder      = sortOrder,
+                    label          = labelEdit.text.toString(),
+                    uri            = uriEdit.text.toString()
+                )
+                if (edit == null) db.addCollectionItem(item) else db.updateCollectionItem(item)
+                rebuild()
+            }
+            .setNegativeButton(activity.getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun makeCollectionItemRow(
+        label: String, subtitle: String,
+        onEdit: () -> Unit, onDelete: () -> Unit
+    ): LinearLayout {
+        val bg = GradientDrawable().apply {
+            setColor(activity.getColor(R.color.surface_card))
+            cornerRadius = activity.resources.dpToPx(8).toFloat()
+        }
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = bg
+            val p = activity.resources.dpToPx(10)
+            setPadding(p, p, p, p)
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onEdit() }
+        }
+        val textCol = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
+        }
+        textCol.addView(makeText(label.ifEmpty { "—" }, 14f))
+        textCol.addView(makeText(subtitle, 12f, secondary = true))
+        row.addView(textCol)
+        row.addView(makeButton("×") { onDelete() }.also { btn ->
+            btn.layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        })
+        return row
     }
 
     private fun buildIconSection(form: LinearLayout) {

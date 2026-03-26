@@ -53,6 +53,12 @@ class LauncherButton @JvmOverloads constructor(
     /** Fired when a Music Player button is activated; MainActivity shows the music pane. */
     var onMusicPlayerActivated: ((String) -> Unit)? = null
 
+    /** Fired when a Bookmark Collection button is activated; MainActivity shows the bookmarks pane. */
+    var onBookmarkCollectionActivated: ((buttonIndex: Int) -> Unit)? = null
+
+    /** Fired when a Nav Target Collection button is activated; MainActivity shows the nav targets pane. */
+    var onNavTargetCollectionActivated: ((buttonIndex: Int) -> Unit)? = null
+
     // ── Edit mode ─────────────────────────────────────────────────────────────
 
     /** Set by MainActivity when entering/exiting edit mode. */
@@ -225,6 +231,19 @@ class LauncherButton @JvmOverloads constructor(
                         UrlIcon.fromRow(row.iconType, row.iconData)
                     )
                 }
+                type == "bookmark" -> {
+                    ButtonConfig.BookmarkCollection(
+                        row.label ?: "",
+                        UrlIcon.fromRow(row.iconType, row.iconData)
+                    )
+                }
+                type == "navtarget" -> {
+                    ButtonConfig.NavTargetCollection(
+                        row.label ?: "",
+                        UrlIcon.fromRow(row.iconType, row.iconData),
+                        value ?: ""
+                    )
+                }
                 else -> ButtonConfig.Empty
             }
         }
@@ -254,6 +273,16 @@ class LauncherButton @JvmOverloads constructor(
                 val (it, id) = UrlIcon.toRow(newConfig.icon)
                 ButtonRow("music", newConfig.playerPackage, newConfig.label,
                     iconType = it, iconData = id)
+                    .also { cleanStaleIconFile(newConfig.icon) }
+            }
+            is ButtonConfig.BookmarkCollection -> {
+                val (it, id) = UrlIcon.toRow(newConfig.icon)
+                ButtonRow("bookmark", null, newConfig.label, iconType = it, iconData = id)
+                    .also { cleanStaleIconFile(newConfig.icon) }
+            }
+            is ButtonConfig.NavTargetCollection -> {
+                val (it, id) = UrlIcon.toRow(newConfig.icon)
+                ButtonRow("navtarget", newConfig.appPackage, newConfig.label, iconType = it, iconData = id)
                     .also { cleanStaleIconFile(newConfig.icon) }
             }
             is ButtonConfig.Empty -> {
@@ -305,6 +334,14 @@ class LauncherButton @JvmOverloads constructor(
                 text = cfg.label.ifEmpty { context.getString(R.string.tab_music) }
                 buttonIcon = resolveIcon(cfg.icon)
             }
+            is ButtonConfig.BookmarkCollection -> {
+                text = cfg.label.ifEmpty { context.getString(R.string.type_bookmark) }
+                buttonIcon = resolveIcon(cfg.icon)
+            }
+            is ButtonConfig.NavTargetCollection -> {
+                text = cfg.label.ifEmpty { context.getString(R.string.type_navtarget) }
+                buttonIcon = resolveIcon(cfg.icon)
+            }
         }
     }
 
@@ -336,6 +373,12 @@ class LauncherButton @JvmOverloads constructor(
             }
             is ButtonConfig.MusicPlayer -> {
                 onMusicPlayerActivated?.invoke(cfg.playerPackage)
+            }
+            is ButtonConfig.BookmarkCollection -> {
+                onBookmarkCollectionActivated?.invoke(index)
+            }
+            is ButtonConfig.NavTargetCollection -> {
+                onNavTargetCollectionActivated?.invoke(index)
             }
         }
     }

@@ -37,6 +37,15 @@
     <string name="edit_settings">Settings</string>
     <string name="edit_add">+ Add</string>
     <string name="check_for_update">Check for Update</string>
+    <string name="type_bookmark">Bookmarks</string>
+    <string name="type_bookmark_desc">A collection of URL bookmarks</string>
+    <string name="type_navtarget">Navigation</string>
+    <string name="type_navtarget_desc">Launch an app with navigation targets</string>
+    <string name="add_bookmark">Add Bookmark</string>
+    <string name="add_target">Add Target</string>
+    <string name="edit_item">Edit</string>
+    <string name="no_bookmarks">No bookmarks added yet.</string>
+    <string name="no_targets">No targets added yet.</string>
     <string name="type_picker_title">New Button</string>
     <string name="type_app_desc">Launch an installed app</string>
     <string name="type_url_desc">Open a web page or URL</string>

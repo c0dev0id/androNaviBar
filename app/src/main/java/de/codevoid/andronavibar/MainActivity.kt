@@ -104,6 +104,12 @@ class MainActivity : Activity() {
     /** Non-null while a music player pane is displayed in reservedArea. */
     private var activeMusicPlayerPane: MusicPlayerPaneContent? = null
 
+    /** Non-null while a bookmarks pane is displayed in reservedArea. */
+    private var activeBookmarksPane: BookmarksPaneContent? = null
+
+    /** Non-null while a nav targets pane is displayed in reservedArea. */
+    private var activeNavTargetsPane: NavTargetsPaneContent? = null
+
     /** Non-null while the global settings pane is displayed in reservedArea. */
     private var activeGlobalSettingsPane: GlobalSettingsPaneContent? = null
 
@@ -730,6 +736,8 @@ class MainActivity : Activity() {
         widgetPanes.values.forEach { it.hide() }
         activeAppsGridPane?.hide()
         activeMusicPlayerPane?.hide()
+        activeBookmarksPane?.hide()
+        activeNavTargetsPane?.hide()
         activeGlobalSettingsPane?.unload(); activeGlobalSettingsPane = null
         keyPane = null
         hideLoading()
@@ -744,6 +752,8 @@ class MainActivity : Activity() {
         widgetPanes.values.forEach { it.unload() }; widgetPanes.clear()
         activeAppsGridPane?.unload();       activeAppsGridPane = null
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null;    cachedMusicPkg = null
+        activeBookmarksPane?.unload();      activeBookmarksPane = null
+        activeNavTargetsPane?.unload();     activeNavTargetsPane = null
         activeGlobalSettingsPane?.unload(); activeGlobalSettingsPane = null
         activeButtonConfigPane?.unload();   activeButtonConfigPane = null
         activeTypePickerPane?.unload();     activeTypePickerPane = null
@@ -944,6 +954,37 @@ class MainActivity : Activity() {
         cachedMusicPkg = playerPackage
         keyPane = pane
         pane.load { pane.show(reservedArea); showLoading() }
+    }
+
+    private fun showBookmarksPane(buttonIndex: Int) {
+        activeBookmarksPane?.let { pane -> pane.show(reservedArea); keyPane = pane; return }
+        val pane = BookmarksPaneContent(
+            context              = this,
+            buttonIndex          = buttonIndex,
+            db                   = db,
+            onUrlActivated       = { url -> showWebPane(url) },
+            onUrlBrowserActivated = { url ->
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+            }
+        )
+        activeBookmarksPane = pane
+        keyPane = pane
+        pane.load { pane.show(reservedArea) }
+    }
+
+    private fun showNavTargetsPane(buttonIndex: Int) {
+        activeNavTargetsPane?.let { pane -> pane.show(reservedArea); keyPane = pane; return }
+        val row = db.loadButton(buttonIndex)
+        val appPackage = row?.value ?: ""
+        val pane = NavTargetsPaneContent(
+            context     = this,
+            buttonIndex = buttonIndex,
+            appPackage  = appPackage,
+            db          = db
+        )
+        activeNavTargetsPane = pane
+        keyPane = pane
+        pane.load { pane.show(reservedArea) }
     }
 
     // ── Widget binding ────────────────────────────────────────────────────────
@@ -1149,6 +1190,14 @@ class MainActivity : Activity() {
         btn.onMusicPlayerActivated = { pkg ->
             val p = buttons.indexOf(btn) + 1
             activateToggleButton(p) { showMusicPlayerPane(pkg) }
+        }
+        btn.onBookmarkCollectionActivated = { idx ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showBookmarksPane(idx) }
+        }
+        btn.onNavTargetCollectionActivated = { idx ->
+            val p = buttons.indexOf(btn) + 1
+            activateToggleButton(p) { showNavTargetsPane(idx) }
         }
     }
 

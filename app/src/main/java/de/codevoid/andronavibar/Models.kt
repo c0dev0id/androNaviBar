@@ -59,4 +59,17 @@ sealed class ButtonConfig {
         val label: String,
         val icon: UrlIcon = UrlIcon.None
     ) : ButtonConfig()
+
+    /** A collection of URL bookmarks shown as a list pane when activated. */
+    data class BookmarkCollection(
+        val label: String,
+        val icon: UrlIcon = UrlIcon.None
+    ) : ButtonConfig()
+
+    /** A collection of navigation targets (label + URI) launched via a configured app. */
+    data class NavTargetCollection(
+        val label: String,
+        val icon: UrlIcon = UrlIcon.None,
+        val appPackage: String          // app to launch with each target URI
+    ) : ButtonConfig()
 }

@@ -53,10 +53,12 @@ class TypePickerPaneContent(
         form.addView(gap(20))
 
         val types = listOf(
-            Triple("app",    activity.getString(R.string.tab_app),    activity.getString(R.string.type_app_desc)),
-            Triple("url",    activity.getString(R.string.tab_url),    activity.getString(R.string.type_url_desc)),
-            Triple("widget", activity.getString(R.string.widget_tab), activity.getString(R.string.type_widget_desc)),
-            Triple("music",  activity.getString(R.string.tab_music),  activity.getString(R.string.type_music_desc))
+            Triple("app",       activity.getString(R.string.tab_app),       activity.getString(R.string.type_app_desc)),
+            Triple("url",       activity.getString(R.string.tab_url),       activity.getString(R.string.type_url_desc)),
+            Triple("widget",    activity.getString(R.string.widget_tab),    activity.getString(R.string.type_widget_desc)),
+            Triple("music",     activity.getString(R.string.tab_music),     activity.getString(R.string.type_music_desc)),
+            Triple("bookmark",  activity.getString(R.string.type_bookmark), activity.getString(R.string.type_bookmark_desc)),
+            Triple("navtarget", activity.getString(R.string.type_navtarget),activity.getString(R.string.type_navtarget_desc))
         )
 
         val cardGap = activity.resources.dpToPx(8)
