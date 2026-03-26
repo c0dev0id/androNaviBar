@@ -110,6 +110,9 @@ class MainActivity : Activity() {
     /** Non-null while a per-button config pane is displayed in reservedArea during edit mode. */
     private var activeButtonConfigPane: ButtonConfigPaneContent? = null
 
+    /** Non-null while the type picker pane is displayed in reservedArea during edit mode. */
+    private var activeTypePickerPane: TypePickerPaneContent? = null
+
     /** The one pane currently visible and receiving remote key events. */
     private var keyPane: PaneContent? = null
 
@@ -614,7 +617,29 @@ class MainActivity : Activity() {
     // ── Edit mode: add / remove ───────────────────────────────────────────────
 
     private fun addNewButton() {
+        showTypePickerPane()
+    }
+
+    private fun showTypePickerPane() {
+        activeButtonConfigPane?.unload(); activeButtonConfigPane = null
+        activeTypePickerPane?.unload();   activeTypePickerPane = null
+        val pane = TypePickerPaneContent(
+            activity = this,
+            onTypeSelected = { typeKey ->
+                activeTypePickerPane?.unload(); activeTypePickerPane = null
+                createButtonWithType(typeKey)
+            },
+            onCancelled = {
+                activeTypePickerPane?.unload(); activeTypePickerPane = null
+            }
+        )
+        activeTypePickerPane = pane
+        pane.load { pane.show(reservedArea) }
+    }
+
+    private fun createButtonWithType(typeKey: String) {
         val i = db.addButton()
+        db.saveButton(i, ButtonRow(type = typeKey))
         val btn = layoutInflater.inflate(
             R.layout.launcher_button_item, buttonPanel, false
         ) as LauncherButton
@@ -624,7 +649,6 @@ class MainActivity : Activity() {
         btn.loadConfig(db)
         buttons.add(btn)
         rebuildButtonPanel()
-        // Show type picker (Phase 4); for now show config pane for empty slot.
         showButtonConfigPane(i)
     }
 
@@ -723,6 +747,7 @@ class MainActivity : Activity() {
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null;    cachedMusicPkg = null
         activeGlobalConfigPane?.unload();   activeGlobalConfigPane = null
         activeButtonConfigPane?.unload();   activeButtonConfigPane = null
+        activeTypePickerPane?.unload();     activeTypePickerPane = null
         keyPane = null
         hideLoading()
     }
