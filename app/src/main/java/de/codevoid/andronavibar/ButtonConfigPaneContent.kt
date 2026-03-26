@@ -438,7 +438,7 @@ class ButtonConfigPaneContent(
                     val buttonLabel = parts.take(3).joinToString(", ")
                     val lat = obj.getString("lat")
                     val lon = obj.getString("lon")
-                    val geoUri = "geo:$lat,$lon?q=${java.net.URLEncoder.encode(shortLabel, "UTF-8")}"
+                    val geoUri = "geo:$lat,$lon?q=${android.net.Uri.encode(shortLabel)}"
                     add(OsmResult(buttonLabel, shortLabel, geoUri))
                 }
             }
