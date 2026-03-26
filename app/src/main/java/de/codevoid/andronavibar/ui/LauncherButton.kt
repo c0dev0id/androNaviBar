@@ -2,12 +2,13 @@ package de.codevoid.andronavibar.ui
 
 import android.content.ComponentName
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import de.codevoid.andronavibar.ButtonConfig
+import de.codevoid.andronavibar.ButtonRow
+import de.codevoid.andronavibar.LauncherDatabase
 import de.codevoid.andronavibar.R
 import de.codevoid.andronavibar.UrlIcon
 import de.codevoid.andronavibar.buttonIconFile
@@ -23,7 +24,7 @@ class LauncherButton @JvmOverloads constructor(
     defStyleAttr: Int = com.google.android.material.R.attr.materialButtonStyle
 ) : FocusableButton(context, attrs, defStyleAttr) {
 
-    // Set by MainActivity during setup; used as the SharedPreferences key suffix.
+    // Set by MainActivity during setup; used as the database row position.
     var index: Int = 0
 
     var config: ButtonConfig = ButtonConfig.Empty
@@ -54,103 +55,94 @@ class LauncherButton @JvmOverloads constructor(
 
     // ── Config persistence ────────────────────────────────────────────────────
 
-    fun loadConfig(prefs: SharedPreferences) {
-        val type  = prefs.getString("btn_${index}_type",  null)
-        val value = prefs.getString("btn_${index}_value", null)
-
-        config = when {
-            type == "app" && value != null -> {
-                val label = prefs.getString("btn_${index}_label", null)
-                if (label != null) ButtonConfig.AppLauncher(value, label) else ButtonConfig.Empty
-            }
-            type == "widget" && value != null -> {
-                val cn = ComponentName.unflattenFromString(value)
-                if (cn == null) {
-                    ButtonConfig.Empty
-                } else {
-                    val widgetId = prefs.getString("btn_${index}_widget_id", null)?.toIntOrNull() ?: -1
-                    val label    = prefs.getString("btn_${index}_label", "") ?: ""
-                    ButtonConfig.WidgetLauncher(cn, widgetId, label, UrlIcon.fromPrefs(prefs, index))
+    fun loadConfig(db: LauncherDatabase) {
+        val row = db.loadButton(index)
+        config = if (row == null) {
+            ButtonConfig.Empty
+        } else {
+            val type = row.type
+            val value = row.value
+            when {
+                type == "app" && value != null -> {
+                    val label = row.label
+                    if (label != null) ButtonConfig.AppLauncher(value, label) else ButtonConfig.Empty
                 }
+                type == "widget" && value != null -> {
+                    val cn = ComponentName.unflattenFromString(value)
+                    if (cn == null) {
+                        ButtonConfig.Empty
+                    } else {
+                        ButtonConfig.WidgetLauncher(
+                            cn, row.widgetId ?: -1,
+                            row.label ?: "",
+                            UrlIcon.fromRow(row.iconType, row.iconData)
+                        )
+                    }
+                }
+                type == "url" && value != null -> {
+                    val labelRaw = row.label ?: ""
+                    val label = if (labelRaw == value) "" else labelRaw
+                    ButtonConfig.UrlLauncher(
+                        value, label,
+                        UrlIcon.fromRow(row.iconType, row.iconData),
+                        row.openBrowser
+                    )
+                }
+                type == "music" -> {
+                    ButtonConfig.MusicPlayer(
+                        value ?: "",
+                        row.label ?: "",
+                        UrlIcon.fromRow(row.iconType, row.iconData)
+                    )
+                }
+                else -> ButtonConfig.Empty
             }
-            type == "url" && value != null -> {
-                val labelRaw = prefs.getString("btn_${index}_label", "") ?: ""
-                // Migrate: old code stored url as label — treat label==url as empty.
-                val label = if (labelRaw == value) "" else labelRaw
-                val openInBrowser = prefs.getString("btn_${index}_open_browser", null) == "true"
-                ButtonConfig.UrlLauncher(value, label, UrlIcon.fromPrefs(prefs, index), openInBrowser)
-            }
-            type == "music" -> {
-                val label     = prefs.getString("btn_${index}_label", "") ?: ""
-                val playerPkg = prefs.getString("btn_${index}_value", "") ?: ""
-                ButtonConfig.MusicPlayer(playerPkg, label, UrlIcon.fromPrefs(prefs, index))
-            }
-            else -> ButtonConfig.Empty
         }
         applyConfig()
     }
 
-    fun saveConfig(prefs: SharedPreferences, newConfig: ButtonConfig) {
+    fun saveConfig(db: LauncherDatabase, newConfig: ButtonConfig) {
         config = newConfig
-        when (newConfig) {
+        val row = when (newConfig) {
             is ButtonConfig.AppLauncher -> {
-                val edit = prefs.edit()
-                    .putString("btn_${index}_type",  "app")
-                    .putString("btn_${index}_value", newConfig.packageName)
-                    .putString("btn_${index}_label", newConfig.label)
-                UrlIcon.writeTo(edit, index, UrlIcon.None)
-                edit.apply()
+                val (it, id) = UrlIcon.toRow(UrlIcon.None)
+                ButtonRow("app", newConfig.packageName, newConfig.label, iconType = it, iconData = id)
             }
-
             is ButtonConfig.UrlLauncher -> {
-                val edit = prefs.edit()
-                    .putString("btn_${index}_type",  "url")
-                    .putString("btn_${index}_value", newConfig.url)
-                    .putString("btn_${index}_label", newConfig.label)
-                if (newConfig.openInBrowser) edit.putString("btn_${index}_open_browser", "true")
-                else edit.remove("btn_${index}_open_browser")
-                UrlIcon.writeTo(edit, index, newConfig.icon)
-                edit.apply()
-                cleanStaleIconFile(newConfig.icon)
+                val (it, id) = UrlIcon.toRow(newConfig.icon)
+                ButtonRow("url", newConfig.url, newConfig.label,
+                    openBrowser = newConfig.openInBrowser, iconType = it, iconData = id)
+                    .also { cleanStaleIconFile(newConfig.icon) }
             }
-
             is ButtonConfig.WidgetLauncher -> {
-                val edit = prefs.edit()
-                    .putString("btn_${index}_type",      "widget")
-                    .putString("btn_${index}_value",     newConfig.provider.flattenToString())
-                    .putString("btn_${index}_label",     newConfig.label)
-                    .putString("btn_${index}_widget_id", newConfig.appWidgetId.toString())
-                UrlIcon.writeTo(edit, index, newConfig.icon)
-                edit.apply()
-                cleanStaleIconFile(newConfig.icon)
+                val (it, id) = UrlIcon.toRow(newConfig.icon)
+                ButtonRow("widget", newConfig.provider.flattenToString(), newConfig.label,
+                    widgetId = newConfig.appWidgetId, iconType = it, iconData = id)
+                    .also { cleanStaleIconFile(newConfig.icon) }
             }
-
             is ButtonConfig.MusicPlayer -> {
-                val edit = prefs.edit()
-                    .putString("btn_${index}_type",  "music")
-                    .putString("btn_${index}_value", newConfig.playerPackage)
-                    .putString("btn_${index}_label", newConfig.label)
-                UrlIcon.writeTo(edit, index, newConfig.icon)
-                edit.apply()
-                cleanStaleIconFile(newConfig.icon)
+                val (it, id) = UrlIcon.toRow(newConfig.icon)
+                ButtonRow("music", newConfig.playerPackage, newConfig.label,
+                    iconType = it, iconData = id)
+                    .also { cleanStaleIconFile(newConfig.icon) }
             }
-
-            is ButtonConfig.Empty -> clearConfig(prefs)
+            is ButtonConfig.Empty -> {
+                clearConfig(db)
+                return
+            }
         }
+        // Preserve current active state
+        val current = db.loadButton(index)
+        db.saveButton(index, row.copy(active = current?.active ?: true))
         applyConfig()
     }
 
-    fun clearConfig(prefs: SharedPreferences) {
+    fun clearConfig(db: LauncherDatabase) {
         config = ButtonConfig.Empty
         buttonIconFile(context.filesDir, index).delete()
-        val edit = prefs.edit()
-            .remove("btn_${index}_type")
-            .remove("btn_${index}_value")
-            .remove("btn_${index}_label")
-            .remove("btn_${index}_widget_id")
-            .remove("btn_${index}_open_browser")
-        UrlIcon.writeTo(edit, index, UrlIcon.None)
-        edit.apply()
+        val current = db.loadButton(index)
+        db.clearButton(index)
+        if (current != null) db.setButtonActive(index, current.active)
         applyConfig()
     }
 

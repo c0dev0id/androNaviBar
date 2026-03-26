@@ -8,7 +8,7 @@ import android.content.ClipDescription
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
+import de.codevoid.andronavibar.LauncherDatabase
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.content.res.ColorStateList
@@ -44,7 +44,7 @@ import java.io.File
  */
 class GlobalConfigPaneContent(
     private val context: Context,
-    private val prefs: SharedPreferences,
+    private val db: LauncherDatabase,
     private val callbacks: Callbacks
 ) : PaneContent {
 
@@ -63,7 +63,7 @@ class GlobalConfigPaneContent(
     private var buttonListContainer: LinearLayout? = null
     private var detailContainer: FrameLayout? = null
     private var selectedButtonIndex: Int = -1
-    private val pendingEdits = mutableMapOf<String, String?>()
+    private var pendingRow: ButtonRow? = null
     private var dragFromIndex = -1
     private var dragGhostIndex = -1
 
@@ -123,7 +123,7 @@ class GlobalConfigPaneContent(
         buttonListContainer = null
         detailContainer = null
         selectedButtonIndex = -1
-        pendingEdits.clear()
+        pendingRow = null
         iconCache.clear()
         cachedApps = null
         cachedWidgets = null
@@ -154,7 +154,7 @@ class GlobalConfigPaneContent(
         container.removeAllViews()
         iconCache.clear()
         rowFocusTargets.clear()
-        val count = prefs.getInt("button_count", 6)
+        val count = db.getButtonCount()
         for (i in 0 until count) container.addView(buildButtonListEntry(i))
         container.addView(buildFooter())
         updateFocusRings()
@@ -179,10 +179,11 @@ class GlobalConfigPaneContent(
         if (selectedButtonIndex >= 0) {
             val prev = selectedButtonIndex
             selectedButtonIndex = -1
-            pendingEdits.clear()
+            pendingRow = null
             replaceEntry(prev)
         }
         selectedButtonIndex = index
+        pendingRow = db.loadButton(index) ?: ButtonRow()
         refreshDetailEditor()
         setEntryHighlight(index, true)
         updateFocusRings()
@@ -192,7 +193,7 @@ class GlobalConfigPaneContent(
         val prev = selectedButtonIndex
         detailContainer?.removeAllViews()
         selectedButtonIndex = -1
-        pendingEdits.clear()
+        pendingRow = null
         if (prev >= 0) {
             iconCache.remove(prev)
             replaceEntry(prev)
@@ -224,8 +225,14 @@ class GlobalConfigPaneContent(
             setPadding(p, p, p, p)
         }
 
-        val type = getEditValue("btn_${index}_type")
-        val label = getEditValue("btn_${index}_label") ?: ""
+        // Sync widget_id from DB (widget binding writes directly to DB)
+        val dbRow = db.loadButton(index)
+        if (pendingRow != null && dbRow != null) {
+            pendingRow = pendingRow!!.copy(widgetId = dbRow.widgetId)
+        }
+        val row = pendingRow ?: ButtonRow()
+        val type = row.type
+        val label = row.label ?: ""
 
         // Header
         content.addView(TextView(context).apply {
@@ -246,8 +253,8 @@ class GlobalConfigPaneContent(
 
         // Icon selector (non-app types)
         if (type != null && type != "app") {
-            val iconType = getEditValue("btn_${index}_icon_type")
-            val iconData = getEditValue("btn_${index}_icon_data")
+            val iconType = row.iconType
+            val iconData = row.iconData
             content.addView(buildIconSelector(index, iconType, iconData))
         }
 
@@ -260,13 +267,10 @@ class GlobalConfigPaneContent(
 
         btnRow.addView(makeActionButton("Save") {
             val idx = selectedButtonIndex
-            val edit = prefs.edit()
-            for ((key, value) in pendingEdits) {
-                if (value != null) edit.putString(key, value) else edit.remove(key)
-            }
-            edit.apply()
+            val saveRow = pendingRow ?: return@makeActionButton
+            db.saveButton(idx, saveRow)
             // Clean up orphaned icon file
-            if (prefs.getString("btn_${idx}_icon_type", null) != "custom") {
+            if (saveRow.iconType != "custom") {
                 buttonIconFile(context.filesDir, idx).delete()
             }
             iconCache.remove(idx)
@@ -286,10 +290,6 @@ class GlobalConfigPaneContent(
         scroll.addView(content)
         container.addView(scroll)
     }
-
-    /** Read a value from pending edits, falling back to saved prefs. */
-    private fun getEditValue(key: String): String? =
-        if (pendingEdits.containsKey(key)) pendingEdits[key] else prefs.getString(key, null)
 
     // ── Layout ──────────────────────────────────────────────────────────────
 
@@ -322,7 +322,7 @@ class GlobalConfigPaneContent(
         buttonListContainer = list
 
         list.setOnDragListener { _, event ->
-            val count = prefs.getInt("button_count", 6)
+            val count = db.getButtonCount()
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> {
                     dragFromIndex = event.localState as? Int ?: -1
@@ -368,8 +368,8 @@ class GlobalConfigPaneContent(
             }
         }
 
-        val count = prefs.getInt("button_count", 6)
-        for (i in 0 until count) list.addView(buildButtonListEntry(i))
+        val initCount = db.getButtonCount()
+        for (i in 0 until initCount) list.addView(buildButtonListEntry(i))
         list.addView(buildFooter())
 
         scroll.addView(list)
@@ -379,7 +379,7 @@ class GlobalConfigPaneContent(
 
     /** Determine which button slot the drop Y coordinate corresponds to. */
     private fun dropTargetIndex(list: LinearLayout, y: Float): Int {
-        val count = prefs.getInt("button_count", 6)
+        val count = db.getButtonCount()
         for (i in 0 until count) {
             val child = list.getChildAt(i) ?: continue
             val mid = child.top + child.height / 2f
@@ -391,9 +391,10 @@ class GlobalConfigPaneContent(
     // ── Right-side button list entries ───────────────────────────────────────
 
     private fun buildButtonListEntry(index: Int): LinearLayout {
-        val type = prefs.getString("btn_${index}_type", null)
-        val label = prefs.getString("btn_${index}_label", "") ?: ""
-        val active = prefs.getBoolean("btn_${index}_active", true)
+        val btnRow = db.loadButton(index)
+        val type = btnRow?.type
+        val label = btnRow?.label ?: ""
+        val active = btnRow?.active ?: true
         val displayName = label.ifEmpty { type?.replaceFirstChar { it.uppercase() } ?: "Empty" }
 
         val row = LinearLayout(context).apply {
@@ -476,7 +477,7 @@ class GlobalConfigPaneContent(
                 marginStart = context.resources.dpToPx(16)
             }
             setOnClickListener {
-                val count = prefs.getInt("button_count", 6)
+                val count = db.getButtonCount()
                 if (count <= 1) return@setOnClickListener
                 if (selectedButtonIndex >= 0) clearDetailEditor()
                 removeButtonAt(index)
@@ -496,8 +497,9 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildIconPreview(index: Int): View? {
-        val iconType = prefs.getString("btn_${index}_icon_type", null)
-        val iconData = prefs.getString("btn_${index}_icon_data", null)
+        val previewRow = db.loadButton(index)
+        val iconType = previewRow?.iconType
+        val iconData = previewRow?.iconData
         val size = context.resources.dpToPx(40)
 
         // Emoji: lightweight TextView, no caching needed
@@ -521,14 +523,13 @@ class GlobalConfigPaneContent(
     }
 
     private fun loadIconDrawable(index: Int): Drawable? {
-        val iconType = prefs.getString("btn_${index}_icon_type", null)
-        if (iconType == "custom") {
+        val iconRow = db.loadButton(index) ?: return null
+        if (iconRow.iconType == "custom") {
             val file = buttonIconFile(context.filesDir, index)
             return if (file.exists()) BitmapDrawable(context.resources, BitmapFactory.decodeFile(file.absolutePath)) else null
         }
-        val type = prefs.getString("btn_${index}_type", null)
-        if (type == "app") {
-            val pkg = prefs.getString("btn_${index}_value", null) ?: return null
+        if (iconRow.type == "app") {
+            val pkg = iconRow.value ?: return null
             return try { context.packageManager.getApplicationIcon(pkg) } catch (_: Exception) { null }
         }
         return null
@@ -603,7 +604,7 @@ class GlobalConfigPaneContent(
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                pendingEdits["btn_${index}_label"] = s?.toString() ?: ""
+                pendingRow = pendingRow?.copy(label = s?.toString() ?: "")
             }
         })
 
@@ -624,7 +625,7 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildAppConfig(index: Int): View {
-        val currentPkg = getEditValue("btn_${index}_value")
+        val currentPkg = pendingRow?.value
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -656,8 +657,10 @@ class GlobalConfigPaneContent(
 
         row.addView(makeChooser("Select app", labels, selectedIndex) { position ->
             val app = installedApps[position]
-            pendingEdits["btn_${index}_value"] = app.activityInfo.packageName
-            pendingEdits["btn_${index}_label"] = app.loadLabel(context.packageManager).toString()
+            pendingRow = pendingRow?.copy(
+                value = app.activityInfo.packageName,
+                label = app.loadLabel(context.packageManager).toString()
+            )
             rebuild()
         })
 
@@ -665,8 +668,8 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildUrlConfig(index: Int): View {
-        val currentUrl = getEditValue("btn_${index}_value") ?: ""
-        val currentOpenBrowser = getEditValue("btn_${index}_open_browser") == "true"
+        val currentUrl = pendingRow?.value ?: ""
+        val currentOpenBrowser = pendingRow?.openBrowser ?: false
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -703,7 +706,7 @@ class GlobalConfigPaneContent(
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
-                pendingEdits["btn_${index}_value"] = s?.toString() ?: ""
+                pendingRow = pendingRow?.copy(value = s?.toString() ?: "")
             }
         })
 
@@ -719,7 +722,7 @@ class GlobalConfigPaneContent(
             layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = context.resources.dpToPx(4) }
         }
         checkbox.setOnCheckedChangeListener { _, isChecked ->
-            pendingEdits["btn_${index}_open_browser"] = if (isChecked) "true" else null
+            pendingRow = pendingRow?.copy(openBrowser = isChecked)
         }
 
         wrapper.addView(checkbox)
@@ -727,10 +730,9 @@ class GlobalConfigPaneContent(
     }
 
     private fun buildWidgetConfig(index: Int): View {
-        val currentValue = getEditValue("btn_${index}_value")
+        val currentValue = pendingRow?.value
         val currentProvider = currentValue?.let { ComponentName.unflattenFromString(it) }
-        val currentWidgetId = getEditValue("btn_${index}_widget_id")
-            ?.toIntOrNull() ?: -1
+        val currentWidgetId = pendingRow?.widgetId ?: -1
 
         val wrapper = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -784,13 +786,12 @@ class GlobalConfigPaneContent(
 
         row.addView(makeChooser("Select widget", labels, selectedIndex) { position ->
             val provider = widgetProviders[position]
-            pendingEdits["btn_${index}_value"] = provider.provider.flattenToString()
-            if (getEditValue("btn_${index}_label").isNullOrEmpty()) {
-                pendingEdits["btn_${index}_label"] = provider.loadLabel(context.packageManager)
-            }
-            // Widget binding is immediate (system side effect); let the
-            // resulting widget_id in prefs be visible through getEditValue.
-            pendingEdits.remove("btn_${index}_widget_id")
+            val newValue = provider.provider.flattenToString()
+            val newLabel = if (pendingRow?.label.isNullOrEmpty())
+                provider.loadLabel(context.packageManager) else pendingRow?.label
+            pendingRow = pendingRow?.copy(value = newValue, label = newLabel)
+            // Widget binding is immediate (system side effect); widgetId
+            // will be synced from DB on next rebuild via refreshDetailEditor.
             callbacks.onWidgetBind(index, provider.provider)
         })
         wrapper.addView(row)
@@ -820,7 +821,7 @@ class GlobalConfigPaneContent(
 
 
     private fun buildMusicConfig(index: Int): View {
-        val currentPkg = getEditValue("btn_${index}_value")
+        val currentPkg = pendingRow?.value
 
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -850,7 +851,7 @@ class GlobalConfigPaneContent(
         } else -1
 
         row.addView(makeChooser("Select player", labels, selectedIndex) { position ->
-            pendingEdits["btn_${index}_value"] = installedApps[position].activityInfo.packageName
+            pendingRow = pendingRow?.copy(value = installedApps[position].activityInfo.packageName)
         })
 
         return row
@@ -926,7 +927,7 @@ class GlobalConfigPaneContent(
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
                 override fun afterTextChanged(s: Editable?) {
-                    pendingEdits["btn_${index}_icon_data"] = s?.toString() ?: ""
+                    pendingRow = pendingRow?.copy(iconData = s?.toString() ?: "")
                 }
             })
         }
@@ -948,7 +949,7 @@ class GlobalConfigPaneContent(
     private fun doAddButton() {
         if (selectedButtonIndex >= 0) clearDetailEditor()
         callbacks.onAddButton()
-        val newIndex = prefs.getInt("button_count", 6) - 1
+        val newIndex = db.getButtonCount() - 1
         val container = buttonListContainer ?: return
         // Insert before the footer
         container.addView(buildButtonListEntry(newIndex), container.childCount - 1)
@@ -993,57 +994,47 @@ class GlobalConfigPaneContent(
 
     private fun changeButtonType(index: Int, typeKey: String?) {
         // Clean up old widget if changing away from widget type
-        val oldType = getEditValue("btn_${index}_type")
+        val oldType = pendingRow?.type
         if (oldType == "widget") {
-            val widgetId = getEditValue("btn_${index}_widget_id")
-                ?.toIntOrNull() ?: -1
+            val widgetId = pendingRow?.widgetId ?: -1
             if (widgetId != -1) callbacks.onWidgetCleanup(widgetId)
         }
 
-        // Clear all keys in pending
-        for (suffix in BUTTON_PREF_SUFFIXES) {
-            pendingEdits["btn_$index$suffix"] = null
-        }
-
-        if (typeKey != null) {
-            pendingEdits["btn_${index}_type"] = typeKey
+        // Preserve active state, reset everything else
+        val active = pendingRow?.active ?: true
+        pendingRow = if (typeKey != null) {
             when (typeKey) {
                 "app" -> {
                     val first = installedApps.firstOrNull()
-                    if (first != null) {
-                        pendingEdits["btn_${index}_value"] = first.activityInfo.packageName
-                        pendingEdits["btn_${index}_label"] =
-                            first.loadLabel(context.packageManager).toString()
-                    } else {
-                        pendingEdits["btn_${index}_label"] = ""
-                    }
+                    ButtonRow(
+                        type = "app", active = active,
+                        value = first?.activityInfo?.packageName,
+                        label = first?.loadLabel(context.packageManager)?.toString() ?: ""
+                    )
                 }
-                "url" -> pendingEdits["btn_${index}_label"] = ""
-                "widget" -> pendingEdits["btn_${index}_label"] = ""
+                "url" -> ButtonRow(type = "url", active = active, label = "")
+                "widget" -> ButtonRow(type = "widget", active = active, label = "")
                 "music" -> {
                     val first = installedApps.firstOrNull()
-                    if (first != null) {
-                        pendingEdits["btn_${index}_value"] = first.activityInfo.packageName
-                    }
-                    pendingEdits["btn_${index}_label"] = "Music"
+                    ButtonRow(
+                        type = "music", active = active,
+                        value = first?.activityInfo?.packageName,
+                        label = "Music"
+                    )
                 }
+                else -> ButtonRow(active = active)
             }
+        } else {
+            ButtonRow(active = active)
         }
     }
 
     private fun applyIconOption(index: Int, option: String) {
         when (option) {
-            "none" -> {
-                pendingEdits["btn_${index}_icon_type"] = null
-                pendingEdits["btn_${index}_icon_data"] = null
-            }
-            "emoji" -> {
-                pendingEdits["btn_${index}_icon_type"] = "emoji"
-                pendingEdits["btn_${index}_icon_data"] = ""
-            }
+            "none" -> pendingRow = pendingRow?.copy(iconType = null, iconData = null)
+            "emoji" -> pendingRow = pendingRow?.copy(iconType = "emoji", iconData = "")
             "custom" -> {
-                pendingEdits["btn_${index}_icon_type"] = "custom"
-                pendingEdits["btn_${index}_icon_data"] = null
+                pendingRow = pendingRow?.copy(iconType = "custom", iconData = null)
                 callbacks.onPickImage(index)
             }
         }
@@ -1053,30 +1044,18 @@ class GlobalConfigPaneContent(
 
     /** Remove button at [index], shifting subsequent entries down. */
     private fun removeButtonAt(index: Int) {
-        val count = prefs.getInt("button_count", 6)
+        val count = db.getButtonCount()
         if (count <= 1) return
-        val keys = BUTTON_PREF_SUFFIXES
 
-        // Shift entries after index down by one
-        val edit = prefs.edit()
+        // Shift icon files down
         for (i in index until count - 1) {
-            val next = i + 1
-            for (k in keys) {
-                val v = prefs.getString("btn_$next$k", null)
-                if (v != null) edit.putString("btn_$i$k", v) else edit.remove("btn_$i$k")
-            }
-            edit.putBoolean("btn_${i}_active", prefs.getBoolean("btn_${next}_active", true))
-            val src = buttonIconFile(context.filesDir, next)
+            val src = buttonIconFile(context.filesDir, i + 1)
             val dst = buttonIconFile(context.filesDir, i)
             if (src.exists()) src.copyTo(dst, overwrite = true) else dst.delete()
         }
-
-        // Clear last slot
-        for (k in keys) edit.remove("btn_${count - 1}$k")
-        edit.remove("btn_${count - 1}_active")
-        edit.apply()
         buttonIconFile(context.filesDir, count - 1).delete()
 
+        db.removeButton(index)
         callbacks.onRemoveButton(index)
         iconCache.clear()
         rebuildButtonList()
@@ -1085,43 +1064,26 @@ class GlobalConfigPaneContent(
     /** Move button at [from] to [to], shifting intermediate entries. */
     private fun moveButtonPrefs(from: Int, to: Int) {
         if (from == to) return
-        val keys = BUTTON_PREF_SUFFIXES
 
-        // Save the moved button's data
-        val movedVals = keys.associateWith { k -> prefs.getString("btn_$from$k", null) }
-        val movedActive = prefs.getBoolean("btn_${from}_active", true)
-        val movedIcon = buttonIconFile(context.filesDir, from)
+        // Swap icon files: save moved icon to tmp, shift intermediates, place at dest
         val tmpIcon = File(context.filesDir, "btn_move_tmp.png")
+        val movedIcon = buttonIconFile(context.filesDir, from)
         if (movedIcon.exists()) movedIcon.copyTo(tmpIcon, overwrite = true) else tmpIcon.delete()
 
-        // Shift entries between from and to (single batch write)
         val dir = if (from < to) 1 else -1
-        val edit = prefs.edit()
         var i = from
         while (i != to) {
             val next = i + dir
-            for (k in keys) {
-                val v = prefs.getString("btn_$next$k", null)
-                if (v != null) edit.putString("btn_$i$k", v) else edit.remove("btn_$i$k")
-            }
-            edit.putBoolean("btn_${i}_active", prefs.getBoolean("btn_${next}_active", true))
-            // Shift icon file
             val src = buttonIconFile(context.filesDir, next)
             val dst = buttonIconFile(context.filesDir, i)
             if (src.exists()) src.copyTo(dst, overwrite = true) else dst.delete()
             i = next
         }
-
-        // Place moved button at destination
-        for (k in keys) {
-            val v = movedVals[k]
-            if (v != null) edit.putString("btn_$to$k", v) else edit.remove("btn_$to$k")
-        }
-        edit.putBoolean("btn_${to}_active", movedActive)
-        edit.apply()
         val dstIcon = buttonIconFile(context.filesDir, to)
         if (tmpIcon.exists()) tmpIcon.copyTo(dstIcon, overwrite = true) else dstIcon.delete()
         tmpIcon.delete()
+
+        db.moveButton(from, to)
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -1188,7 +1150,7 @@ class GlobalConfigPaneContent(
      * Returns false for RIGHT at the rightmost column so MainActivity exits the pane.
      */
     override fun handleKey(keyCode: Int): Boolean {
-        val count = prefs.getInt("button_count", 6)
+        val count = db.getButtonCount()
         return when (keyCode) {
             19 -> {  // UP
                 if (focusRow in 0 until count && focusCol == 2) moveEntryUp(focusRow, count)
@@ -1243,7 +1205,7 @@ class GlobalConfigPaneContent(
             }
             focusRow == count -> {   // + Add Button
                 doAddButton()
-                val newCount = prefs.getInt("button_count", 6)
+                val newCount = db.getButtonCount()
                 focusRow = newCount - 1
                 focusCol = 1
                 scrollToFocused()
@@ -1280,7 +1242,7 @@ class GlobalConfigPaneContent(
     }
 
     private fun updateFocusRings() {
-        val count = prefs.getInt("button_count", 6)
+        val count = db.getButtonCount()
         for (row in rowFocusTargets.indices) {
             val t = rowFocusTargets[row]
             applyFocusRing(t.checkbox,  focusRow == row && focusCol == 0)
@@ -1303,10 +1265,4 @@ class GlobalConfigPaneContent(
         } else null
     }
 
-    companion object {
-        private val BUTTON_PREF_SUFFIXES = listOf(
-            "_type", "_value", "_label", "_icon_type", "_icon_data",
-            "_widget_id", "_open_browser"
-        )
-    }
 }

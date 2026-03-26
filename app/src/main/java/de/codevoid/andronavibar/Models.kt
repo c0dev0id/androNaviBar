@@ -1,7 +1,6 @@
 package de.codevoid.andronavibar
 
 import android.content.ComponentName
-import android.content.SharedPreferences
 
 // ── Icon type for URL buttons ─────────────────────────────────────────────────
 
@@ -13,22 +12,16 @@ sealed class UrlIcon {
     data class Emoji(val emoji: String) : UrlIcon()
 
     companion object {
-        fun fromPrefs(prefs: SharedPreferences, index: Int): UrlIcon {
-            val iconType = prefs.getString("btn_${index}_icon_type", null)
-            val iconData = prefs.getString("btn_${index}_icon_data", null)
-            return when (iconType) {
-                "custom" -> CustomFile
-                "emoji"  -> Emoji(iconData ?: "")
-                else     -> None
-            }
+        fun fromRow(iconType: String?, iconData: String?): UrlIcon = when (iconType) {
+            "custom" -> CustomFile
+            "emoji"  -> Emoji(iconData ?: "")
+            else     -> None
         }
 
-        fun writeTo(edit: SharedPreferences.Editor, index: Int, icon: UrlIcon) {
-            when (icon) {
-                is None       -> edit.remove("btn_${index}_icon_type").remove("btn_${index}_icon_data")
-                is CustomFile -> edit.putString("btn_${index}_icon_type", "custom").remove("btn_${index}_icon_data")
-                is Emoji      -> edit.putString("btn_${index}_icon_type", "emoji").putString("btn_${index}_icon_data", icon.emoji)
-            }
+        fun toRow(icon: UrlIcon): Pair<String?, String?> = when (icon) {
+            is None       -> null to null
+            is CustomFile -> "custom" to null
+            is Emoji      -> "emoji" to icon.emoji
         }
     }
 }

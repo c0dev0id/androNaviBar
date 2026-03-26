@@ -65,6 +65,7 @@ class LauncherApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        LauncherDatabase.getInstance(this).migrateFromPrefsIfNeeded(this)
         registerReceiver(remoteReceiver, IntentFilter(REMOTE_ACTION), RECEIVER_EXPORTED)
     }
 
