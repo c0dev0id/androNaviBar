@@ -16,10 +16,10 @@ import android.view.ViewGroup
  * unload() detaches from container and releases all held resources.
  *
  * hide() makes the pane invisible without detaching it. The default no-op
- * is sufficient for panes that are never cached (e.g. GlobalConfigPaneContent).
+ * is sufficient for panes that are never cached (e.g. GlobalSettingsPaneContent).
  *
  * refresh() triggers a data reload on user request. The default no-op is
- * sufficient for panes whose content never goes stale (e.g. AppLauncherPane).
+ * sufficient for panes whose content never goes stale (e.g. AppLauncherPaneContent).
  */
 interface PaneContent {
     fun load(onReady: () -> Unit)
