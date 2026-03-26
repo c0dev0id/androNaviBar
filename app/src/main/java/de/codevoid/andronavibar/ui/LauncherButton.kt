@@ -105,10 +105,10 @@ class LauncherButton @JvmOverloads constructor(
         canvas.save()
         canvas.clipPath(drawPath)
 
-        // ── Drag handle zone (left, over the icon slot) ───────────────────
-        canvas.drawRect(barW, 0f, barW + zoneW, h, overlayBgPaint)
+        // ── Drag handle zone (right side, left of delete zone) ───────────
+        canvas.drawRect(w - zoneW * 2, 0f, w - zoneW, h, overlayBgPaint)
         val lineW = zoneW * 0.45f
-        val lineX0 = barW + (zoneW - lineW) / 2f
+        val lineX0 = w - zoneW * 2 + (zoneW - lineW) / 2f
         val lineX1 = lineX0 + lineW
         for (i in 0..2) {
             val y = h * (i + 1) / 4f
@@ -146,8 +146,8 @@ class LauncherButton @JvmOverloads constructor(
 
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             touchZone = when {
-                event.x < barW + height -> TouchZone.DRAG
                 event.x >= width - height -> TouchZone.DELETE
+                event.x >= width - height * 2 -> TouchZone.DRAG
                 else -> TouchZone.NONE
             }
         }
