@@ -466,7 +466,7 @@ class MainActivity : Activity() {
             activeAppsGridPane?.setInitialFocus()
             activeAppLauncherPane?.setInitialFocus()
             activeUrlLauncherPane?.setInitialFocus()
-            activeGlobalConfigPane?.setInitialFocus()
+            activeGlobalSettingsPane?.setInitialFocus()
         } else {
             // Snap cursor to the active button so it's immediately highlighted on return.
             if (activeButtonIndex >= 0) {
@@ -480,7 +480,7 @@ class MainActivity : Activity() {
             activeAppsGridPane?.clearFocus()
             activeAppLauncherPane?.clearFocus()
             activeUrlLauncherPane?.clearFocus()
-            activeGlobalConfigPane?.clearFocus()
+            activeGlobalSettingsPane?.clearFocus()
         }
     }
 
@@ -1253,7 +1253,7 @@ class MainActivity : Activity() {
     private fun enterPane() {
         if (activeDashboardPane != null || activeAppsGridPane != null
             || activeMusicPlayerPane != null || activeAppLauncherPane != null
-            || activeUrlLauncherPane != null || activeGlobalConfigPane != null) {
+            || activeUrlLauncherPane != null || activeGlobalSettingsPane != null) {
             setFocusOwner(FocusOwner.PANE)
         }
     }
