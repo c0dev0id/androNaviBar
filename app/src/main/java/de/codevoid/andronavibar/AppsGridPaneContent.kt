@@ -2,6 +2,9 @@ package de.codevoid.andronavibar
 
 import android.app.Dialog
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import de.codevoid.andronavibar.LauncherDatabase
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -379,9 +382,8 @@ class AppsGridPaneContent(
         private val isHidden: Boolean
     ) {
         private val dialog = Dialog(context)
-        private var focusOnCancel = true
-        private lateinit var actionBtn: FocusableButton
-        private lateinit var cancelBtn: FocusableButton
+        private val buttons = mutableListOf<FocusableButton>()
+        private var focusIndex = 0
         private var dismissed = false
 
         init { build() }
@@ -415,29 +417,57 @@ class AppsGridPaneContent(
                 }
             })
 
-            val btnRow = LinearLayout(context).apply {
+            // Row 1: Hide/Show + Uninstall
+            val row1 = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                    bottomMargin = gap
+                }
+            }
+
+            val hideShowBtn = FocusableButton(context).apply {
+                text = context.getString(if (isHidden) R.string.show_app else R.string.hide_app)
+                textSize = 24f
+                layoutParams = LinearLayout.LayoutParams(btnW, btnH).apply { marginEnd = gap }
+                setOnClickListener { performHideShow() }
+            }
+            val uninstallBtn = FocusableButton(context).apply {
+                text = context.getString(R.string.uninstall_app)
+                textSize = 24f
+                layoutParams = LinearLayout.LayoutParams(btnW, btnH).apply { marginStart = gap }
+                setOnClickListener { performUninstall() }
+            }
+            row1.addView(hideShowBtn)
+            row1.addView(uninstallBtn)
+            content.addView(row1)
+
+            // Row 2: App Info + Cancel
+            val row2 = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER
                 layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
             }
 
-            actionBtn = FocusableButton(context).apply {
-                text = context.getString(if (isHidden) R.string.show_app else R.string.hide_app)
+            val appInfoBtn = FocusableButton(context).apply {
+                text = context.getString(R.string.app_info)
                 textSize = 24f
                 layoutParams = LinearLayout.LayoutParams(btnW, btnH).apply { marginEnd = gap }
-                setOnClickListener { performAndDismiss() }
+                setOnClickListener { performAppInfo() }
             }
-            cancelBtn = FocusableButton(context).apply {
+            val cancelBtn = FocusableButton(context).apply {
                 text = context.getString(R.string.cancel)
                 textSize = 24f
-                isFocusedButton = true
                 layoutParams = LinearLayout.LayoutParams(btnW, btnH).apply { marginStart = gap }
                 setOnClickListener { dismissQuietly() }
             }
+            row2.addView(appInfoBtn)
+            row2.addView(cancelBtn)
+            content.addView(row2)
 
-            btnRow.addView(actionBtn)
-            btnRow.addView(cancelBtn)
-            content.addView(btnRow)
+            // buttons indexed as: 0=hide/show, 1=uninstall, 2=appInfo, 3=cancel
+            buttons.addAll(listOf(hideShowBtn, uninstallBtn, appInfoBtn, cancelBtn))
+            setFocus(3) // default focus on Cancel
 
             dialog.setContentView(content)
             dialog.window?.apply {
@@ -450,25 +480,51 @@ class AppsGridPaneContent(
             dialog.show()
         }
 
+        // 2x2 grid navigation: 0=topLeft, 1=topRight, 2=bottomLeft, 3=bottomRight
         fun handleKey(keyCode: Int): Boolean {
             when (keyCode) {
-                21  -> setFocus(onCancel = false)   // LEFT → action
-                22  -> setFocus(onCancel = true)    // RIGHT → cancel
-                66  -> if (focusOnCancel) dismissQuietly() else performAndDismiss()
+                21  -> setFocus(if (focusIndex % 2 == 1) focusIndex - 1 else focusIndex) // LEFT
+                22  -> setFocus(if (focusIndex % 2 == 0) focusIndex + 1 else focusIndex) // RIGHT
+                19  -> setFocus(if (focusIndex >= 2) focusIndex - 2 else focusIndex)     // UP
+                20  -> setFocus(if (focusIndex < 2) focusIndex + 2 else focusIndex)      // DOWN
+                66  -> activateFocused()
                 111 -> dismissQuietly()
             }
             return true  // consume all keys while dialog is open
         }
 
-        private fun setFocus(onCancel: Boolean) {
-            focusOnCancel = onCancel
-            cancelBtn.isFocusedButton = onCancel
-            actionBtn.isFocusedButton = !onCancel
+        private fun setFocus(index: Int) {
+            focusIndex = index
+            buttons.forEachIndexed { i, btn -> btn.isFocusedButton = (i == index) }
         }
 
-        private fun performAndDismiss() {
+        private fun activateFocused() {
+            when (focusIndex) {
+                0 -> performHideShow()
+                1 -> performUninstall()
+                2 -> performAppInfo()
+                3 -> dismissQuietly()
+            }
+        }
+
+        private fun performHideShow() {
             if (isHidden) showApp(app.packageName) else hideApp(app.packageName)
             dismissQuietly()
+        }
+
+        private fun performUninstall() {
+            dismissQuietly()
+            val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.packageName}"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
+
+        private fun performAppInfo() {
+            dismissQuietly()
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${app.packageName}"))
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
         }
 
         fun dismissQuietly() {
