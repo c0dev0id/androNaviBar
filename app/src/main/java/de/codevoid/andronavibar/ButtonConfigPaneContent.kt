@@ -3,9 +3,12 @@ package de.codevoid.andronavibar
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ComponentName
+import android.os.Handler
+import android.os.Looper
 import android.service.media.MediaBrowserService
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
@@ -289,11 +292,16 @@ class ButtonConfigPaneContent(
     }
 
     private fun showNavTargetDialog(edit: CollectionItem?) {
-        val p = activity.resources.dpToPx(16)
+        val res = activity.resources
+        val p = res.dpToPx(16)
+
+        val scroll = ScrollView(activity)
         val layout = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(p, p, p, p)
         }
+        scroll.addView(layout)
+
         val labelEdit = EditText(activity).apply {
             hint = activity.getString(R.string.label_hint)
             inputType = android.text.InputType.TYPE_CLASS_TEXT
@@ -305,13 +313,90 @@ class ButtonConfigPaneContent(
                         android.text.InputType.TYPE_TEXT_VARIATION_URI
             setText(edit?.uri ?: "")
         }
+
+        // ── OSM address / POI search ──────────────────────────────────────
+        val searchEdit = EditText(activity).apply {
+            hint = activity.getString(R.string.osm_search_hint)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setHintTextColor(activity.getColor(R.color.text_secondary))
+            setTextColor(activity.getColor(R.color.text_primary))
+            setBackgroundColor(activity.getColor(R.color.surface_card))
+            val ep = res.dpToPx(10)
+            setPadding(ep, ep, ep, ep)
+            layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f).apply {
+                marginEnd = res.dpToPx(8)
+            }
+        }
+        val searchBtn = MaterialButton(activity).apply {
+            text = activity.getString(R.string.osm_search_button)
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+        }
+        val searchRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+            addView(searchEdit)
+            addView(searchBtn)
+        }
+
+        val resultsLayout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+        }
+
+        fun performSearch() {
+            val query = searchEdit.text.toString().trim()
+            if (query.isEmpty()) return
+            resultsLayout.removeAllViews()
+            resultsLayout.visibility = View.VISIBLE
+            resultsLayout.addView(TextView(activity).apply {
+                text = activity.getString(R.string.osm_searching)
+                textSize = 13f
+                setTextColor(activity.getColor(R.color.text_secondary))
+                layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+            })
+            Thread {
+                val results = searchOsm(query)
+                Handler(Looper.getMainLooper()).post {
+                    resultsLayout.removeAllViews()
+                    if (results.isEmpty()) {
+                        resultsLayout.addView(TextView(activity).apply {
+                            text = activity.getString(R.string.osm_no_results)
+                            textSize = 13f
+                            setTextColor(activity.getColor(R.color.text_secondary))
+                            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+                        })
+                    } else {
+                        val rowGap = res.dpToPx(4)
+                        results.forEach { result ->
+                            resultsLayout.addView(makeButton(result.buttonLabel) {
+                                labelEdit.setText(result.shortLabel)
+                                uriEdit.setText(result.geoUri)
+                                resultsLayout.visibility = View.GONE
+                            }.also { it.layoutParams = LinearLayout.LayoutParams(MATCH, WRAP).apply { bottomMargin = rowGap } })
+                        }
+                    }
+                }
+            }.start()
+        }
+
+        searchBtn.setOnClickListener { performSearch() }
+        searchEdit.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) { performSearch(); true } else false
+        }
+
+        layout.addView(searchRow)
+        layout.addView(gap(4))
+        layout.addView(resultsLayout)
+        layout.addView(gap(12))
         layout.addView(labelEdit)
         layout.addView(gap(8))
         layout.addView(uriEdit)
 
         AlertDialog.Builder(activity)
             .setTitle(if (edit == null) activity.getString(R.string.add_target) else activity.getString(R.string.edit_item))
-            .setView(layout)
+            .setView(scroll)
             .setPositiveButton(activity.getString(R.string.save)) { _, _ ->
                 val sortOrder = edit?.sortOrder ?: db.getCollectionItems(buttonIndex).size
                 val item = CollectionItem(
@@ -326,6 +411,38 @@ class ButtonConfigPaneContent(
             }
             .setNegativeButton(activity.getString(R.string.cancel), null)
             .show()
+    }
+
+    // ── OSM Nominatim search ──────────────────────────────────────────────────
+
+    private data class OsmResult(val buttonLabel: String, val shortLabel: String, val geoUri: String)
+
+    private fun searchOsm(query: String): List<OsmResult> {
+        return try {
+            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+            val url = java.net.URL("https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=8")
+            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                setRequestProperty("User-Agent", "aR2Launcher/1.0")
+                connectTimeout = 8_000
+                readTimeout    = 8_000
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            val arr = org.json.JSONArray(body)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val displayName = obj.getString("display_name")
+                    val parts = displayName.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    val shortLabel = parts.take(2).joinToString(", ")
+                    val buttonLabel = parts.take(3).joinToString(", ")
+                    val lat = obj.getString("lat")
+                    val lon = obj.getString("lon")
+                    val geoUri = "geo:$lat,$lon?q=${java.net.URLEncoder.encode(shortLabel, "UTF-8")}"
+                    add(OsmResult(buttonLabel, shortLabel, geoUri))
+                }
+            }
+        } catch (_: Exception) { emptyList() }
     }
 
     private fun makeCollectionItemRow(

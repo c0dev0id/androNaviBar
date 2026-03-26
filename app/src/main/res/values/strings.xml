@@ -51,4 +51,8 @@
     <string name="type_url_desc">Open a web page or URL</string>
     <string name="type_widget_desc">Embed a home screen widget</string>
     <string name="type_music_desc">Control a music player</string>
+    <string name="osm_search_hint">Search address or place…</string>
+    <string name="osm_search_button">Search</string>
+    <string name="osm_searching">Searching…</string>
+    <string name="osm_no_results">No results found</string>
 </resources>
