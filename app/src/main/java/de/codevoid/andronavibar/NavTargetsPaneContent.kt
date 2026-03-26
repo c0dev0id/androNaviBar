@@ -3,13 +3,14 @@ package de.codevoid.andronavibar
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import de.codevoid.andronavibar.ui.FocusableButton
+import de.codevoid.andronavibar.ui.LauncherButton
 
 /**
  * Runtime pane for NavTargetCollection buttons.
@@ -87,14 +88,14 @@ class NavTargetsPaneContent(
                 col.addView(row)
             }
             val item = items[i]
-            row!!.addView(FocusableButton(context).apply {
-                text = item.label.ifEmpty { item.uri }
-                cornerRadius = res.dpToPx(FocusableButton.CORNER_RADIUS_DP)
-                layoutParams = LinearLayout.LayoutParams(tileW, tileH).apply {
-                    setMargins(margin, margin, margin, margin)
-                }
-                setOnClickListener { launchTarget(item.uri) }
-            })
+            val cell = LayoutInflater.from(context)
+                .inflate(R.layout.launcher_button_item, row, false) as LauncherButton
+            cell.layoutParams = LinearLayout.LayoutParams(tileW, tileH).apply {
+                setMargins(margin, margin, margin, margin)
+            }
+            cell.text = item.label.ifEmpty { item.uri }
+            cell.setOnClickListener { launchTarget(item.uri) }
+            row!!.addView(cell)
         }
 
         // Fill remainder of last row with invisible spacers
