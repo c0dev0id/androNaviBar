@@ -107,6 +107,9 @@ class MainActivity : Activity() {
     /** Non-null while the global config pane is displayed in reservedArea. */
     private var activeGlobalConfigPane: GlobalConfigPaneContent? = null
 
+    /** Non-null while a per-button config pane is displayed in reservedArea during edit mode. */
+    private var activeButtonConfigPane: ButtonConfigPaneContent? = null
+
     /** The one pane currently visible and receiving remote key events. */
     private var keyPane: PaneContent? = null
 
@@ -123,6 +126,7 @@ class MainActivity : Activity() {
     private var pendingWidgetConfig: ButtonConfig.WidgetLauncher? = null
     private var pendingWidgetButtonIndex: Int = 0
     private var pendingWidgetFromGlobalConfig = false
+    private var pendingWidgetFromButtonConfig = false
 
     /** Loading spinner overlay, shown while a pane's content is being prepared. */
     private var loadingSpinner: ProgressBar? = null
@@ -718,6 +722,7 @@ class MainActivity : Activity() {
         activeAppsGridPane?.unload();       activeAppsGridPane = null
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null;    cachedMusicPkg = null
         activeGlobalConfigPane?.unload();   activeGlobalConfigPane = null
+        activeButtonConfigPane?.unload();   activeButtonConfigPane = null
         keyPane = null
         hideLoading()
     }
@@ -976,29 +981,42 @@ class MainActivity : Activity() {
     }
 
     private fun cancelPendingWidget() {
-        val fromGlobalConfig = pendingWidgetFromGlobalConfig
+        val fromGlobalConfig  = pendingWidgetFromGlobalConfig
+        val fromButtonConfig  = pendingWidgetFromButtonConfig
         pendingWidgetConfig?.let {
             if (it.appWidgetId != -1) releaseWidgetId(it.appWidgetId)
         }
-        pendingWidgetConfig = null
+        pendingWidgetConfig           = null
         pendingWidgetFromGlobalConfig = false
+        pendingWidgetFromButtonConfig = false
         clearPendingWidgetId()
-        if (fromGlobalConfig) {
-            val row = db.loadButton(pendingWidgetButtonIndex)
-            if (row != null) db.saveButton(pendingWidgetButtonIndex, row.copy(widgetId = null))
-            buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(db)
-            activeGlobalConfigPane?.rebuild()
-        } else {
-            deactivateActiveButton()
-            setFocusOwner(FocusOwner.BUTTONS)
+        when {
+            fromGlobalConfig -> {
+                val row = db.loadButton(pendingWidgetButtonIndex)
+                if (row != null) db.saveButton(pendingWidgetButtonIndex, row.copy(widgetId = null))
+                buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(db)
+                activeGlobalConfigPane?.rebuild()
+            }
+            fromButtonConfig -> {
+                val row = db.loadButton(pendingWidgetButtonIndex)
+                if (row != null) db.saveButton(pendingWidgetButtonIndex, row.copy(widgetId = null))
+                buttons.getOrNull(pendingWidgetButtonIndex)?.loadConfig(db)
+                activeButtonConfigPane?.rebuildFromDb()
+            }
+            else -> {
+                deactivateActiveButton()
+                setFocusOwner(FocusOwner.BUTTONS)
+            }
         }
     }
 
     private fun finishWidgetSetup() {
-        val cfg = pendingWidgetConfig ?: return
+        val cfg              = pendingWidgetConfig ?: return
         val fromGlobalConfig = pendingWidgetFromGlobalConfig
-        pendingWidgetConfig = null
+        val fromButtonConfig = pendingWidgetFromButtonConfig
+        pendingWidgetConfig           = null
         pendingWidgetFromGlobalConfig = false
+        pendingWidgetFromButtonConfig = false
         clearPendingWidgetId()
         buttons[pendingWidgetButtonIndex].saveConfig(db, cfg)
         if (cfg.appWidgetId != -1) {
@@ -1007,14 +1025,17 @@ class MainActivity : Activity() {
                 widgetViews[cfg.appWidgetId] = appWidgetHost.createView(this, cfg.appWidgetId, info)
             }
         }
-        if (fromGlobalConfig) {
-            activeGlobalConfigPane?.rebuild()
-        } else if (cfg.appWidgetId != -1) {
-            showWidgetPane(cfg.appWidgetId)
-            setFocusOwner(FocusOwner.PANE)
-        } else {
-            deactivateActiveButton()
-            setFocusOwner(FocusOwner.BUTTONS)
+        when {
+            fromGlobalConfig -> activeGlobalConfigPane?.rebuild()
+            fromButtonConfig -> activeButtonConfigPane?.rebuildFromDb()
+            cfg.appWidgetId != -1 -> {
+                showWidgetPane(cfg.appWidgetId)
+                setFocusOwner(FocusOwner.PANE)
+            }
+            else -> {
+                deactivateActiveButton()
+                setFocusOwner(FocusOwner.BUTTONS)
+            }
         }
     }
 
@@ -1086,6 +1107,7 @@ class MainActivity : Activity() {
                     buttons.getOrNull(pendingIconButtonIndex)?.loadConfig(db)
                     it.rebuild()
                 }
+                activeButtonConfigPane?.rebuild()
             } catch (_: Exception) { /* ignore failed pick */ }
         }
     }
@@ -1220,9 +1242,56 @@ class MainActivity : Activity() {
 
     // ── Edit mode pane routing ───────────────────────────────────────────────
 
-    /** Show the config pane for button at [index] in reservedArea. Phase 3 impl. */
     private fun showButtonConfigPane(index: Int) {
-        // TODO Phase 3: load and show the per-button config pane
+        activeButtonConfigPane?.unload()
+        val pane = ButtonConfigPaneContent(
+            activity         = this,
+            db               = db,
+            buttonIndex      = index,
+            onSaved          = {
+                buttons.getOrNull(index)?.loadConfig(db)
+                activeButtonConfigPane?.unload()
+                activeButtonConfigPane = null
+            },
+            onDiscarded      = {
+                activeButtonConfigPane?.unload()
+                activeButtonConfigPane = null
+            },
+            onPickImage      = { btnIdx ->
+                pendingIconButtonIndex = btnIdx
+                val intent = Intent(Intent.ACTION_GET_CONTENT).apply { type = "image/*" }
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, IMAGE_REQUEST_CODE)
+            },
+            onWidgetBind     = { btnIdx, provider ->
+                val oldCfg = buttons.getOrNull(btnIdx)?.config
+                if (oldCfg is ButtonConfig.WidgetLauncher && oldCfg.appWidgetId != -1) {
+                    releaseWidgetId(oldCfg.appWidgetId)
+                }
+                val btnData = db.loadButton(btnIdx)
+                val label   = btnData?.label ?: ""
+                val icon    = UrlIcon.fromRow(btnData?.iconType, btnData?.iconData)
+                val newId   = appWidgetHost.allocateAppWidgetId()
+                savePendingWidgetId(newId)
+                pendingWidgetConfig             = ButtonConfig.WidgetLauncher(provider, newId, label, icon)
+                pendingWidgetButtonIndex        = btnIdx
+                pendingWidgetFromButtonConfig   = true
+                val mgr = AppWidgetManager.getInstance(this)
+                if (mgr.bindAppWidgetIdIfAllowed(newId, provider)) {
+                    completeWidgetBinding(newId)
+                } else {
+                    val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newId)
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, provider)
+                    }
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(bindIntent, BIND_WIDGET_REQUEST_CODE)
+                }
+            },
+            onWidgetCleanup  = { appWidgetId -> releaseWidgetId(appWidgetId) }
+        )
+        activeButtonConfigPane = pane
+        pane.load { pane.show(reservedArea) }
     }
 
     /** Show the global settings pane in reservedArea. Phase 5 impl. */
