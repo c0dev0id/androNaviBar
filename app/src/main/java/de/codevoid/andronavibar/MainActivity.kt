@@ -499,6 +499,8 @@ class MainActivity : Activity() {
     fun exitEditMode() {
         if (!editMode) return
         editMode = false
+        activeButtonConfigPane?.unload(); activeButtonConfigPane = null
+        activeTypePickerPane?.unload();   activeTypePickerPane = null
         buttons.forEach { it.isEditMode = false }
         updateEditModeUI()
         activateDashboardButton()
