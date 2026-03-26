@@ -43,18 +43,13 @@ import java.util.TimeZone
 
 /**
  * Dashboard pane — shown when the fixed Dashboard button at the top of the
- * column is activated. Displays the current time, date, and weather. A gear
- * icon in the top-right corner opens the global config pane.
+ * column is activated. Displays the current time, date, and weather.
  */
 class DashboardPaneContent(
     private val context: Context
 ) : PaneContent {
 
-    /** Invoked when the user activates the gear icon. */
-    var onConfigRequested: (() -> Unit)? = null
-
     private var rootView: FrameLayout? = null
-    private var gearButton: FocusableButton? = null
     private var clockView: TextView? = null
 
     /** Holds the live views for each weather panel. */
@@ -329,25 +324,6 @@ class DashboardPaneContent(
 
         root.addView(column)
 
-        // ── Gear icon — top-right corner ──────────────────────────────────────
-
-        val gear = FocusableButton(context).apply {
-            text = "⚙"
-            textSize = 20f
-            setTextColor(context.getColor(R.color.text_secondary))
-            backgroundTintList = android.content.res.ColorStateList.valueOf(
-                Color.TRANSPARENT
-            )
-            val size = res.dpToPx(56)
-            layoutParams = FrameLayout.LayoutParams(size, size, Gravity.TOP or Gravity.END).apply {
-                topMargin = res.dpToPx(12)
-                marginEnd  = res.dpToPx(12)
-            }
-            setOnClickListener { onConfigRequested?.invoke() }
-        }
-        gearButton = gear
-        root.addView(gear)
-
         // ── Compass sensor ────────────────────────────────────────────────────
 
         val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -372,7 +348,6 @@ class DashboardPaneContent(
         scope.coroutineContext.cancelChildren()
         val root = rootView ?: return
         rootView = null
-        gearButton = null
         clockView = null
         panels?.forEach { it.icon.cancelAnimation() }
         panels = null
@@ -409,7 +384,6 @@ class DashboardPaneContent(
             }
         }
 
-        if (keyCode == 66) { onConfigRequested?.invoke(); return true }
         return false
     }
 
@@ -417,13 +391,11 @@ class DashboardPaneContent(
     fun setInitialFocus() {
         focusedPanelIndex = 2   // start at +6h (rightmost panel)
         updatePanelFocus()
-        gearButton?.isFocusedButton = false
     }
 
     fun clearFocus() {
         focusedPanelIndex = -1
         updatePanelFocus()
-        gearButton?.isFocusedButton = false
     }
 
     private fun movePanelFocus(idx: Int) {

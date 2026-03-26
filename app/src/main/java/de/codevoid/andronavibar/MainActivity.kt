@@ -769,7 +769,6 @@ class MainActivity : Activity() {
             pane.show(reservedArea); keyPane = pane; return
         }
         val pane = DashboardPaneContent(this)
-        pane.onConfigRequested = { showGlobalSettingsPane() }
         activeDashboardPane = pane
         pane.load { pane.show(reservedArea); keyPane = pane }
     }
