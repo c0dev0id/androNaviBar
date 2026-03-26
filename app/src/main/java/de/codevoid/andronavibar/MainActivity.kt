@@ -126,10 +126,12 @@ class MainActivity : Activity() {
     // Each tracks the identity of the currently-cached pane so we can detect
     // when a button's target has changed and the old pane must be replaced.
 
-    private var cachedWebUrl:         String? = null
-    private var cachedAppLauncherPkg: String? = null
-    private var cachedUrlLauncherUrl: String? = null
-    private var cachedMusicPkg:       String? = null
+    private var cachedWebUrl:           String? = null
+    private var cachedAppLauncherPkg:   String? = null
+    private var cachedUrlLauncherUrl:   String? = null
+    private var cachedMusicPkg:         String? = null
+    private var cachedBookmarksIndex:   Int     = -1
+    private var cachedNavTargetsIndex:  Int     = -1
 
     /** Holds a partially-bound widget config while waiting for the system bind dialog result. */
     private var pendingWidgetConfig: ButtonConfig.WidgetLauncher? = null
@@ -731,8 +733,8 @@ class MainActivity : Activity() {
         widgetPanes.values.forEach { it.unload() }; widgetPanes.clear()
         activeAppsGridPane?.unload();       activeAppsGridPane = null
         activeMusicPlayerPane?.unload();    activeMusicPlayerPane = null;    cachedMusicPkg = null
-        activeBookmarksPane?.unload();      activeBookmarksPane = null
-        activeNavTargetsPane?.unload();     activeNavTargetsPane = null
+        activeBookmarksPane?.unload();      activeBookmarksPane = null;  cachedBookmarksIndex  = -1
+        activeNavTargetsPane?.unload();     activeNavTargetsPane = null; cachedNavTargetsIndex = -1
         activeGlobalSettingsPane?.unload(); activeGlobalSettingsPane = null
         activeButtonConfigPane?.unload();   activeButtonConfigPane = null
         activeTypePickerPane?.unload();     activeTypePickerPane = null
@@ -936,23 +938,30 @@ class MainActivity : Activity() {
     }
 
     private fun showBookmarksPane(buttonIndex: Int) {
-        activeBookmarksPane?.let { pane -> pane.show(reservedArea); keyPane = pane; return }
+        activeBookmarksPane?.let { pane ->
+            if (cachedBookmarksIndex == buttonIndex) { pane.show(reservedArea); keyPane = pane; return }
+            pane.unload(); activeBookmarksPane = null; cachedBookmarksIndex = -1
+        }
         val pane = BookmarksPaneContent(
-            context              = this,
-            buttonIndex          = buttonIndex,
-            db                   = db,
-            onUrlActivated       = { url -> showWebPane(url) },
+            context               = this,
+            buttonIndex           = buttonIndex,
+            db                    = db,
+            onUrlActivated        = { url -> showWebPane(url) },
             onUrlBrowserActivated = { url ->
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
             }
         )
         activeBookmarksPane = pane
+        cachedBookmarksIndex = buttonIndex
         keyPane = pane
         pane.load { pane.show(reservedArea) }
     }
 
     private fun showNavTargetsPane(buttonIndex: Int) {
-        activeNavTargetsPane?.let { pane -> pane.show(reservedArea); keyPane = pane; return }
+        activeNavTargetsPane?.let { pane ->
+            if (cachedNavTargetsIndex == buttonIndex) { pane.show(reservedArea); keyPane = pane; return }
+            pane.unload(); activeNavTargetsPane = null; cachedNavTargetsIndex = -1
+        }
         val row = db.loadButton(buttonIndex)
         val appPackage = row?.value ?: ""
         val pane = NavTargetsPaneContent(
@@ -962,6 +971,7 @@ class MainActivity : Activity() {
             db          = db
         )
         activeNavTargetsPane = pane
+        cachedNavTargetsIndex = buttonIndex
         keyPane = pane
         pane.load { pane.show(reservedArea) }
     }
