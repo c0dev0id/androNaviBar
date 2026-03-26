@@ -1166,7 +1166,8 @@ class MainActivity : Activity() {
         }
         btn.onUrlActivated = { url ->
             val p = buttons.indexOf(btn) + 1
-            activateToggleButton(p) { showWebPane(url) }
+            if (activeButtonIndex == p) activeWebPane?.refresh()
+            else activateToggleButton(p) { showWebPane(url) }
         }
         btn.onUrlLauncherActivated = { url, lbl, ic ->
             val p = buttons.indexOf(btn) + 1
@@ -1182,7 +1183,12 @@ class MainActivity : Activity() {
         }
         btn.onBookmarkCollectionActivated = { idx ->
             val p = buttons.indexOf(btn) + 1
-            activateToggleButton(p) { showBookmarksPane(idx) }
+            if (activeButtonIndex == p) {
+                activeWebPane?.unload(); activeWebPane = null; cachedWebUrl = null
+                activeBookmarksPane?.let { it.refresh(); keyPane = it }
+            } else {
+                activateToggleButton(p) { showBookmarksPane(idx) }
+            }
         }
         btn.onNavTargetCollectionActivated = { idx ->
             val p = buttons.indexOf(btn) + 1

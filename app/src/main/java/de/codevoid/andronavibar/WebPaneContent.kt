@@ -62,6 +62,9 @@ class WebPaneContent(
         wv.destroy()
     }
 
+    /** Reload the original URL, discarding any in-pane navigation. */
+    override fun refresh() { webView?.loadUrl(url) }
+
     /** Navigate back in WebView history. Returns true if consumed, false if at root. */
     fun goBack(): Boolean {
         val wv = webView ?: return false
