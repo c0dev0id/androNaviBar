@@ -258,6 +258,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Park Android's focus on the root layout so keyboard navigation keys never
+        // cause container views (ScrollView, FrameLayout) to light up.
+        findViewById<android.view.View>(R.id.rootLayout).requestFocus()
         widgetRebindAttempted = false
         appWidgetHost.startListening()
         LauncherApplication.mainActivity = WeakReference(this)
