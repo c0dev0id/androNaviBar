@@ -159,6 +159,8 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         hideSystemBars()
+        InputLog.init(this)
+        InputLog.log("--- session start ---")
         db                  = LauncherDatabase.getInstance(this)
         reservedArea        = findViewById(R.id.reservedArea)
         buttonScroll        = findViewById(R.id.buttonScroll)
@@ -320,46 +322,47 @@ class MainActivity : Activity() {
 
             if (intent.hasExtra("key_press")) {
                 val keyCode = intent.getIntExtra("key_press", 0)
+                InputLog.log("BROADCAST key_press=$keyCode editMode=$editMode pressedKeys=$pressedKeys")
                 if (editMode) return
-                if (!pressedKeys.add(keyCode)) return  // auto-repeat, ignore
+                if (!pressedKeys.add(keyCode)) { InputLog.log("  → ignored (auto-repeat)"); return }
 
                 if (keyCode == LauncherApplication.TOGGLE_KEY) {
-                    // Record press time; act on release to distinguish short vs long.
+                    InputLog.log("  → toggle key: recording press time")
                     key111PressedAt = SystemClock.elapsedRealtime()
                     return
                 }
 
-                // Long-press confirm in the apps grid: arm a 500ms timer that fires
-                // immediately on hold, without waiting for key release.
                 if (keyCode == 66 && focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
+                    InputLog.log("  → arming long-press for apps grid confirm")
                     armKey66LongPress()
                     return
                 }
 
+                InputLog.log("  → handleKey($keyCode) focusOwner=$focusOwner activeButton=$activeButtonIndex")
                 handleKey(keyCode)
 
             } else if (intent.hasExtra("key_release")) {
                 val keyCode = intent.getIntExtra("key_release", 0)
+                InputLog.log("BROADCAST key_release=$keyCode editMode=$editMode")
                 if (editMode) return
                 pressedKeys.remove(keyCode)
 
                 if (keyCode == 66) {
-                    // If the runnable hadn't fired yet (released before 500ms) →
-                    // treat as short press. If it already fired, cancelKey66LongPress
-                    // returns false and we do nothing.
-                    if (cancelKey66LongPress()) handleKey(66)
+                    val fired = !cancelKey66LongPress()
+                    InputLog.log("  → confirm release: longPressFired=$fired")
+                    if (!fired) handleKey(66)
                     return
                 }
 
                 if (keyCode == LauncherApplication.TOGGLE_KEY && key111PressedAt > 0L) {
                     val held = SystemClock.elapsedRealtime() - key111PressedAt
                     key111PressedAt = 0L
+                    InputLog.log("  → toggle release: held=${held}ms focusOwner=$focusOwner")
                     if (held < LauncherApplication.TOGGLE_HOLD_MS) {
                         if (focusOwner == FocusOwner.PANE) {
                             setFocusOwner(FocusOwner.BUTTONS)
                         }
                     }
-                    // Long press already handled by LauncherApplication.
                 }
             }
         }
@@ -374,32 +377,38 @@ class MainActivity : Activity() {
      */
     private fun handleKey(keyCode: Int) {
         if (editMode) return
-        // When a pane shows a modal Dialog the Activity loses window focus, but remote
-        // keys must still reach the pane so the user can dismiss the popup.
         if (!isWindowFocused) {
             if (activeDashboardPane?.hasModalDialog == true) {
+                InputLog.log("  handleKey($keyCode) → dashboard modal dialog")
                 activeDashboardPane?.handleKey(keyCode)
             } else if (activeAppsGridPane?.hasModalDialog == true) {
+                InputLog.log("  handleKey($keyCode) → apps grid modal dialog")
                 activeAppsGridPane?.handleKey(keyCode)
+            } else {
+                InputLog.log("  handleKey($keyCode) → dropped (no window focus, no modal)")
             }
             return
         }
         when (focusOwner) {
             FocusOwner.PANE -> {
                 val handled = keyPane?.handleKey(keyCode) ?: false
+                InputLog.log("  handleKey($keyCode) PANE → keyPane=${keyPane?.javaClass?.simpleName} handled=$handled")
                 if (!handled && keyCode == 22) setFocusOwner(FocusOwner.BUTTONS)
             }
-            FocusOwner.BUTTONS -> when (keyCode) {
-                19 -> moveFocus(-1)
-                20 -> moveFocus(+1)
-                21 -> {
-                    if (focusedIndex == activeButtonIndex) refreshCurrentPane()
-                    enterPane()
-                }
-                66 -> when {
-                    focusedIndex == 0              -> activateDashboardButton()
-                    focusedIndex in 1..buttons.size -> buttons[focusedIndex - 1].activate()
-                    focusedIndex == buttons.size + 1 -> activateAppsButton()
+            FocusOwner.BUTTONS -> {
+                InputLog.log("  handleKey($keyCode) BUTTONS → focusedIndex=$focusedIndex")
+                when (keyCode) {
+                    19 -> moveFocus(-1)
+                    20 -> moveFocus(+1)
+                    21 -> {
+                        if (focusedIndex == activeButtonIndex) refreshCurrentPane()
+                        enterPane()
+                    }
+                    66 -> when {
+                        focusedIndex == 0              -> activateDashboardButton()
+                        focusedIndex in 1..buttons.size -> buttons[focusedIndex - 1].activate()
+                        focusedIndex == buttons.size + 1 -> activateAppsButton()
+                    }
                 }
             }
         }
