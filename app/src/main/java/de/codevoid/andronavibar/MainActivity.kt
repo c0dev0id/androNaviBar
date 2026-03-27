@@ -219,38 +219,22 @@ class MainActivity : Activity() {
         // Pass through when a text field owns Android focus (cursor navigation, etc.)
         if (currentFocus is android.widget.EditText) return super.dispatchKeyEvent(event)
 
-        // The physical remote sends BOTH a broadcast (handled by remoteListener) AND an
-        // injected KeyEvent. We must consume the injected event for all navigation keys
-        // to prevent Android's own focus traversal from running a second time and moving
-        // the Material highlight independently of our custom focus ring. For true keyboard
-        // sources (USB/BT keyboard during development) we also call handleKey() here since
-        // no broadcast fires for those.
-        val isKeyboard = event.source and android.view.InputDevice.SOURCE_KEYBOARD != 0
-
+        // All navigation input is handled exclusively by the wireddevices broadcast receiver.
+        // Any KeyEvent carrying these codes — whether injected by the remote driver or sent
+        // by a USB keyboard — is consumed silently here to prevent Android's focus traversal
+        // from moving the Material highlight independently of our custom focus ring.
+        // KEYCODE_ESCAPE (= 111) is also consumed to prevent Android's back action, since
+        // Round Button 2 (keyCode 111) is handled by the broadcast.
+        // All other codes (volume, brightness, media, etc.) fall through to the system.
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP,
             KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (isKeyboard && event.action == KeyEvent.ACTION_DOWN) handleKey(event.keyCode)
-                return true  // consume for all sources — remote handled by broadcast
-            }
+            KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_CENTER,
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
-            KeyEvent.KEYCODE_DPAD_CENTER -> {
-                if (isKeyboard) {
-                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                        if (focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
-                            armKey66LongPress()
-                        } else {
-                            handleKey(66)
-                        }
-                    } else if (event.action == KeyEvent.ACTION_UP) {
-                        if (cancelKey66LongPress()) handleKey(66)
-                    }
-                }
-                return true  // consume for all sources — remote handled by broadcast
-            }
+            KeyEvent.KEYCODE_ESCAPE -> return true
         }
         return super.dispatchKeyEvent(event)
     }
