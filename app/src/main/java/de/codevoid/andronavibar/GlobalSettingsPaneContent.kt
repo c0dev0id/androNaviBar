@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import de.codevoid.andronavibar.ui.FocusableButton
+import java.io.File
 
 /**
  * Global settings pane — shown in reservedArea when the ⚙ Settings button
@@ -22,6 +23,7 @@ class GlobalSettingsPaneContent(
 
     private var container: ViewGroup? = null
     private var updateBtn: FocusableButton? = null
+    private var logView: TextView? = null
 
     override fun load(onReady: () -> Unit) = onReady()
 
@@ -34,6 +36,7 @@ class GlobalSettingsPaneContent(
         container?.removeAllViews()
         container = null
         updateBtn = null
+        logView = null
     }
 
     private fun build(container: ViewGroup) {
@@ -62,6 +65,47 @@ class GlobalSettingsPaneContent(
         }
         updateBtn = btn
         form.addView(btn)
+
+        // ── Input log viewer ──────────────────────────────────────────────────
+        form.addView(gap(20))
+
+        val logHeader = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+        }
+        logHeader.addView(makeText("Input Log", 16f, bold = true).also {
+            it.layoutParams = LinearLayout.LayoutParams(0, WRAP, 1f)
+        })
+        logHeader.addView(FocusableButton(activity).apply {
+            text = "Refresh"
+            textSize = 14f
+            cornerRadius = activity.resources.dpToPx(10)
+            backgroundTintList = ColorStateList.valueOf(activity.getColor(R.color.button_inactive))
+            setTextColor(activity.getColor(R.color.text_primary))
+            layoutParams = LinearLayout.LayoutParams(WRAP, WRAP)
+            setOnClickListener { refreshLog() }
+        })
+        form.addView(logHeader)
+        form.addView(gap(8))
+
+        val tv = TextView(activity).apply {
+            textSize = 11f
+            typeface = Typeface.MONOSPACE
+            setTextColor(activity.getColor(R.color.text_secondary))
+            setBackgroundColor(activity.getColor(R.color.surface_card))
+            val p = activity.resources.dpToPx(10)
+            setPadding(p, p, p, p)
+            layoutParams = LinearLayout.LayoutParams(MATCH, WRAP)
+        }
+        logView = tv
+        form.addView(tv)
+        refreshLog()
+    }
+
+    private fun refreshLog() {
+        val tv = logView ?: return
+        val file = File(activity.filesDir, "input.log")
+        tv.text = if (file.exists()) file.readText().takeLast(8000) else "(no log yet)"
     }
 
     private fun triggerUpdateCheck() {
