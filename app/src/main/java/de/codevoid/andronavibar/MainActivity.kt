@@ -216,27 +216,42 @@ class MainActivity : Activity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Pass through when a text field owns Android focus (cursor navigation, etc.)
+        // When the on-screen keyboard is active (an EditText has focus), let all key
+        // events through so text input works normally.
         if (currentFocus is android.widget.EditText) return super.dispatchKeyEvent(event)
 
-        // All navigation input is handled exclusively by the wireddevices broadcast receiver.
-        // Any KeyEvent carrying these codes — whether injected by the remote driver or sent
-        // by a USB keyboard — is consumed silently here to prevent Android's focus traversal
-        // from moving the Material highlight independently of our custom focus ring.
-        // KEYCODE_ESCAPE (= 111) is also consumed to prevent Android's back action, since
-        // Round Button 2 (keyCode 111) is handled by the broadcast.
-        // All other codes (volume, brightness, media, etc.) fall through to the system.
+        // Hardware system keys must always reach the system regardless of focus state.
         when (event.keyCode) {
-            KeyEvent.KEYCODE_DPAD_UP,
-            KeyEvent.KEYCODE_DPAD_DOWN,
-            KeyEvent.KEYCODE_DPAD_LEFT,
-            KeyEvent.KEYCODE_DPAD_RIGHT,
-            KeyEvent.KEYCODE_DPAD_CENTER,
-            KeyEvent.KEYCODE_ENTER,
-            KeyEvent.KEYCODE_NUMPAD_ENTER,
-            KeyEvent.KEYCODE_ESCAPE -> return true
+            KeyEvent.KEYCODE_VOLUME_UP,
+            KeyEvent.KEYCODE_VOLUME_DOWN,
+            KeyEvent.KEYCODE_VOLUME_MUTE,
+            KeyEvent.KEYCODE_BRIGHTNESS_UP,
+            KeyEvent.KEYCODE_BRIGHTNESS_DOWN,
+            KeyEvent.KEYCODE_MEDIA_PLAY,
+            KeyEvent.KEYCODE_MEDIA_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+            KeyEvent.KEYCODE_MEDIA_STOP,
+            KeyEvent.KEYCODE_MEDIA_NEXT,
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> return super.dispatchKeyEvent(event)
         }
-        return super.dispatchKeyEvent(event)
+
+        // Consume everything else. Navigation is handled exclusively by the wireddevices
+        // broadcast receiver. All other KeyEvent sources (USB keyboard, injected events
+        // from the remote driver) only cause interference: focus traversal, hover highlights,
+        // accidental back navigation.
+        return true
+    }
+
+    override fun dispatchGenericMotionEvent(ev: android.view.MotionEvent): Boolean {
+        // Consume joystick axis events so ViewRootImpl.processJoystickEvent() never runs
+        // (it would move Android's focus independently of our custom ring).
+        // Consume all hover events (enter/move/exit) — no hover UI in this launcher.
+        // Mouse clicks arrive as touch ACTION_DOWN and are unaffected.
+        if (ev.isFromSource(android.view.InputDevice.SOURCE_JOYSTICK) ||
+            ev.action == android.view.MotionEvent.ACTION_HOVER_ENTER ||
+            ev.action == android.view.MotionEvent.ACTION_HOVER_MOVE ||
+            ev.action == android.view.MotionEvent.ACTION_HOVER_EXIT) return true
+        return super.dispatchGenericMotionEvent(ev)
     }
 
     override fun onResume() {

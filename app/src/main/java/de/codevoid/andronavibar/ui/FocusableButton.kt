@@ -80,13 +80,13 @@ open class FocusableButton @JvmOverloads constructor(
 
     init {
         cornerRadius = resources.dpToPx(CORNER_RADIUS_DP)
-        // Opt out of Android's view-focus system entirely. We manage our own focus
-        // indicator (isFocusedButton / the left accent bar) and handle all navigation
-        // via handleKey(). Keeping the button focusable would let Android's D-pad
-        // traversal move the Material highlight independently of our custom ring,
-        // causing double-movement and confirm landing on the wrong button.
+        // Opt out of Android's view-focus system. We manage focus via isFocusedButton.
         isFocusable = false
     }
+
+    // Suppress Material's hover highlight — focus state is managed exclusively via
+    // isFocusedButton. Not calling super prevents View.setHovered(true) from running.
+    override fun onHoverEvent(event: android.view.MotionEvent): Boolean = false
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
