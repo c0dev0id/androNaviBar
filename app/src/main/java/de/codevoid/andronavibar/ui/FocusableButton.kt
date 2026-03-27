@@ -46,10 +46,6 @@ open class FocusableButton @JvmOverloads constructor(
 
     // ── Icon ─────────────────────────────────────────────────────────────────
 
-    private val iconBackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(20, 255, 255, 255)  // 8% white — frames the icon slot
-    }
-
     /** Icon drawn as a full-height square on the left edge. Setting this adjusts paddingStart. */
     var buttonIcon: Drawable? = null
         set(value) {
@@ -145,7 +141,7 @@ open class FocusableButton @JvmOverloads constructor(
         }
     }
 
-    /** Draws the icon slot backing rectangle and the [buttonIcon] drawable, if set. */
+    /** Draws the [buttonIcon] drawable, if set. */
     open fun onDrawContent(canvas: Canvas) {
         buttonIcon?.let { drawable ->
             val vInset = resources.dpToPx(STROKE_WIDTH_DP) * 2
@@ -153,7 +149,6 @@ open class FocusableButton @JvmOverloads constructor(
             val hInset = barW.toInt() + vInset
             canvas.save()
             canvas.clipPath(drawPath)
-            canvas.drawRect(barW, 0f, barW + height, height.toFloat(), iconBackPaint)
             drawable.setBounds(hInset, vInset, hInset + iconSize, vInset + iconSize)
             drawable.draw(canvas)
             canvas.restore()
