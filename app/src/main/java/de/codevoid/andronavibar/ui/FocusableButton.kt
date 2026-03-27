@@ -80,6 +80,12 @@ open class FocusableButton @JvmOverloads constructor(
 
     init {
         cornerRadius = resources.dpToPx(CORNER_RADIUS_DP)
+        // Opt out of Android's view-focus system entirely. We manage our own focus
+        // indicator (isFocusedButton / the left accent bar) and handle all navigation
+        // via handleKey(). Keeping the button focusable would let Android's D-pad
+        // traversal move the Material highlight independently of our custom ring,
+        // causing double-movement and confirm landing on the wrong button.
+        isFocusable = false
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

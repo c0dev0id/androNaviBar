@@ -218,32 +218,38 @@ class MainActivity : Activity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // Pass through when a text field owns Android focus (cursor navigation, etc.)
         if (currentFocus is android.widget.EditText) return super.dispatchKeyEvent(event)
-        // Only handle keyboard-sourced events here. Physical remote buttons arrive via
-        // the broadcast receiver; intercepting their injected KeyEvents too would double-fire.
-        if (event.source and android.view.InputDevice.SOURCE_KEYBOARD == 0)
-            return super.dispatchKeyEvent(event)
+
+        // The physical remote sends BOTH a broadcast (handled by remoteListener) AND an
+        // injected KeyEvent. We must consume the injected event for all navigation keys
+        // to prevent Android's own focus traversal from running a second time and moving
+        // the Material highlight independently of our custom focus ring. For true keyboard
+        // sources (USB/BT keyboard during development) we also call handleKey() here since
+        // no broadcast fires for those.
+        val isKeyboard = event.source and android.view.InputDevice.SOURCE_KEYBOARD != 0
 
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP,
             KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                if (event.action == KeyEvent.ACTION_DOWN) handleKey(event.keyCode)
-                return true
+                if (isKeyboard && event.action == KeyEvent.ACTION_DOWN) handleKey(event.keyCode)
+                return true  // consume for all sources — remote handled by broadcast
             }
             KeyEvent.KEYCODE_ENTER,
             KeyEvent.KEYCODE_NUMPAD_ENTER,
             KeyEvent.KEYCODE_DPAD_CENTER -> {
-                if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                    if (focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
-                        armKey66LongPress()
-                    } else {
-                        handleKey(66)
+                if (isKeyboard) {
+                    if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                        if (focusOwner == FocusOwner.PANE && activeAppsGridPane != null) {
+                            armKey66LongPress()
+                        } else {
+                            handleKey(66)
+                        }
+                    } else if (event.action == KeyEvent.ACTION_UP) {
+                        if (cancelKey66LongPress()) handleKey(66)
                     }
-                } else if (event.action == KeyEvent.ACTION_UP) {
-                    if (cancelKey66LongPress()) handleKey(66)
                 }
-                return true
+                return true  // consume for all sources — remote handled by broadcast
             }
         }
         return super.dispatchKeyEvent(event)
